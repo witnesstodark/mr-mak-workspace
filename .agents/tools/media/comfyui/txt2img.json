@@ -1,0 +1,41 @@
+{
+  "4": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": { "ckpt_name": "__CKPT__" }
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "text": "__PROMPT__", "clip": ["4", 1] }
+  },
+  "7": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "text": "__NEGATIVE__", "clip": ["4", 1] }
+  },
+  "5": {
+    "class_type": "EmptyLatentImage",
+    "inputs": { "width": "__WIDTH__", "height": "__HEIGHT__", "batch_size": 1 }
+  },
+  "3": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": "__SEED__",
+      "steps": "__STEPS__",
+      "cfg": "__CFG__",
+      "sampler_name": "__SAMPLER__",
+      "scheduler": "__SCHEDULER__",
+      "denoise": 1,
+      "model": ["4", 0],
+      "positive": ["6", 0],
+      "negative": ["7", 0],
+      "latent_image": ["5", 0]
+    }
+  },
+  "8": {
+    "class_type": "VAEDecode",
+    "inputs": { "samples": ["3", 0], "vae": ["4", 2] }
+  },
+  "9": {
+    "class_type": "SaveImage",
+    "inputs": { "filename_prefix": "ashenhold", "images": ["8", 0] }
+  }
+}

@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { createService } from '../server.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+await mkdir(path.join(root, '.cache'), { recursive: true });
 const repo = await mkdtemp(path.join(root, '.cache/workspace-ui-'));
 for (const dir of ['workspace/test', 'knowledge', 'processes', '.claude/skills/example', '.agents/skills/example', 'inbox', 'projects']) await mkdir(path.join(repo, dir), { recursive: true });
 await writeFile(path.join(repo, '.claude/skills/example/SKILL.md'), '# Example skill\n\n**Read me**\n');
@@ -134,11 +135,11 @@ try {
     } else {
       await page.locator('.xterm-helper-textarea').focus(); await page.keyboard.press('Control+c');
       for (let i = 0; i < 20 && !writes.get(agent).includes('\x03'); i++) await new Promise(resolve => setTimeout(resolve, 20));
-      assert.ok(writes.get(agent).includes('\x03'), 'PowerShell retains Ctrl+C interrupt');
+      assert.ok(writes.get(agent).includes('\x03'), 'Shell terminal retains Ctrl+C interrupt');
     }
   }
   assert.deepEqual(errors, []);
-  console.log('UI passed: 12 clickable wrapping tabs; Markdown preview/edit/save/conflict/draft; local Skills; MCP filtering, checks and hidden credentials; terminal bottom row visible across four window/font sizes; Codex/Claude/Kimi copy and scroll; PowerShell interrupt.');
+  console.log('UI passed: 12 clickable wrapping tabs; Markdown preview/edit/save/conflict/draft; local Skills; MCP filtering, checks and hidden credentials; terminal bottom row visible across four window/font sizes; Codex/Claude/Kimi copy and scroll; shell interrupt.');
 } finally {
   await browser?.close();
   for (const session of service.sessions.items.values()) session.process = null;

@@ -5,6 +5,8 @@ import path from 'node:path';
 import { Files } from '../files.mjs';
 import { NativeSettings } from '../native-settings.mjs';
 
+await mkdir(path.resolve('.cache'), { recursive: true });
+
 test('Markdown saves preserve Unicode, keep a recovery copy, and reject stale or concurrent writes', async () => {
   const repo = await mkdtemp(path.resolve('.cache/markdown-'));
   const file = path.join(repo, 'notes.md'), files = new Files(repo);

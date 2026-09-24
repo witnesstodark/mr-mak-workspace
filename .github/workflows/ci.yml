@@ -1,0 +1,88 @@
+# CI for the Mr. Mak workspace fork: Linux verification and desktop build.
+# The Windows job is present but disabled until a Windows runner is approved.
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Lint, test and web build (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            desktop/service/package-lock.json
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm ci --prefix desktop/service
+      - name: Lint
+        run: npm run lint
+      - name: Tests
+        run: npm test
+      - name: Template and skills check
+        run: npm run test:template
+      - name: Web build
+        run: npm run build
+
+  desktop-linux:
+    name: Tauri build (Linux)
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            desktop/service/package-lock.json
+      - name: Install system dependencies (Tauri)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm ci --prefix desktop/service
+      - name: Build desktop app
+        run: npm run desktop:build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mrmak-linux-bundle
+          path: src-tauri/target/release/bundle/
+          if-no-files-found: error
+
+  desktop-windows:
+    name: Tauri build (Windows, disabled)
+    # Present but disabled: no Windows runner is approved for this fork yet.
+    if: ${{ false }}
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            desktop/service/package-lock.json
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm ci --prefix desktop/service
+      - name: Build desktop app
+        run: npm run desktop:build

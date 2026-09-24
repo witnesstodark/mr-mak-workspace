@@ -1,0 +1,34 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "atlassian": {
+        "type": "remote",
+        "url": "https://mcp.atlassian.com/v2/mcp"
+      },
+      "unity": {
+        "type": "local",
+        "command": [
+          "node",
+          "/home/fabio/.local/share/unity-mcp-server/src/index.js"
+        ],
+        "environment": {
+          "UNITY_BRIDGE_PORT": "7890",
+          "UNITY_HUB_PATH": "/usr/bin/unityhub"
+        }
+      }
+    }
+  },
+  "media": {
+    "image": {
+      "auto_resize": true,
+      "max_width": 2048,
+      "max_height": 2048
+    }
+  },
+  "permissions": [
+    { "action": "media_*", "resource": "*", "effect": "allow" },
+    { "action": "shell", "resource": ".agents/tools/media/*", "effect": "allow" },
+    { "action": "shell", "resource": "/home/fabio/dev/m1-game-labs/.agents/tools/media/*", "effect": "allow" }
+  ]
+}

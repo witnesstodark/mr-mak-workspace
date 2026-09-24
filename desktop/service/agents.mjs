@@ -3,17 +3,23 @@ import path from 'node:path';
 import os from 'node:os';
 import { parse as parseEnv } from 'dotenv';
 
+const isWindows = process.platform === 'win32';
+
 export const AGENTS = [
   { id: 'codex', label: 'Codex', color: '#88d8bf', command: 'codex', subscription: true },
   { id: 'claude', label: 'Claude Code', color: '#dba68c', command: 'claude', subscription: true },
   { id: 'kimi', label: 'Kimi', color: '#b3a3f7', command: 'kimi', subscription: true },
-  { id: 'shell', label: 'PowerShell', color: '#89b7ed', command: 'powershell.exe', subscription: false },
+  { id: 'shell', label: isWindows ? 'PowerShell' : path.basename(process.env.SHELL || '/bin/bash'), color: '#89b7ed', command: isWindows ? 'powershell.exe' : process.env.SHELL || '/bin/bash', subscription: false },
 ];
+
+export { isWindows };
 
 export function commandPath(name, env = process.env) {
   if (path.isAbsolute(name) && existsSync(name)) return name;
-  const extra = [path.join(env.APPDATA || '', 'npm'), path.join(os.homedir(), '.kimi-code', 'bin'), path.join(os.homedir(), '.local', 'bin')];
-  const extensions = process.platform === 'win32' ? ['.exe', '.cmd', '.bat', '.ps1', ''] : [''];
+  const extra = [];
+  if (env.APPDATA) extra.push(path.join(env.APPDATA, 'npm'));
+  extra.push(path.join(os.homedir(), '.kimi-code', 'bin'), path.join(os.homedir(), '.local', 'bin'), path.join(os.homedir(), '.npm-global', 'bin'));
+  const extensions = isWindows ? ['.exe', '.cmd', '.bat', '.ps1', ''] : [''];
   for (const folder of [...String(env.PATH || env.Path || '').split(path.delimiter), ...extra]) {
     for (const ext of extensions) {
       const candidate = path.join(folder, name.toLowerCase().endsWith(ext) && ext ? name : name + ext);
@@ -29,17 +35,30 @@ export function inventory(env = process.env) {
 
 // Resolve the real Codex binary when available so JSON-RPC does not pass through a shell.
 export function codexBinary(env = process.env) {
-  const npmRoot = path.join(env.APPDATA || '', 'npm', 'node_modules', '@openai');
-  const triple = process.arch === 'arm64' ? 'aarch64-pc-windows-msvc' : 'x86_64-pc-windows-msvc';
-  const platformPackage = `codex-win32-${process.arch}`;
-  for (const root of [path.join(npmRoot, 'codex', 'node_modules', '@openai', platformPackage), path.join(npmRoot, platformPackage), path.join(npmRoot, 'codex')]) {
-    for (const directory of ['bin', 'codex']) {
-      const candidate = path.join(root, 'vendor', triple, directory, 'codex.exe');
-      if (existsSync(candidate)) return { file: candidate, args: [] };
-    }
+  const npmRoots = [];
+  if (env.APPDATA) npmRoots.push(path.join(env.APPDATA, 'npm', 'node_modules', '@openai'));
+  for (const base of [path.join(os.homedir(), '.npm-global', 'lib', 'node_modules'), '/usr/local/lib/node_modules', '/usr/lib/node_modules']) {
+    npmRoots.push(path.join(base, '@openai'));
   }
-  const js = path.join(npmRoot, 'codex', 'bin', 'codex.js');
-  if (existsSync(js)) return { file: process.execPath, args: [js] };
+  const triples = {
+    'win32-x64': ['x86_64-pc-windows-msvc', 'codex-win32-x64', 'codex.exe'],
+    'win32-arm64': ['aarch64-pc-windows-msvc', 'codex-win32-arm64', 'codex.exe'],
+    'linux-x64': ['x86_64-unknown-linux-musl', 'codex-linux-x64', 'codex'],
+    'linux-arm64': ['aarch64-unknown-linux-musl', 'codex-linux-aarch64', 'codex'],
+    'darwin-x64': ['x86_64-apple-darwin', 'codex-darwin-x64', 'codex'],
+    'darwin-arm64': ['aarch64-apple-darwin', 'codex-darwin-arm64', 'codex'],
+  };
+  const [triple, platformPackage, binary] = triples[`${process.platform}-${process.arch}`] || [];
+  for (const npmRoot of npmRoots) {
+    for (const root of triple ? [path.join(npmRoot, 'codex', 'node_modules', '@openai', platformPackage), path.join(npmRoot, platformPackage), path.join(npmRoot, 'codex')] : [path.join(npmRoot, 'codex')]) {
+      for (const directory of ['bin', 'codex']) {
+        const candidate = path.join(root, 'vendor', triple, directory, binary);
+        if (existsSync(candidate)) return { file: candidate, args: [] };
+      }
+    }
+    const js = path.join(npmRoot, 'codex', 'bin', 'codex.js');
+    if (existsSync(js)) return { file: process.execPath, args: [js] };
+  }
   const executable = commandPath('codex', env);
   if (executable && !/\.(cmd|bat|ps1)$/i.test(executable)) return { file: executable, args: [] };
   throw new Error('Codex CLI is not installed. Install it and sign in once to use Mr. Mak.');
@@ -64,10 +83,10 @@ export function terminalCommand(agent, { bypass = false, resumeId, nativeId, eff
   } else if (agent === 'kimi') {
     if (resumeId) args.push('--session', resumeId);
     if (bypass) args.push('--yolo');
-  } else {
+  } else if (isWindows) {
     args.push('-NoLogo');
   }
-  if (process.platform !== 'win32' || agent === 'shell') return { file: command, args };
+  if (!isWindows || agent === 'shell') return { file: command, args };
   // An encoded PowerShell script preserves spaces, Unicode and quotes. No -NoExit:
   // after the agent exits, stale coordinator input cannot become shell commands.
   const quote = value => "'" + value.replaceAll("'", "''") + "'";

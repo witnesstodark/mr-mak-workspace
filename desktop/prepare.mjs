@@ -5,7 +5,7 @@ import path from 'node:path';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const runtime = path.join(repo, '.cache', 'desktop-runtime');
-if (process.platform !== 'win32' || process.arch !== 'x64') throw new Error('This package currently targets Windows x64. Build on that platform.');
+if (!['win32', 'linux'].includes(process.platform) || (process.platform === 'win32' && process.arch !== 'x64')) throw new Error('This package targets Windows x64 and Linux x64/arm64. Build on one of those platforms.');
 // Clear only this generated staging directory, after verifying its resolved path.
 const actualRuntime = await realpath(runtime).catch(() => null);
 if (actualRuntime) {

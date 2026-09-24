@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { createService } from '../server.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+await mkdir(path.join(root, '.cache'), { recursive: true });
 const repo = await mkdtemp(path.join(root, '.cache/scroll-ui-'));
 await mkdir(path.join(repo, 'workspace'), { recursive: true });
 await writeFile(path.join(repo, 'workspace/workspace.json'), '{"entities":[]}');

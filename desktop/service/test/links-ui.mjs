@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { createService } from '../server.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+await mkdir(path.join(root, '.cache'), { recursive: true });
 const repo = await mkdtemp(path.join(root, '.cache/links-ui-'));
 await mkdir(path.join(repo, 'workspace/test'), { recursive: true });
 const external = 'https://browser-check.example/page?one=1&two=2#details';

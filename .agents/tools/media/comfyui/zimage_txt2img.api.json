@@ -1,0 +1,63 @@
+{
+  "1": {
+    "class_type": "UnetLoaderGGUF",
+    "inputs": { "unet_name": "z_image_turbo-Q4_K_M.gguf" },
+    "_meta": { "title": "Z-Image Turbo (GGUF Q4_K_M)" }
+  },
+  "2": {
+    "class_type": "ModelSamplingAuraFlow",
+    "inputs": { "model": ["1", 0], "shift": 3.0 },
+    "_meta": { "title": "Sampling shift" }
+  },
+  "3": {
+    "class_type": "CLIPLoaderGGUF",
+    "inputs": { "clip_name": "Qwen3-4B-Q4_K_M.gguf", "type": "lumina2" },
+    "_meta": { "title": "Qwen3-4B text encoder (GGUF)" }
+  },
+  "4": {
+    "class_type": "VAELoader",
+    "inputs": { "vae_name": "ae.safetensors" },
+    "_meta": { "title": "Z-Image VAE" }
+  },
+  "5": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "clip": ["3", 0], "text": "a single stone tower" },
+    "_meta": { "title": "Positive" }
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "clip": ["3", 0], "text": "blurry, ugly, bad" },
+    "_meta": { "title": "Negative" }
+  },
+  "7": {
+    "class_type": "EmptyLatentImage",
+    "inputs": { "width": 768, "height": 768, "batch_size": 1 },
+    "_meta": { "title": "Latent 768x768" }
+  },
+  "8": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": ["2", 0],
+      "positive": ["5", 0],
+      "negative": ["6", 0],
+      "latent_image": ["7", 0],
+      "seed": 1,
+      "steps": 9,
+      "cfg": 1.0,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1.0
+    },
+    "_meta": { "title": "Sampler (9 steps, cfg 1.0)" }
+  },
+  "9": {
+    "class_type": "VAEDecode",
+    "inputs": { "samples": ["8", 0], "vae": ["4", 0] },
+    "_meta": { "title": "Decode" }
+  },
+  "10": {
+    "class_type": "SaveImage",
+    "inputs": { "images": ["9", 0], "filename_prefix": "zimage" },
+    "_meta": { "title": "Save" }
+  }
+}

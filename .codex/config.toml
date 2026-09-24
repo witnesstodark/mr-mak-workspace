@@ -1,2 +1,8 @@
 # Project-local MCP definitions can be added here after selecting a provider.
 # Account logins stay in the agent's own secure storage. Do not commit keys.
+
+  [mcp_servers.rider]
+    url = "http://127.0.0.1:64482/stream"
+
+  [mcp_servers.atlassian]
+    url = "https://mcp.atlassian.com/v2/mcp"

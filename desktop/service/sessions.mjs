@@ -277,7 +277,7 @@ export class Sessions extends EventEmitter {
   input(id, data, { coordinator = false, submit = false } = {}) {
     const session = this.get(id);
     if (!session.process) throw new Error('This terminal is stopped. Resume it before sending a message.');
-    if (coordinator && session.agent === 'shell') throw new Error('Mr. Mak can send messages to agent chats; type shell commands directly in PowerShell.');
+    if (coordinator && session.agent === 'shell') throw new Error('Mr. Mak can send messages to agent chats; type shell commands directly in the terminal.');
     if (typeof data !== 'string' || data.length > 64000) throw new Error('Message is too large');
     if (coordinator && Date.now() - Date.parse(session.lastInputAt || 0) < 2500) throw new Error('You are typing in this chat. Wait a moment before sending through Mr. Mak.');
     if (coordinator) {

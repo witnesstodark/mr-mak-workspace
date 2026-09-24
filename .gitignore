@@ -33,6 +33,9 @@ inbox/*
 **/upload.json
 **/*.blend1
 
+# Personal project folders keep their own repository (never committed here)
+workspace/ashenhold-td/
+
 # Editor and operating-system files
 .vscode/
 .idea/
