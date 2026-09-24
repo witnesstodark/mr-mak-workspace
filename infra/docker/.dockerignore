@@ -1,6 +1,0 @@
-# The build context of this folder is `infra/docker/`. The runtime data of the
-# local AI stack lives here too and must never enter a build context:
-# `comfy/` is the ComfyUI root (a full checkout plus models and custom nodes)
-# and `kimodo/data/` holds the Kimodo models and caches. Both are git-ignored.
-comfy
-kimodo/data

@@ -12,6 +12,10 @@
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
+# The stack lives in the game project, not next to this script: resolve the game
+# root so `.models-dir` and the models directory land where stack.sh reads them.
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../workspace/ashenhold-td" && pwd)"
+
 MOUNT="${1:-}"
 [ -n "$MOUNT" ] || die "usage: models-hd.sh MOUNT_POINT [--move]"
 MOVE=0

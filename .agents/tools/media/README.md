@@ -9,10 +9,10 @@ also be run directly from the shell.
 Already installed on the machine: `ImageMagick` (`convert`), `ffmpeg`/`ffprobe`,
 `sox`, `Blender`, `Inkscape`, `python3`.
 
-GPU generation runs in the ComfyUI container of the project stack (`infra/docker/stack.sh up
+GPU generation runs in the ComfyUI container of the project stack (`workspace/ashenhold-td/infra/docker/stack.sh up
 comfyui`); the endpoint is `http://127.0.0.1:8188`, override with `COMFYUI_URL`.
 The image is `yanwk/comfyui-boot:cu130-slim-v2`; models, custom nodes and user data
-live in `infra/docker/comfy/data/` (git-ignored; the container's
+live in `workspace/ashenhold-td/infra/docker/comfy/data/` (git-ignored; the container's
 `/root/ComfyUI/models`, `custom_nodes`, `user` and `input` point into it).
 
 No `magick` binary exists here; ImageMagick 6 uses `convert`.
@@ -170,21 +170,21 @@ official template:
 
 ## Server control
 
-`infra/docker/stack.sh` (run from the repository root) starts, stops and inspects the stack, passing
+`workspace/ashenhold-td/infra/docker/stack.sh` (run from the workspace root) starts, stops and inspects the stack, passing
 the right Docker engine per service (ComfyUI and Kimodo need the Engine, which has
 the GPU; the runner lives on Docker Desktop). ComfyUI always starts with
 `--cache-none`, the flag that makes Pixal3D fit in 6 GB.
 
 ```sh
-infra/docker/stack.sh up comfyui
-infra/docker/stack.sh stop comfyui
-infra/docker/stack.sh open comfyui     # start if needed and open the browser
-infra/docker/stack.sh logs comfyui 40
-infra/docker/stack.sh status
+workspace/ashenhold-td/infra/docker/stack.sh up comfyui
+workspace/ashenhold-td/infra/docker/stack.sh stop comfyui
+workspace/ashenhold-td/infra/docker/stack.sh open comfyui     # start if needed and open the browser
+workspace/ashenhold-td/infra/docker/stack.sh logs comfyui 40
+workspace/ashenhold-td/infra/docker/stack.sh status
 ```
 
 Desktop shortcuts for **Blender** and **ComfyUI** exist in `~/Desktop` and in the
-application menu and call `infra/docker/stack.sh`. The ComfyUI one starts the container if
+application menu and call `workspace/ashenhold-td/infra/docker/stack.sh`. The ComfyUI one starts the container if
 needed and opens the browser; its context menu offers status, stop, the
 generated-models folder and the log.
 
@@ -230,13 +230,13 @@ session.
 ## ComfyUI (Docker)
 
 ComfyUI is a container (`yanwk/comfyui-boot:cu130-slim-v2`), defined in the root
-`infra/docker/compose.yml` and run by `infra/docker/stack.sh` on the Docker Engine — the Docker Desktop VM
+`workspace/ashenhold-td/infra/docker/compose.yml` and run by `workspace/ashenhold-td/infra/docker/stack.sh` on the Docker Engine — the Docker Desktop VM
 on Linux has no GPU passthrough, which is why the GPU services never run there.
-Models, custom nodes, workflows and the database live in `infra/docker/comfy/data/`
+Models, custom nodes, workflows and the database live in `workspace/ashenhold-td/infra/docker/comfy/data/`
 (git-ignored, mounted at `/root`); generated files land in `Artifacts/ComfyUI/`.
 
 ```sh
-infra/docker/stack.sh up comfyui
+workspace/ashenhold-td/infra/docker/stack.sh up comfyui
 COMFYUI_URL=http://127.0.0.1:8188 python3 .agents/tools/media/comfyui_client.py --prompt "..." --out Artifacts/Media/preview.png
 ```
 
@@ -271,7 +271,7 @@ ComfyUI core, so no third-party nodes are needed; both official templates (singl
 image and multi-view) come with the image — download the checkpoints from the
 table above before the first run.
 
-1. Start ComfyUI (`infra/docker/stack.sh up comfyui`) and load the `Pixal3D & TRELLIS.2: Image to Model` template.
+1. Start ComfyUI (`workspace/ashenhold-td/infra/docker/stack.sh up comfyui`) and load the `Pixal3D & TRELLIS.2: Image to Model` template.
 2. Load the concept image and queue the workflow.
 3. The GLB lands in `Artifacts/ComfyUI/3d/` (the container's output directory).
 4. Convert it for Unity:

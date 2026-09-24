@@ -1,11 +1,14 @@
+import { existsSync } from "node:fs"
 import { spawn } from "node:child_process"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
 // Local media tooling. Every tool shells out to a script under the workspace
 // root's .agents/tools/media/ (resolved from this file), which validates paths
-// and arguments. Scripts run in the session's project directory, and
-// MEDIA_PROJECT_ROOT points them at <project>/Assets/ and <project>/Artifacts/.
+// and arguments. The project is the game: a session inside it uses its own
+// directory, any other session falls back to the game clone at
+// `workspace/ashenhold-td`, and MEDIA_PROJECT_ROOT points the scripts at
+// <project>/Assets/ and <project>/Artifacts/.
 // No credentials, no network except the optional local ComfyUI at COMFYUI_URL.
 //
 // The object is a plain Promise plugin: `Plugin.define` is the identity
@@ -249,7 +252,13 @@ const tools = [
 export default {
   id: "ashenhold.media-tools",
   async setup(ctx) {
-    const root = ctx.location.directory
+    const gameRoot = join(scriptsDir, "..", "..", "..", "workspace", "ashenhold-td")
+    const session = ctx.location.directory
+    const root = existsSync(join(session, "infra", "docker"))
+      ? session
+      : existsSync(join(gameRoot, "infra", "docker"))
+        ? gameRoot
+        : session
 
     await ctx.tool.transform((editor) => {
       editor.namespace({ name: "media", description: "Ashenhold TD local media tools" })

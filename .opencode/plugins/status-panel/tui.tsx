@@ -26,19 +26,19 @@ const BOARD_STATES = ["In Development", "In Review", "Backlog", "Done"]
 
 // The service list comes from the compose: a new service in
 // `infra/docker/compose.yml` shows up here with no code change. The compose
-// lives at the workspace root, next to this plugin, so the panel reads it from
-// there regardless of the session's directory. The state comes from Docker,
-// with `docker ps -a` on both engines and matched by the compose service label
-// — asking both means the panel never has to decide how a service reaches
-// Docker Desktop, which a Compose file cannot say.
-const COMPOSE_PATH = join(
+// lives with the game project, so the panel tries the session's own directory
+// first (a session inside the game) and then the game clone at the workspace
+// root. The state comes from Docker, with `docker ps -a` on both engines and
+// matched by the compose service label — asking both means the panel never has
+// to decide how a service reaches Docker Desktop, which a Compose file cannot say.
+const COMPOSE_RELATIVE = join("infra", "docker", "compose.yml")
+const GAME_ROOT = join(
   dirname(fileURLToPath(import.meta.url)),
   "..",
   "..",
   "..",
-  "infra",
-  "docker",
-  "compose.yml",
+  "workspace",
+  "ashenhold-td",
 )
 const ENGINE_CONTEXTS = ["default", "desktop-linux"]
 const PS_FORMAT = [
@@ -265,8 +265,13 @@ export default Plugin.define({
     const location = context.location ?? context.data.location.default()
 
     // The service list is read once, when the plugin loads: the compose changes with a
-    // merge, and a plugin reload follows it. Probing is what repeats.
-    const panelCompose = readCompose(COMPOSE_PATH)
+    // merge, and a plugin reload follows it. Probing is what repeats. Two candidates —
+    // the session's directory and the game clone at the workspace root — and the first
+    // one that declares services wins.
+    const panelCompose =
+      [join(location.directory, COMPOSE_RELATIVE), join(GAME_ROOT, COMPOSE_RELATIVE)]
+        .map(readCompose)
+        .find((candidate) => candidate.services.length > 0) ?? { project: "", services: [] }
 
     // The key changes with the shape of the state on purpose: the memory store outlives a
     // plugin reload, and a value from an older shape would render as-is forever.
