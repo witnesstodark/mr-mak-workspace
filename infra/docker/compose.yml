@@ -1,0 +1,125 @@
+# Stack de ferramentas do Ashenhold TD.
+#
+# Onde cada serviço roda (o Docker Desktop não passa GPU no Linux):
+#   - gitlab-runner, portainer -> Docker Desktop (contexto "desktop-linux")
+#   - comfyui, kimodo-demo     -> Docker Engine (contexto "default"), com GPU
+#
+# Suba só o que for usar — a GPU tem 6 GB e ComfyUI/Kimodo competem por ela
+# (os comandos abaixo rodam da raiz do repositório):
+#
+#   docker compose -f infra/docker/compose.yml up -d portainer
+#   docker compose -f infra/docker/compose.yml up -d gitlab-runner
+#   docker --context default compose -f infra/docker/compose.yml up -d comfyui
+#   docker --context default compose -f infra/docker/compose.yml up -d kimodo-demo
+#
+# O caminho normal é `infra/docker/stack.sh`, que escolhe o contexto por serviço.
+#
+# Portas (só localhost): ComfyUI 8188 | Kimodo 7860 | Portainer 9000 (HTTP).
+name: ashenhold-td
+
+services:
+  gitlab-runner:
+    image: gitlab/gitlab-runner:latest
+    restart: unless-stopped
+    volumes:
+      - runner-config:/etc/gitlab-runner
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  # Geração de imagem/3D (sd_turbo, Z-Image, Pixal3D, TRELLIS.2).
+  # O estado (models, custom nodes, workflows, banco) fica em
+  # `infra/docker/comfy/data/`; a saída cai em `Artifacts/ComfyUI/`.
+  comfyui:
+    image: yanwk/comfyui-boot:cu130-slim-v2
+    container_name: comfyui
+    init: true
+    ports:
+      - "127.0.0.1:8188:8188"
+    volumes:
+      # O código do ComfyUI não é montado: o entrypoint da imagem copia o bundle
+      # dela para `/root/ComfyUI` quando o diretório não existe, então o fonte e
+      # o `.git` do repositório do ComfyUI ficam fora do projeto.
+      - ./comfy/data/models:/root/ComfyUI/models
+      - ./comfy/data/custom_nodes:/root/ComfyUI/custom_nodes
+      - ./comfy/data/user:/root/ComfyUI/user
+      - ./comfy/data/input:/root/ComfyUI/input
+      - ./comfy/data/cache:/root/.cache
+      - ./comfy/data/user-scripts:/root/user-scripts
+      - ../../Artifacts/ComfyUI:/root/ComfyUI/output
+    environment:
+      # --cache-none mantém os workflows 3D (Pixal3D/TRELLIS.2) dentro dos 6 GB.
+      - CLI_ARGS=--cache-none
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # Kimodo — geração de movimento. Usa a cópia corrigida do fork Aero-Ex
+  # (flag --offload para 6 GB e wrapper NF4), montada em /workspace.
+  #
+  # Encode de texto LOCAL (TEXT_ENCODER_MODE=local): em 6 GB não cabe o encoder
+  # (4,6 GB) num processo separado + o modelo de movimento em outro; no mesmo
+  # processo o --offload reveza os modelos entre RAM e VRAM.
+  kimodo-demo:
+    build:
+      context: .
+      dockerfile: kimodo/kimodo.Dockerfile
+    image: kimodo:1.0-bnb
+    container_name: kimodo-demo
+    working_dir: /workspace
+    command: python -m kimodo.demo --offload
+    volumes:
+      # Modelos e cache de embeddings em `infra/docker/kimodo/data/` (o cache do
+      # Hugging Face fica no /workspace e é repovoado quando o container recria).
+      - ./kimodo/data:/opt/kimodo
+      # Os artefatos gerados (BVH/NPZ/CSV) saem do container para o projeto:
+      # /opt/kimodo/exports no container é Artifacts/Kimodo/ na máquina.
+      - ../../Artifacts/Kimodo:/opt/kimodo/exports
+    ports:
+      - "127.0.0.1:7860:7860"
+    environment:
+      - TEXT_ENCODER_MODE=local
+      # Cache do Hugging Face: fica no /workspace (efêmero) de propósito — o
+      # container o repovoa quando é recriado. A pasta de dados guarda só os
+      # modelos e o cache de embeddings.
+      - HF_HOME=/workspace/.cache/huggingface
+      - kimodo_EMBED_CACHE_DIR=/opt/kimodo/cache/embeddings
+      - SERVER_PORT=7860
+      - HOST_USER=${USER:-user}
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    shm_size: "16gb"
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # Painel web do stack — roda no Docker Desktop e administra o Engine em
+  # tcp://host.docker.internal:2375 (o Desktop não compartilha /var/run/docker.sock).
+  # A senha do admin vem de `infra/docker/portainer/portainer-password.txt`
+  # (fora do git) e só é usada na primeira criação do usuário; depois disso,
+  # troque pela UI.
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: unless-stopped
+    command: --admin-password-file /run/secrets/portainer-password
+    ports:
+      # HTTP, sem TLS: é um serviço local e o certificado auto-assinado da 9443
+      # só rendia aviso no navegador.
+      - "127.0.0.1:9000:9000"
+    volumes:
+      - portainer_data:/data
+      - ./portainer/portainer-password.txt:/run/secrets/portainer-password:ro
+
+volumes:
+  runner-config:
+  portainer_data:
+  # ComfyUI e Kimodo não usam volume nomeado: os dados ficam nas pastas
+  # `infra/docker/comfy/` e `infra/docker/kimodo/data/`, fora do git.

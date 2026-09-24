@@ -41,3 +41,9 @@ workspace/ashenhold-td/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Local AI stack outputs and runtime data (moved from the game project)
+/Artifacts/
+/infra/docker/comfy/
+/infra/docker/kimodo/data/
+/infra/docker/portainer/portainer-password.txt

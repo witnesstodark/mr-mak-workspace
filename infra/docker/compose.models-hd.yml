@@ -1,0 +1,14 @@
+# Guarda os modelos do ComfyUI num disco externo, em vez do volume no SSD.
+#
+# Não é usado por padrão: `infra/docker/stack.sh` inclui este arquivo
+# automaticamente quando existe um `.models-dir` no projeto (veja
+# .agents/tools/media/models-hd.sh).
+#
+# Na mão (da raiz do repositório):
+#   COMFYUI_MODELS_DIR=/mnt/ai-models/comfyui-models \
+#     docker --context default compose \
+#       -f infra/docker/compose.yml -f infra/docker/compose.models-hd.yml up -d comfyui
+services:
+  comfyui:
+    volumes:
+      - ${COMFYUI_MODELS_DIR:?defina COMFYUI_MODELS_DIR (rode .agents/tools/media/models-hd.sh)}:/root/ComfyUI/models
