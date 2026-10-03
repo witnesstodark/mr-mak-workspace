@@ -3,7 +3,7 @@ import { promisify } from 'node:util';
 import { randomUUID } from 'node:crypto';
 import { stat, readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { commandPath, shellCommand } from './agents.mjs';
+import { commandPath, wrapCommand } from './agents.mjs';
 import { validSessionId } from './opencode/observer.mjs';
 
 const execute = promisify(execFile);
@@ -15,7 +15,7 @@ export async function opencodeVersion(env) {
   if (!file) throw new Error('OpenCode is not installed. Install it and connect a provider in OpenCode first.');
   const key = `${file}:${(await stat(file)).mtimeMs}`;
   if (!versions.has(key)) {
-    const command = shellCommand(file, ['--version']);
+    const command = wrapCommand(file, ['--version']);
     const result = await execute(command.file, command.args, { env, windowsHide: true, timeout: 15000, maxBuffer: 64000 });
     const match = /(?:^|\s)(?:v)?(\d+)\.\d+\.\d+/.exec(result.stdout.trim());
     if (!match || ![1, 2].includes(Number(match[1]))) throw new Error('This OpenCode version is not supported yet. Mr. Mak supports OpenCode 1.x and 2.x.');

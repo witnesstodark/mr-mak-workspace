@@ -5,7 +5,7 @@ import path from 'node:path';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const runtime = path.join(repo, '.cache', 'desktop-runtime');
-if (process.platform !== 'win32' || process.arch !== 'x64') throw new Error('This package currently targets Windows x64. Build on that platform.');
+if (!['win32', 'linux', 'darwin'].includes(process.platform)) throw new Error(`Unsupported desktop platform: ${process.platform}`);
 // Clear only this generated staging directory, after verifying its resolved path.
 const actualRuntime = await realpath(runtime).catch(() => null);
 if (actualRuntime) {
@@ -14,10 +14,20 @@ if (actualRuntime) {
   await rm(actualRuntime, { recursive: true });
 }
 await mkdir(runtime, { recursive: true });
-const npm = path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
-const run = (args, cwd) => { const result = spawnSync(process.execPath, [npm, ...args], { cwd, stdio: 'inherit', windowsHide: true }); if (result.status !== 0) throw new Error(`npm ${args.join(' ')} failed`); };
+// npm may be installed separately from Node (system packages and nvm do this),
+// and npm_execpath can point at an old Node installation after switching
+// versions. Prefer a valid npm_execpath, then resolve the active npm command.
+const configuredNpm = process.env.npm_execpath;
+const npmScript = configuredNpm && await access(configuredNpm).then(() => configuredNpm).catch(() => null);
+const npmCommand = npmScript || (process.platform === 'win32' ? 'npm.cmd' : 'npm');
+const run = (args, cwd) => {
+  const command = npmScript ? process.execPath : npmCommand;
+  const commandArgs = npmScript ? [npmScript, ...args] : args;
+  const result = spawnSync(command, commandArgs, { cwd, stdio: 'inherit', windowsHide: true });
+  if (result.error || result.status !== 0) throw new Error(`npm ${args.join(' ')} failed: ${result.error?.message || `exit ${result.status}`}`);
+};
 run(['run', 'build'], repo);
-await cp(process.execPath, path.join(runtime, 'node.exe'));
+await cp(process.execPath, path.join(runtime, process.platform === 'win32' ? 'node.exe' : 'node'));
 await mkdir(path.join(runtime, 'service'), { recursive: true });
 const serviceSource = path.join(repo, 'desktop', 'service');
 await cp(serviceSource, path.join(runtime, 'service'), { recursive: true, filter: source => !path.relative(serviceSource, source).split(path.sep).some(part => ['node_modules', 'test', '.cache'].includes(part)) });
@@ -28,10 +38,17 @@ run(['ci', '--omit=dev'], path.join(runtime, 'service'));
 await cp(path.join(repo, 'dist'), path.join(runtime, 'ui'), { recursive: true });
 // Vite deliberately does not copy the enormous workspace junction. Bundle only UI assets.
 try { await access(path.join(repo, 'public', 'assets')); await cp(path.join(repo, 'public', 'assets'), path.join(runtime, 'ui', 'assets'), { recursive: true }); } catch { /* Optional brand assets. */ }
-await writeFile(path.join(runtime, 'README.txt'), 'Mr. Mak local runtime. Node.js and native ConPTY bindings are bundled. User repositories, keys and CLI logins are not included.\n');
-const nodeLicense = path.join(path.dirname(process.execPath), 'LICENSE');
+await writeFile(path.join(runtime, 'README.txt'), `Mr. Mak local runtime for ${process.platform}. User repositories, keys and CLI logins are not included.\n`);
+const licenseCandidates = [
+  path.join(path.dirname(process.execPath), 'LICENSE'),
+  path.join(path.dirname(path.dirname(process.execPath)), 'LICENSE'),
+  '/usr/share/licenses/nodejs-libs/LICENSE',
+];
 let license;
-try { license = await readFile(nodeLicense); } catch {
+for (const nodeLicense of licenseCandidates) {
+  try { license = await readFile(nodeLicense); break; } catch { /* Try the next installation layout. */ }
+}
+if (!license) {
   const response = await fetch(`https://raw.githubusercontent.com/nodejs/node/${process.version}/LICENSE`);
   if (!response.ok) throw new Error('Could not retrieve the license for the bundled Node runtime');
   license = await response.text();

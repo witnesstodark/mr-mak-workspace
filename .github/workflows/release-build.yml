@@ -1,0 +1,169 @@
+name: Build release packages
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to build
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  NODE_VERSION: '22'
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  linux:
+    name: Linux binary and AppImage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux packaging dependencies
+        run: sudo apt-get update && sudo apt-get install -y build-essential file libssl-dev libwebkit2gtk-4.1-dev libappindicator3-dev libxdo-dev librsvg2-dev libwayland-dev patchelf
+
+      - run: npm ci
+
+      - name: Set package version from release tag
+        env:
+          RELEASE_VERSION: ${{ env.RELEASE_TAG }}
+        run: |
+          version="${RELEASE_VERSION#v}"
+          jq -n --arg version "${version}" '{version: $version}' > src-tauri/release-config.json
+
+      - name: Build AppImage and binary
+        run: npm exec -- tauri build --ci --bundles appimage --config src-tauri/release-config.json
+
+      - name: Stage Linux assets
+        run: |
+          mkdir -p release-assets
+          cp src-tauri/target/release/mrmak-workspace "release-assets/Mr-Mak-Workspace-${RELEASE_TAG}-linux-x86_64"
+          cp src-tauri/target/release/bundle/appimage/*.AppImage "release-assets/Mr-Mak-Workspace-${RELEASE_TAG}-linux-x86_64.AppImage"
+          file release-assets/*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-linux
+          path: release-assets/
+          if-no-files-found: error
+          retention-days: 14
+
+  windows:
+    name: Windows installer and binary
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+      - run: npm ci
+
+      - name: Set package version from release tag
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ env.RELEASE_TAG }}
+        run: |
+          $version = $env:RELEASE_VERSION.TrimStart('v')
+          @{ version = $version } | ConvertTo-Json | Set-Content src-tauri/release-config.json
+
+      - name: Build NSIS installer and binary
+        run: npm exec -- tauri build --ci --bundles nsis --config src-tauri/release-config.json
+
+      - name: Stage Windows assets
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release-assets | Out-Null
+          Copy-Item (Get-ChildItem src-tauri/target/release/bundle/nsis/*.exe | Select-Object -First 1).FullName "release-assets/Mr-Mak-Workspace-$env:RELEASE_TAG-windows-x64-setup.exe"
+          Copy-Item src-tauri/target/release/mrmak-workspace.exe "release-assets/Mr-Mak-Workspace-$env:RELEASE_TAG-windows-x64.exe"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-windows
+          path: release-assets/
+          if-no-files-found: error
+          retention-days: 14
+
+  macos:
+    name: macOS app
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+      - run: npm ci
+
+      - name: Set package version from release tag
+        env:
+          RELEASE_VERSION: ${{ env.RELEASE_TAG }}
+        run: |
+          version="${RELEASE_VERSION#v}"
+          jq -n --arg version "${version}" '{version: $version}' > src-tauri/release-config.json
+
+      - name: Build DMG
+        run: npm exec -- tauri build --ci --bundles dmg --config src-tauri/release-config.json
+
+      - name: Stage macOS assets
+        run: |
+          mkdir -p release-assets
+          cp src-tauri/target/release/bundle/dmg/*.dmg "release-assets/Mr-Mak-Workspace-${RELEASE_TAG}-macos.dmg"
+          ditto -c -k --sequesterRsrc --keepParent src-tauri/target/release/bundle/macos/*.app "release-assets/Mr-Mak-Workspace-${RELEASE_TAG}-macos.app.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-macos
+          path: release-assets/
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    needs: [linux, windows, macos]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create release and upload assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if ! gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            gh release create "${RELEASE_TAG}" \
+              --title "Mr. Mak Workspace ${RELEASE_TAG}" \
+              --generate-notes \
+              --verify-tag
+          fi
+
+          find release-assets -type f -print0 | xargs -0 gh release upload "${RELEASE_TAG}" --clobber

@@ -2,14 +2,14 @@ import { open, realpath, stat, lstat, unlink, link, copyFile } from 'node:fs/pro
 import { constants } from 'node:fs';
 import path from 'node:path';
 import { within } from './util.mjs';
+import { invalidFilename, samePath } from './platform.mjs';
 
 export const MAX_FILE_BYTES = 1024 * 1024 * 1024;
 const invalid = message => Object.assign(new Error(message), { status: 400 });
 
 export async function importFile(source, folder, name, maxBytes = MAX_FILE_BYTES) {
   if (typeof folder !== 'string' || !folder) throw invalid('Choose a destination folder.');
-  if (typeof name !== 'string' || !name || name.length > 240 || /[<>:"/\\|?*\x00-\x1f]/.test(name)
-    || /[. ]$/.test(name) || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(name)) {
+  if (invalidFilename(name)) {
     throw invalid('This file name cannot be used on Windows.');
   }
   const destination = await realpath(path.resolve(folder));
@@ -73,7 +73,7 @@ export async function moveFile(value, folder) {
   const destination = await realpath(path.resolve(folder));
   if (!(await stat(destination)).isDirectory()) throw invalid('Choose a destination folder.');
   const target = path.join(destination, path.basename(source));
-  if (source.toLowerCase() === target.toLowerCase()) return { path: source, moved: false };
+  if (samePath(source, target)) return { path: source, moved: false };
   const before = await lstat(source);
   if (!before.isFile() || before.isSymbolicLink()) throw invalid('Move individual files here. Use Explorer for folder or link moves.');
   try {

@@ -2,7 +2,6 @@ import path from 'node:path';
 import os from 'node:os';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { execFile } from 'node:child_process';
 import { parse as toml } from 'smol-toml';
 import { parse as dotenv } from 'dotenv';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -10,6 +9,7 @@ import { StdioClientTransport, getDefaultEnvironment } from '@modelcontextprotoc
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { commandPath } from './agents.mjs';
+import { terminateProcessTree } from './platform.mjs';
 
 const key = value => path.resolve(value).replaceAll('\\', '/').toLowerCase();
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -201,9 +201,9 @@ async function probeServer(entry, signal) {
     const auth = /401|403|unauthoriz|authentication/i.test([error.name, error.code, error.status, error.message].join(' '));
     return { status: auth ? 'agent-auth' : signal.aborted ? 'timeout' : 'unavailable', toolCount: null };
   } finally {
-    if (transport instanceof StdioClientTransport && process.platform === 'win32' && transport.pid) {
+    if (transport instanceof StdioClientTransport && transport.pid) {
       // Kill only the new inspector-owned process tree, never an agent's MCP.
-      await new Promise(resolve => execFile('taskkill.exe', ['/PID', String(transport.pid), '/T', '/F'], { windowsHide: true, timeout: 3000 }, () => resolve()));
+      await terminateProcessTree(transport.pid, { force: true });
     }
     closing = true;
     if (transport instanceof StreamableHTTPClientTransport && transport.sessionId) await transport.terminateSession().catch(() => {});

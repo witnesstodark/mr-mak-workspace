@@ -23,7 +23,7 @@ async function fixture() {
   return { repo, paths };
 }
 
-test('multiple folder, document and image paths reach a real terminal once without copying or submitting', { skip: process.platform !== 'win32', timeout: 20000 }, async () => {
+test('multiple folder, document and image paths reach a real terminal once without copying or submitting', { timeout: 20000 }, async () => {
   const { repo, paths } = await fixture();
   const service = await createService({ repo, uiDir: path.join(repo, 'ui') });
   try {

@@ -1,6 +1,6 @@
 # Desktop architecture
 
-The Windows app is a Tauri 2 shell around two webviews. It starts one local Node
+The desktop app is a Tauri 2 shell around two webviews. It starts one local Node
 service, binds it to loopback and gives each window the authenticated local URL.
 Workspace renders the React UI and report files. Chats renders real PTYs through
 xterm.js. The windows share sessions and settings but minimize independently.
@@ -9,15 +9,17 @@ xterm.js. The windows share sessions and settings but minimize independently.
 | --- | --- |
 | `src/` | React Workspace, document previews, files, chat and voice UI |
 | `desktop/service/` | HTTP/WebSocket service, PTYs, session history, tools, voice connection |
-| `src-tauri/src/` | Windows shell integration, taskbar identities, native drag and optional Win key |
+| `src-tauri/src/` | Cross-platform shell integration plus Windows taskbar identities, native drag and optional system shortcut |
 | `workspace/workspace.json` | Card registry |
 | `workspace/_shared/` | Report CSS, image viewer and Help |
 | `.mrmak/` | Local runtime state; ignored by Git |
 
 `npm run desktop:build` runs `desktop/prepare.mjs`, builds the React frontend,
 packages the service with a Node executable and production dependencies, then
-builds the Tauri executable and NSIS installer. The recipient selects their own
-repository; its content is served from disk rather than baked into the installer.
+builds the Tauri executable and platform installers. On Linux, use
+`npm run desktop:build:appimage` for the distributable AppImage. The recipient
+selects their own repository; its content is served from disk rather than baked
+into the installer.
 
 The service runs CLIs as the current user. Their available files and permissions
 follow their launch options and native account settings. Permission bypass is
@@ -91,5 +93,5 @@ It isolates the CLI's home and data directories, verifies two separate native
 histories, then closes and resumes a real terminal. Tested with OpenCode 1.18.3
 and 2.0.21 on Windows. No paid model calls are made.
 
-Windows x64 is the validated native target. Porting the native shell integration
-to another operating system requires additional work.
+Windows x64 and Linux are supported native targets. macOS remains a future target;
+the shared platform boundary avoids making Linux behavior a prerequisite for it.

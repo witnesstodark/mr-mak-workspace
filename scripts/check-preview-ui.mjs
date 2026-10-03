@@ -12,7 +12,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // Omitting it hides CSS module failures caused by Vite's public-file middleware.
 await import('./ensure-workspace-link.mjs');
 const { entities } = JSON.parse(await readFile(path.join(root, 'workspace/workspace.json')));
-const server = await createServer({ root, server: { host: '127.0.0.1', port: 0, open: false, watch: null } });
+const server = await createServer({ root, server: { host: '127.0.0.1', port: 0, open: false, watch: null, hmr: false } });
 let browser;
 try {
   await server.listen();

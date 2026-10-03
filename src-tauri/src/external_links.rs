@@ -10,7 +10,7 @@ pub fn open_popup(url: tauri::Url) -> tauri::webview::NewWindowResponse<tauri::W
             if let Err(error) = open_browser(&url) {
                 rfd::MessageDialog::new()
                     .set_title("Could not open your browser")
-                    .set_description(format!("{error}\nCheck the default browser in Windows Settings."))
+                    .set_description(format!("{error}\nCheck the default browser in your system settings."))
                     .set_level(rfd::MessageLevel::Error)
                     .show();
             }
@@ -34,8 +34,28 @@ fn open_browser(url: &tauri::Url) -> Result<(), String> {
 }
 
 #[cfg(not(windows))]
-fn open_browser(_url: &tauri::Url) -> Result<(), String> {
-    Err("Opening browser links is currently supported by Mr. Mak for Windows.".into())
+fn open_browser(url: &tauri::Url) -> Result<(), String> {
+    use std::process::Command;
+    let program = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
+    Command::new(program).arg(url.as_str()).spawn().map(|_| ()).map_err(|error| format!("Could not start {program}: {error}"))
+}
+
+pub fn reveal_path(path: &str) -> Result<(), String> {
+    use std::path::Path;
+    use std::process::Command;
+    let target = Path::new(path);
+    #[cfg(windows)]
+    {
+        let mut command = Command::new("explorer.exe");
+        if target.is_dir() { command.arg(target); } else { command.arg(format!("/select,{}", target.display())); }
+        command.spawn().map(|_| ()).map_err(|error| format!("Could not open Explorer: {error}"))
+    }
+    #[cfg(not(windows))]
+    {
+        let folder = if target.is_dir() { target } else { target.parent().unwrap_or(target) };
+        let program = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
+        Command::new(program).arg(folder).spawn().map(|_| ()).map_err(|error| format!("Could not start {program}: {error}"))
+    }
 }
 
 #[cfg(test)]

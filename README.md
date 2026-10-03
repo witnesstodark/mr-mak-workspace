@@ -69,13 +69,14 @@ Claude Code CLI or OpenCode and paste:
 The repository includes examples, instructions and application source. You bring
 your own agent accounts and any services you want to use.
 
-## Run on Windows
+## Run the desktop app
 
-1. Download the installer from [Releases](https://github.com/witnesstodark/mr-mak-workspace/releases/latest)
-   and install **Mr. Mak Workspace**.
-2. Open **Start Mr. Mak.cmd** in your cloned repository. On a first launch from
-   the Start menu, select that repository when asked.
-3. Use **+** in Chats to open an installed CLI. Sign in with your own account.
+On Windows, download the installer from [Releases](https://github.com/witnesstodark/mr-mak-workspace/releases/latest),
+install **Mr. Mak Workspace**, then open **Start Mr. Mak.cmd** in your cloned
+repository. On Linux, build the Tauri desktop target after installing the Node,
+Rust and WebKitGTK prerequisites, then launch the resulting AppImage/deb install
+with `--repo /path/to/your/workspace`. On both systems, use **+** in Chats to
+open an installed CLI and sign in with your own account.
 
 The installer includes the local Node service. It does not include Codex,
 Claude Code, OpenCode, Kimi, Blender, Python or provider accounts.
@@ -156,9 +157,8 @@ and save workflows in `processes/`. English is the default for stored content;
 ask for another language whenever you need it. The app's Win-key shortcut and
 permission bypass both start disabled.
 
-This release targets **Windows x64**. Browser report previews can run elsewhere;
-the native Windows shell integration has not been ported or validated on macOS
-or Linux. See [customization](docs/customization.md) and
+This release targets **Windows x64 and Linux**. Browser report previews can run
+elsewhere; macOS native packaging remains future work. See [customization](docs/customization.md) and
 [sharing your version](docs/sharing.md).
 
 Application code and original workflow documentation are under the MIT license.

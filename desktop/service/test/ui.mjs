@@ -135,7 +135,7 @@ try {
     } else {
       await page.locator('.xterm-helper-textarea').focus(); await page.keyboard.press('Control+c');
       for (let i = 0; i < 20 && !writes.get(agent).includes('\x03'); i++) await new Promise(resolve => setTimeout(resolve, 20));
-      assert.ok(writes.get(agent).includes('\x03'), 'PowerShell retains Ctrl+C interrupt');
+      assert.ok(writes.get(agent).includes('\x03'), 'The local shell retains Ctrl+C interrupt');
     }
   }
   assert.deepEqual(errors, []);

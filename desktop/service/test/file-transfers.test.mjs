@@ -35,7 +35,9 @@ test('streaming copies preserve bytes and concurrent duplicate names never overw
 
 test('invalid names, interrupted uploads and size limits leave no partial copies', async () => {
   const repo = await fixture(), folder = path.join(repo, 'inbox');
-  for (const name of ['../escape.txt', '..\\escape.txt', '.', '..', 'CON.txt', 'C:secret', 'trailing.', 'trailing ', 'a/b.txt']) {
+  const invalidNames = ['../escape.txt', '..\\escape.txt', '.', '..', 'a/b.txt'];
+  if (process.platform === 'win32') invalidNames.push('CON.txt', 'C:secret', 'trailing.', 'trailing ');
+  for (const name of invalidNames) {
     await assert.rejects(importFile(Readable.from(['bad']), folder, name), /file name/);
   }
   await assert.rejects(importFile(Readable.from([Buffer.from('123'), Buffer.from('456')]), folder, 'Large.bin', 4), /1 GB/);

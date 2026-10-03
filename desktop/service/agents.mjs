@@ -1,35 +1,42 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import { parse as parseEnv } from 'dotenv';
+import { isWindows, resolveCommand, shellCommand, shellLabel } from './platform.mjs';
+
+export { shellCommand };
+
+export function wrapCommand(file, args = []) {
+  if (!isWindows) return { file, args };
+  const quote = value => "'" + value.replaceAll("'", "''") + "'";
+  const script = `[Console]::InputEncoding = [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new(); & ${[file, ...args].map(quote).join(' ')}; exit $LASTEXITCODE`;
+  return { file: 'powershell.exe', args: ['-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')] };
+}
 
 export const AGENTS = [
   { id: 'codex', label: 'Codex', color: '#88d8bf', command: 'codex', subscription: true },
   { id: 'claude', label: 'Claude Code', color: '#dba68c', command: 'claude', subscription: true },
   { id: 'opencode', label: 'OpenCode', color: '#c8d2dc', command: 'opencode', subscription: false },
   { id: 'kimi', label: 'Kimi', color: '#b3a3f7', command: 'kimi', subscription: true },
-  { id: 'shell', label: 'PowerShell', color: '#89b7ed', command: 'powershell.exe', subscription: false },
+  { id: 'shell', label: shellLabel(), color: '#89b7ed', command: 'shell', subscription: false },
 ];
 
-export function commandPath(name, env = process.env) {
-  if (path.isAbsolute(name) && existsSync(name)) return name;
-  const extra = [path.join(env.APPDATA || '', 'npm'), path.join(os.homedir(), '.kimi-code', 'bin'), path.join(os.homedir(), '.opencode', 'bin'), path.join(os.homedir(), '.local', 'bin')];
-  const extensions = process.platform === 'win32' ? ['.exe', '.cmd', '.bat', '.ps1', ''] : [''];
-  for (const folder of [...String(env.PATH || env.Path || '').split(path.delimiter), ...extra]) {
-    for (const ext of extensions) {
-      const candidate = path.join(folder, name.toLowerCase().endsWith(ext) && ext ? name : name + ext);
-      if (existsSync(candidate)) return candidate;
-    }
-  }
-  return null;
+export function commandPath(name, env = process.env, home) {
+  return resolveCommand(name, env, home);
 }
 
 export function inventory(env = process.env) {
-  return AGENTS.map(agent => ({ ...agent, available: !!commandPath(agent.command, env) }));
+  const shell = shellCommand(env);
+  const shellAvailable = path.isAbsolute(shell.file) ? existsSync(shell.file) : !!commandPath(shell.file, env);
+  return AGENTS.map(agent => ({ ...agent, available: agent.id === 'shell' ? shellAvailable : !!commandPath(agent.command, env) }));
 }
 
 // Resolve the real Codex binary when available so JSON-RPC does not pass through a shell.
 export function codexBinary(env = process.env) {
+  if (!isWindows) {
+    const executable = commandPath('codex', env);
+    if (executable) return { file: executable, args: [] };
+    throw new Error('Codex CLI is not installed. Install it and sign in once to use Mr. Mak.');
+  }
   const npmRoot = path.join(env.APPDATA || '', 'npm', 'node_modules', '@openai');
   const triple = process.arch === 'arm64' ? 'aarch64-pc-windows-msvc' : 'x86_64-pc-windows-msvc';
   const platformPackage = `codex-win32-${process.arch}`;
@@ -48,8 +55,9 @@ export function codexBinary(env = process.env) {
 
 export function terminalCommand(agent, { bypass = false, resumeId, nativeId, effort, opencodeMajor = 1 } = {}) {
   if (!AGENTS.some(item => item.id === agent)) throw new Error('Unknown agent');
-  const command = commandPath(AGENTS.find(item => item.id === agent).command);
-  if (!command) throw new Error(`${agent} is not installed on this computer`);
+  const command = agent === 'shell' ? shellCommand() : { file: commandPath(AGENTS.find(item => item.id === agent).command), args: [] };
+  if (!command || !command.file) throw new Error(`${agent} is not installed on this computer`);
+  if (agent === 'shell' && (path.isAbsolute(command.file) ? !existsSync(command.file) : !commandPath(command.file))) throw new Error('The local shell is not available on this computer');
   const args = [];
   if (agent === 'codex') {
     if (resumeId) args.push('resume', resumeId);
@@ -70,20 +78,10 @@ export function terminalCommand(agent, { bypass = false, resumeId, nativeId, eff
     if (opencodeMajor >= 2) args.push('--standalone');
     if (resumeId) args.push('--session', resumeId);
     if (bypass) args.push('--auto');
-  } else {
-    args.push('-NoLogo');
   }
-  if (process.platform !== 'win32' || agent === 'shell') return { file: command, args };
-  return shellCommand(command, args);
-}
-
-export function shellCommand(command, args) {
-  if (process.platform !== 'win32') return { file: command, args };
-  // An encoded PowerShell script preserves spaces, Unicode and quotes. No -NoExit:
-  // after the agent exits, stale coordinator input cannot become shell commands.
-  const quote = value => "'" + value.replaceAll("'", "''") + "'";
-  const script = `[Console]::InputEncoding = [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new(); & ${[command, ...args].map(quote).join(' ')}; exit $LASTEXITCODE`;
-  return { file: 'powershell.exe', args: ['-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')] };
+  if (!isWindows || agent === 'shell') return { file: command.file || command, args: [...(command.args || []), ...args] };
+  // No -NoExit: stale coordinator input cannot become shell commands after the agent exits.
+  return wrapCommand(command.file, [...(command.args || []), ...args]);
 }
 
 export function childEnvironment(repo) {

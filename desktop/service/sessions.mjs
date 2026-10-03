@@ -11,6 +11,7 @@ import { claudeTranscript, codexTranscript, tailNativeFile } from './native-even
 import { findCodexChat } from './codex-history.mjs';
 import { englishTitle, restoredTitle } from './titles.mjs';
 import { defaultWorkerEffort, workerEfforts } from './effort.mjs';
+import { ptyOptions } from './platform.mjs';
 import { opencodeVersion, opencodeEnvironment, readOpencodeState, watchOpencode } from './opencode.mjs';
 
 const { Terminal } = headless;
@@ -134,7 +135,7 @@ export class Sessions extends EventEmitter {
     if (this.closed || !session.open) throw new Error('The chat was closed before its terminal started.');
     const command = terminalCommand(session.agent, { bypass: session.bypass, resumeId, nativeId: session.nativeId, effort: session.effort, opencodeMajor });
     if (session.agent === 'codex') env.CODEX_INTERNAL_ORIGINATOR_OVERRIDE = `mrmak_chat_${session.id}`;
-    const proc = pty.spawn(command.file, command.args, { name: 'xterm-256color', cwd: session.cwd, env, cols: session.cols, rows: session.rows, useConpty: true, useConptyDll: true });
+    const proc = pty.spawn(command.file, command.args, ptyOptions({ cwd: session.cwd, env, cols: session.cols, rows: session.rows }));
     session.process = proc;
     session.deviceReplies?.dispose();
     // Inactive tabs still have a terminal: answer device queries without needing
@@ -159,10 +160,12 @@ export class Sessions extends EventEmitter {
       this.flushOutput(session);
       session.process = null;
       session.deviceReplies?.dispose();
-      // node-pty 1.1.0 leaves its ConPTY output worker alive after a natural exit.
-      // The bundled ConPTY DLL avoids the legacy AttachConsole-on-dead-PID path.
-      try { proc.kill(); } catch { /* Native console already closed. */ }
-      proc._agent?._conoutSocketWorker?.dispose();
+      if (process.platform === 'win32') {
+        // node-pty 1.1.0 leaves its ConPTY output worker alive after a natural exit.
+        // The bundled ConPTY DLL avoids the legacy AttachConsole-on-dead-PID path.
+        try { proc.kill(); } catch { /* Native console already closed. */ }
+        proc._agent?._conoutSocketWorker?.dispose();
+      }
       session.stopNativeWatch?.();
       session.stopNativeWatch = null;
       session.status = 'exited';
@@ -297,7 +300,7 @@ export class Sessions extends EventEmitter {
   input(id, data, { coordinator = false, submit = false } = {}) {
     const session = this.get(id);
     if (!session.process) throw new Error('This terminal is stopped. Resume it before sending a message.');
-    if (coordinator && session.agent === 'shell') throw new Error('Mr. Mak can send messages to agent chats; type shell commands directly in PowerShell.');
+    if (coordinator && session.agent === 'shell') throw new Error('Mr. Mak can send messages to agent chats; type shell commands directly in the local shell.');
     if (typeof data !== 'string' || data.length > 64000) throw new Error('Message is too large');
     if (coordinator && Date.now() - Date.parse(session.lastInputAt || 0) < 2500) throw new Error('You are typing in this chat. Wait a moment before sending through Mr. Mak.');
     if (coordinator) {
@@ -305,8 +308,8 @@ export class Sessions extends EventEmitter {
       const clean = data.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '').replaceAll('\r', '');
       const target = session.process;
       target.write(`\x1b[200~${clean}\x1b[201~`);
-      // ConPTY and the native CLI finish handling a paste asynchronously. A quick
-      // Enter can be swallowed by Codex's paste guard, especially after resume.
+      // The native CLI finishes handling a paste asynchronously. A quick Enter
+      // can be swallowed by a paste guard, especially after resume.
       if (submit) setTimeout(() => { if (session.process === target) target.write('\r'); }, 500);
     } else session.process.write(data);
     if (!coordinator && !/^\x1b\[[?>0-9;]*[RcnIO]$/.test(data)) session.attention = false;

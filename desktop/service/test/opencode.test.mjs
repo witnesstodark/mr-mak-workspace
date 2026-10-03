@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createObserver } from '../opencode/observer.mjs';
-import { opencodeEnvironment, readOpencodeState, watchOpencode, opencodeStatePath } from '../opencode.mjs';
-import { terminalCommand } from '../agents.mjs';
+import { opencodeEnvironment, opencodeVersion, readOpencodeState, watchOpencode, opencodeStatePath } from '../opencode.mjs';
+import { commandPath, terminalCommand } from '../agents.mjs';
 import { Sessions } from '../sessions.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -106,6 +106,65 @@ test('OpenCode launch flags preserve native permissions and never pass Codex rea
       assert.doesNotMatch(launch, /--effort|model_reasoning_effort|xhigh/);
     }
   } finally { if (previous === undefined) delete process.env.PATH; else process.env.PATH = previous; }
+});
+
+test('OpenCode version detection executes the resolved CLI with --version', async () => {
+  const sandbox = await mkdtemp(path.join(directory, 'opencode-version-'));
+  const bin = path.join(sandbox, 'bin');
+  await mkdir(bin);
+  const executable = path.join(bin, process.platform === 'win32' ? 'opencode.cmd' : 'opencode');
+  await writeFile(executable, process.platform === 'win32'
+    ? '@echo off\r\necho 2.0.21\r\n'
+    : '#!/bin/sh\nprintf "2.0.21\\n"\n');
+  if (process.platform !== 'win32') await chmod(executable, 0o755);
+  const env = { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH || process.env.Path || ''}` };
+
+  assert.equal(commandPath('opencode', env), executable);
+  assert.equal(await opencodeVersion(env), 2);
+});
+
+test('OpenCode chat creation and resume both pass through version detection and launch the CLI', { skip: process.platform !== 'linux' }, async () => {
+  const sandbox = await mkdtemp(path.join(directory, 'opencode-chat-flow-'));
+  const repo = path.join(sandbox, 'project');
+  const stateDir = path.join(sandbox, 'state');
+  const bin = path.join(sandbox, 'bin');
+  await Promise.all([mkdir(repo), mkdir(stateDir), mkdir(bin)]);
+  const log = path.join(sandbox, 'launches.log');
+  const executable = path.join(bin, 'opencode');
+  await writeFile(executable, '#!/bin/sh\nif [ "$1" = "--version" ]; then printf "2.0.21\\n"; exit 0; fi\nprintf "%s\\n" "$*" >> "$OPENCODE_TEST_LOG"\nsleep 0.15\n');
+  await chmod(executable, 0o755);
+  const previousPath = process.env.PATH;
+  const previousLog = process.env.OPENCODE_TEST_LOG;
+  process.env.PATH = `${bin}${path.delimiter}${previousPath || ''}`;
+  process.env.OPENCODE_TEST_LOG = log;
+  const sessions = await new Sessions(repo, stateDir).init();
+  let restored;
+  try {
+    const created = await sessions.create({ agent: 'opencode', name: 'Version regression', cwd: repo });
+    const original = sessions.get(created.id);
+    assert.match(original.nativeId, /^ses_/);
+    for (let i = 0; i < 50 && original.process; i++) await new Promise(resolve => setTimeout(resolve, 50));
+    assert.equal(original.process, null);
+    await sessions.close();
+
+    restored = await new Sessions(repo, stateDir).init();
+    await restored.resume(created.id);
+    const resumed = restored.get(created.id);
+    assert.equal(resumed.nativeId, original.nativeId);
+    for (let i = 0; i < 50 && resumed.process; i++) await new Promise(resolve => setTimeout(resolve, 50));
+    assert.equal(resumed.process, null);
+    const launches = (await readFile(log, 'utf8')).trim().split('\n');
+    assert.equal(launches.length, 2);
+    for (const launch of launches) {
+      assert.match(launch, /--standalone/);
+      assert.match(launch, new RegExp(`--session ${original.nativeId}`));
+    }
+  } finally {
+    await sessions.close();
+    await restored?.close();
+    if (previousPath === undefined) delete process.env.PATH; else process.env.PATH = previousPath;
+    if (previousLog === undefined) delete process.env.OPENCODE_TEST_LOG; else process.env.OPENCODE_TEST_LOG = previousLog;
+  }
 });
 
 test('OpenCode recovery is per chat, rejects stale activity and resumes the same native ID after restart', async () => {

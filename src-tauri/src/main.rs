@@ -127,6 +127,17 @@ fn repo_path(app: &tauri::AppHandle) -> Result<PathBuf, Box<dyn std::error::Erro
     }
 }
 
+fn normalize_node_path(path: PathBuf) -> PathBuf {
+    let value = path.to_string_lossy();
+    if let Some(rest) = value.strip_prefix(r"\\?\UNC\") {
+        return PathBuf::from(format!(r"\\{rest}"));
+    }
+    if let Some(rest) = value.strip_prefix(r"\\?\") {
+        return PathBuf::from(rest);
+    }
+    path
+}
+
 fn make_windows(app: &tauri::AppHandle, workspace: &str, chats: &str) -> Result<(), Box<dyn std::error::Error>> {
     let (mut x, mut y, mut width, mut height) = (0.0, 0.0, 1440.0, 900.0);
     if let Some(monitor) = app.primary_monitor()? {
@@ -196,15 +207,15 @@ fn main() {
             #[cfg(windows)]
             window_identity::initialize(app.handle())?;
             let repo = repo_path(app.handle())?;
-            // WebView/Tauri canonical paths can carry the Windows extended-path
-            // prefix. Node's entrypoint resolver needs a normal drive path.
             let resource_dir = app.path().resource_dir()?;
-            let runtime = PathBuf::from(resource_dir.to_string_lossy().trim_start_matches(r"\\?\")).join("runtime");
-            let (node, script, ui) = if runtime.join("node.exe").is_file() {
-                (runtime.join("node.exe"), runtime.join("service/main.mjs"), runtime.join("ui"))
+            let runtime = resource_dir.join("runtime");
+            let runtime_node = if cfg!(windows) { runtime.join("node.exe") } else { runtime.join("node") };
+            let (node, script, ui) = if runtime_node.is_file() {
+                (runtime_node, runtime.join("service/main.mjs"), runtime.join("ui"))
             } else {
                 (PathBuf::from("node"), repo.join("desktop/service/main.mjs"), repo.join("dist"))
             };
+            let script = normalize_node_path(script);
             let logs = app.path().app_log_dir()?; fs::create_dir_all(&logs)?;
             let log = fs::OpenOptions::new().create(true).append(true).open(logs.join("service.log"))?;
             let mut command = Command::new(node);
@@ -252,7 +263,6 @@ fn main() {
                                 }
                             }
                         },
-                        #[cfg(windows)]
                         "recycle-file" => {
                             if let Some(file) = event["path"].as_str() {
                                 if let Some(window) = app_handle.get_webview_window("workspace") {
@@ -284,13 +294,7 @@ fn main() {
                                 });
                             }
                         },
-                        "reveal" => {
-                            if let Some(file) = event["path"].as_str() {
-                                let mut command = Command::new("explorer.exe");
-                                if PathBuf::from(file).is_dir() { command.arg(file); } else { command.arg(format!("/select,{}", file)); }
-                                let _ = hidden(&mut command).spawn();
-                            }
-                        },
+                        "reveal" => { if let Some(file) = event["path"].as_str() { let _ = external_links::reveal_path(file); } },
                         _ => {}
                     }
                 }
@@ -351,5 +355,18 @@ fn main() {
             }
         }),
         Err(error) => { rfd::MessageDialog::new().set_title("Mr. Mak could not start").set_description(error.to_string()).show(); }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_node_path;
+    use std::path::PathBuf;
+
+    #[test]
+    fn normalize_node_path_removes_windows_extended_prefixes() {
+        assert_eq!(normalize_node_path(PathBuf::from(r"\\?\C:\Mr Mak\service\main.mjs")), PathBuf::from(r"C:\Mr Mak\service\main.mjs"));
+        assert_eq!(normalize_node_path(PathBuf::from(r"\\?\UNC\server\share\service\main.mjs")), PathBuf::from(r"\\server\share\service\main.mjs"));
+        assert_eq!(normalize_node_path(PathBuf::from(r"C:\Mr Mak\service\main.mjs")), PathBuf::from(r"C:\Mr Mak\service\main.mjs"));
     }
 }

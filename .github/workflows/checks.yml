@@ -24,3 +24,26 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m unittest discover -s .agents/skills/fal-ai-generation/scripts -p test_fal_job.py -v
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - run: sudo apt-get update && sudo apt-get install -y build-essential file libssl-dev libwebkit2gtk-4.1-dev libappindicator3-dev libxdo-dev librsvg2-dev libwayland-dev patchelf
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run test:template
+      - run: npm run build
+      - run: npm run desktop:build:appimage
+      - name: Upload Linux AppImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: mr-mak-workspace-linux-appimage
+          path: src-tauri/target/release/bundle/appimage/*.AppImage
+          if-no-files-found: error
+          retention-days: 14
