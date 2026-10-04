@@ -1,0 +1,1 @@
+Sample reference fixture for file integrity checks.

@@ -1,0 +1,20 @@
+{
+  "schema": "mrmak.asset-delivery-plan/v1",
+  "card_id": "my-dream-game",
+  "step": "concept-study",
+  "provider": "local-example",
+  "model": "manual",
+  "receipt_id": "example-001",
+  "files": [
+    {
+      "path": "scripts/asset-delivery/examples/reference.txt",
+      "role": "approved-reference",
+      "kind": "input"
+    },
+    {
+      "path": "scripts/asset-delivery/examples/result.txt",
+      "role": "study-output",
+      "kind": "output"
+    }
+  ]
+}

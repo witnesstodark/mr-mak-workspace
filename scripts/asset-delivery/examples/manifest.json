@@ -1,0 +1,24 @@
+{
+  "schema": "mrmak.asset-delivery/v1",
+  "card_id": "my-dream-game",
+  "step": "concept-study",
+  "provider": "local-example",
+  "model": "manual",
+  "receipt_id": "example-001",
+  "files": [
+    {
+      "path": "scripts/asset-delivery/examples/reference.txt",
+      "role": "approved-reference",
+      "kind": "input",
+      "sha256": "5ac4677c5a9604f7aa8e3f33cd2811c1b18c8871fc55f6a36ad2c9b77d537bfe",
+      "bytes": 52
+    },
+    {
+      "path": "scripts/asset-delivery/examples/result.txt",
+      "role": "study-output",
+      "kind": "output",
+      "sha256": "e5c9be92755f43aed4c3a9eef771345b9dc6784c8d4d9de2e63b0545a06be692",
+      "bytes": 66
+    }
+  ]
+}

@@ -122,6 +122,13 @@ Click web links in chats or cards to open your default browser. New Codex and
 Claude chats start with `xhigh` effort; saved effort choices are preserved.
 OpenCode keeps its own model and reasoning configuration.
 
+## Optional asset delivery evidence
+
+Asset deliveries can carry a local SHA-256 manifest. The offline
+[asset delivery tool](scripts/asset-delivery/README.md) records inputs and outputs
+for a card without changing existing cards. Verification checks file integrity;
+visual approval and engine readiness remain separate decisions.
+
 ## Skills you can keep
 
 Twenty project skills cover planning, handoffs, Workspace reports, image
