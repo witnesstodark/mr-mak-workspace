@@ -85,12 +85,21 @@ try {
   await phone.getByRole('button', { name: 'Request connection' }).click();
   await phone.getByRole('heading', { name: 'Confirm on your computer' }).waitFor();
   await desktop.getByRole('button', { name: 'Connect phone', exact: true }).click();
-  await phone.getByRole('heading', { name: 'Your chats', exact: true }).waitFor();
+  await phone.getByRole('heading', { name: 'Chats', exact: true }).waitFor();
   await desktop.getByText('Connected now', { exact: true }).waitFor();
+  assert.deepEqual(await phone.locator('.mobile-header button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))), ['New chat', 'History', 'Chats', 'Results', 'Phone settings']);
+  await phone.getByRole('button', { name: 'History', exact: true }).click();
+  await phone.getByRole('heading', { name: 'History', exact: true }).waitFor();
+  await phone.getByRole('button', { name: 'History', exact: true }).click();
+  await phone.getByRole('heading', { name: 'Chats', exact: true }).waitFor();
+  assert.equal(await phone.locator('.mobile-connection').evaluate(dot => getComputedStyle(dot).animationDuration), '3.6s');
+  await phone.emulateMedia({ reducedMotion: 'reduce' });
+  assert.equal(await phone.locator('.mobile-connection').evaluate(dot => getComputedStyle(dot).animationName), 'none');
+  await phone.emulateMedia({ reducedMotion: 'no-preference' });
   for (const width of [320, 360, 393, 430, 768]) {
     await phone.setViewportSize({ width, height: 844 });
     const layout = await phone.evaluate(() => {
-      const selectors = ['.mobile-chat-list', '.mobile-chat-cards', '.mobile-chat-card', '.mobile-list-title', '.mobile-search', '.mobile-list-tabs'];
+      const selectors = ['.mobile-chat-list', '.mobile-chat-cards', '.mobile-chat-card', '.mobile-header', '.mobile-main-nav', '.mobile-search'];
       return [...document.querySelectorAll(selectors.join(','))].map(node => ({ selector: node.className, left: node.getBoundingClientRect().left, right: node.getBoundingClientRect().right, client: node.clientWidth, scroll: node.scrollWidth }));
     });
     await phone.screenshot({ path: path.join(repo, `phone-chats-${width}.png`) });
@@ -170,7 +179,7 @@ try {
   assert.equal(await phone.getByRole('textbox', { name: 'Message this chat' }).inputValue(), 'Keep this draft while I switch chats.');
   await phone.screenshot({ path: path.join(repo, 'phone-conversation.png') });
   await mobileContext.setOffline(true); await phone.getByText('Offline · draft saved', { exact: true }).waitFor();
-  await mobileContext.setOffline(false); await phone.getByText('Connected to your computer', { exact: true }).waitFor();
+  await mobileContext.setOffline(false); await phone.getByRole('status', { name: 'Connected to your computer', exact: true }).waitFor();
   assert.equal(await input.inputValue(), 'Keep this draft while I switch chats.');
   await phone.getByRole('button', { name: 'Terminal', exact: true }).click(); await phone.locator('.mobile-terminal .xterm-screen').waitFor();
   const beforeKeys = writes.length;
@@ -217,7 +226,7 @@ try {
   assert.equal(service.sessions.get(ids[0]).open, true);
   phone.once('dialog', dialog => { assert.match(dialog.message(), /History/); void dialog.accept(); });
   await phone.getByRole('button', { name: 'Close chat', exact: true }).click();
-  await phone.getByRole('heading', { name: 'Your chats', exact: true }).waitFor();
+  await phone.getByRole('heading', { name: 'Chats', exact: true }).waitFor();
   assert.equal(await phone.getByRole('button', { name: /Game animations/ }).count(), 0);
   await desktop.locator(`[data-chat-tab="${ids[0]}"]`).waitFor({ state: 'detached' });
   const afterClose = await (await fetch(`${service.origin}/api/bootstrap`, { headers: { Authorization: `Bearer ${service.token}` } })).json();
