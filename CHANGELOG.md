@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Update a desktop build from source with `Setup.ps1 -Mode Update`: it builds, waits until you quit Mr. Mak, installs silently and starts Mr. Mak again. It never closes the app itself.
+
 ## 0.5.1 - 2026-10-09
 
 - Click a card's status dot in the desktop Workspace to set Active, Done or Archived, change its category, or pin it. Changes save immediately; archived cards keep their files and can be restored through search or Show archive.

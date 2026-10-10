@@ -11,6 +11,10 @@ context, credentials or agent conversations.
 3. Open the same repository you were using before. Your cards, settings and
    History remain in that folder.
 
+For a desktop build from source, `Setup.ps1 -Mode Update` replaces these steps:
+it builds the current source, waits for you to quit Mr. Mak, installs the build
+silently and starts Mr. Mak again. See [getting started](getting-started.md).
+
 Version 0.5.0 adds optional [mobile access](mobile-access.md). After updating,
 use the phone button in Chats to connect your own devices through Tailscale.
 Existing pairings survive application updates. Mobile dictation uses an
