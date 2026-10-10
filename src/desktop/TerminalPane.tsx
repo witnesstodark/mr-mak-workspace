@@ -89,6 +89,17 @@ export default function TerminalPane({ id, agent, fontSize, appearance, onAttach
     let sequence = -1
     let ready = false
     let queued: { sequence: number; data: string }[] = []
+    // Agent TUIs copy their own mouse selection with OSC 52 ("c;<base64>").
+    // Write-only: a program may set the clipboard but never read it back.
+    const clipboard = terminal.parser.registerOscHandler(52, data => {
+      const payload = data.slice(data.indexOf(';') + 1)
+      if (!ready || !data.includes(';') || !payload || payload === '?' || payload.length > 4 * 1024 * 1024) return true
+      try {
+        const text = new TextDecoder().decode(Uint8Array.from(atob(payload), char => char.charCodeAt(0)))
+        navigator.clipboard.writeText(text).catch(reportError)
+      } catch { /* Malformed clipboard data is not copied. */ }
+      return true
+    })
     const resize = () => {
       if (!host.current?.clientWidth || !host.current?.clientHeight) return
       fit.fit()
@@ -160,7 +171,7 @@ export default function TerminalPane({ id, agent, fontSize, appearance, onAttach
     subscribe()
     const focus = () => terminal.focus()
     window.addEventListener('focus', focus)
-    return () => { off(); input.dispose(); observer.disconnect(); element.removeEventListener('paste', paste, true); window.removeEventListener('focus', focus); clearTimeout(statusTimer.current); onAttachmentStatus(id, ''); terminal.dispose(); terminalRef.current = null; fitRef.current = null }
+    return () => { off(); input.dispose(); clipboard.dispose(); observer.disconnect(); element.removeEventListener('paste', paste, true); window.removeEventListener('focus', focus); clearTimeout(statusTimer.current); onAttachmentStatus(id, ''); terminal.dispose(); terminalRef.current = null; fitRef.current = null }
   }, [id, agent, onAttachmentStatus])
   useEffect(() => {
     const terminal = terminalRef.current

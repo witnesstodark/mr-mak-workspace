@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Copy text selected with the mouse in agent chats. Claude Code copies its selection with a terminal clipboard sequence (OSC 52), which the terminal previously ignored. Programs can set the clipboard but cannot read it.
+
 ## 0.5.1 - 2026-10-09
 
 - Click a card's status dot in the desktop Workspace to set Active, Done or Archived, change its category, or pin it. Changes save immediately; archived cards keep their files and can be restored through search or Show archive.
