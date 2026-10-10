@@ -1,0 +1,6 @@
+.dictation-settings{margin:16px 0;padding:14px 0;border-top:1px solid #ffffff18}
+.dictation-settings h3{margin:0 0 10px;font-size:13px}
+.dictation-settings label{display:grid;gap:8px;font-size:12px}
+.dictation-settings select{width:100%;min-height:42px;padding:8px 10px;background:#19181e;color:#eee;border:1px solid #45404c;border-radius:7px;font:inherit}
+.dictation-settings p{font-size:12px;line-height:1.6;color:#aaa6b1;margin:10px 0 0}
+.dictation-settings [role=alert],.dictation-settings [role=status]{color:#edb5c7}

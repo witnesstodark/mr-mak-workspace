@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { localAvailable, localConfig, localTranscribe } from './local-dictation.mjs';
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { parse } from 'dotenv';
@@ -10,7 +11,8 @@ const fail = (message, status = 400) => { throw Object.assign(new Error(message)
 const formats = { 'audio/webm': 'webm', 'audio/mp4': 'm4a', 'audio/ogg': 'ogg', 'audio/wav': 'wav' };
 
 export class MobileDictation {
-  constructor(repo, { fetcher = fetch, env = process.env } = {}) {
+  constructor(repo, { fetcher = fetch, env = process.env, localRunner = localTranscribe, localStatus = localAvailable, providerChoice = () => null } = {}) {
+    this.providerChoice = providerChoice; this.localRunner = localRunner; this.localStatus = localStatus;
     this.repo = repo; this.fetcher = fetcher; this.env = env;
     this.jobs = new Map(); this.controllers = new Map(); this.rates = new Map(); this.closed = false;
   }
@@ -18,14 +20,23 @@ export class MobileDictation {
     const keys = { ...this.env, ...parse(await readFile(path.join(this.repo, '.env'), 'utf8').catch(() => '')) };
     const router = keys.OPENROUTER_API_KEY || keys.OPENROUTER_KEY;
     const openai = keys.OPENAI_API_KEY || keys.OPENAI_KEY;
-    const provider = keys.MRMAK_TRANSCRIBE_PROVIDER?.trim().toLowerCase() || (router ? 'openrouter' : 'openai');
+    const provider = this.providerChoice() || keys.MRMAK_TRANSCRIBE_PROVIDER?.trim().toLowerCase() || 'local';
     const key = provider === 'openrouter' ? router : provider === 'openai' ? openai : null;
-    return { provider, key, model: keys.MRMAK_TRANSCRIBE_MODEL?.trim() || (provider === 'openrouter' ? 'openai/gpt-4o-transcribe' : 'gpt-4o-transcribe') };
+    const modelOverride = !this.providerChoice() || keys.MRMAK_TRANSCRIBE_PROVIDER?.trim().toLowerCase() === provider ? keys.MRMAK_TRANSCRIBE_MODEL?.trim() : null;
+    return { provider, key, local: localConfig(this.repo, keys), model: modelOverride || (provider === 'openrouter' ? 'openai/gpt-4o-transcribe' : 'gpt-4o-transcribe') };
   }
   async status() {
-    const { provider, key } = await this.config();
-    return { available: !!key, provider: key ? provider : null, maxSeconds: RECORDING_SECONDS, maxBytes: AUDIO_LIMIT };
+    const config = await this.config();
+    const keys = { ...this.env, ...parse(await readFile(path.join(this.repo, '.env'), 'utf8').catch(() => '')) };
+    const providers = [
+      { id: 'local', label: 'Local Whisper · Free', available: await this.localStatus(config.local), detail: 'Runs on your computer. No API charges.' },
+      { id: 'openai', label: 'OpenAI · Paid', available: !!(keys.OPENAI_API_KEY || keys.OPENAI_KEY), detail: 'Uses your OpenAI API credit.' },
+      { id: 'openrouter', label: 'OpenRouter · Paid', available: !!(keys.OPENROUTER_API_KEY || keys.OPENROUTER_KEY), detail: 'Uses your OpenRouter API credit.' },
+      { id: 'off', label: 'Off', available: true, detail: 'Microphone dictation disabled.' },
+    ];
+    return { available: config.provider !== 'off' && !!providers.find(item => item.id === config.provider)?.available, provider: config.provider, providers, maxSeconds: RECORDING_SECONDS, maxBytes: AUDIO_LIMIT };
   }
+
   async transcribe(request, deviceId, authorized = () => true) {
     if (this.closed || !authorized()) fail('This phone is disconnected.', 401);
     const id = request.headers['x-transcription-id'];
@@ -60,7 +71,8 @@ export class MobileDictation {
     const rate = this.rates.get(deviceId) || { at: now, count: 0 };
     if (rate.count >= 6) fail('Please wait a minute before transcribing another recording.', 429);
     const config = await this.config();
-    if (!config.key) fail('Voice input needs OPENROUTER_API_KEY or OPENAI_API_KEY in the computer workspace .env. Your keyboard microphone still works.', 503);
+    if (config.provider === 'local' && !await this.localStatus(config.local)) fail('Local Whisper is not installed. Run the local dictation setup on your computer.', 503);
+    if (config.provider !== 'local' && !config.key) fail('Voice input needs OPENROUTER_API_KEY or OPENAI_API_KEY in the computer workspace .env. Your keyboard microphone still works.', 503);
     // Recheck after the asynchronous config read, before reserving a paid request.
     if (!authorized() || this.closed) fail('This phone is disconnected.', 401);
     const completed = this.jobs.get(key);
@@ -93,7 +105,14 @@ export class MobileDictation {
     this.jobs.set(key, job);
     return job.promise;
   }
-  async call({ provider, key, model }, audio, mime, signal) {
+  async call({ provider, key, model, local }, audio, mime, signal) {
+    if (provider === 'local') {
+      const result = await this.localRunner(local, audio, formats[mime], signal);
+      const text = typeof result?.text === 'string' ? result.text.trim() : '';
+      if (!text) fail('No speech was recognized. Try recording again.', 422);
+      if (text.length > 60000) fail('The transcript is too long for one message.', 413);
+      return { text };
+    }
     const form = new FormData();
     form.append('file', new Blob([audio], { type: mime }), `recording.${formats[mime]}`);
     form.append('model', model); form.append('response_format', 'json');

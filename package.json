@@ -16,7 +16,7 @@
     "desktop:build:appimage": "NO_STRIP=1 tauri build --bundles appimage",
     "desktop:dev": "tauri dev",
     "desktop:test": "node --test desktop/service/test/*.test.mjs",
-    "desktop:test:ui": "node desktop/service/test/ui.mjs && node desktop/service/test/links-ui.mjs && node desktop/service/test/scroll-ui.mjs && node desktop/service/test/history-ui.mjs && node desktop/service/test/theme-ui.mjs && node desktop/service/test/voice-ui.mjs && node desktop/service/test/mobile-ui.mjs && node desktop/service/test/workspace-edit-ui.mjs",
+    "desktop:test:ui": "node desktop/service/test/ui.mjs && node desktop/service/test/links-ui.mjs && node desktop/service/test/scroll-ui.mjs && node desktop/service/test/history-ui.mjs && node desktop/service/test/theme-ui.mjs && node desktop/service/test/voice-ui.mjs && node desktop/service/test/desktop-dictation-ui.mjs && node desktop/service/test/mobile-ui.mjs && node desktop/service/test/workspace-edit-ui.mjs",
     "test": "npm run desktop:test",
     "test:preview": "node scripts/check-preview-ui.mjs",
     "test:template": "node scripts/check-template.mjs && node scripts/sync-skills.mjs --check && npm run test:assets",

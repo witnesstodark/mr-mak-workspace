@@ -1,6 +1,6 @@
 // Two independent browser clients, a local test transport and stub CLI processes.
 // No personal conversations, paid requests or Tailscale configuration are touched.
-import { chromium } from '@playwright/test';
+import { chromium, expect } from '@playwright/test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { cp, copyFile, mkdir, mkdtemp, writeFile } from 'node:fs/promises';
@@ -26,7 +26,7 @@ await writeFile(path.join(repo, 'workspace/report/plan.md'), '# Mobile plan\n\n*
 await writeFile(path.join(repo, 'workspace/workspace.json'), JSON.stringify({ entities: [{ id: 'mobile-report', title: 'A useful report', folder: 'report', category: 'dev', created: '2026-10-06', steps: [{ name: 'Report', path: 'index.html' }, { name: 'Plan', path: 'plan.md' }] }] }));
 const transport = { probe: async () => ({ ready: true, installed: true }), enable: async origin => ({ origin }), disable: async () => {} };
 const voiceCalls = [];
-const dictation = new MobileDictation(repo, { env: { OPENROUTER_API_KEY: 'test-voice-key' }, fetcher: async (url, options) => {
+const dictation = new MobileDictation(repo, { env: { OPENROUTER_API_KEY: 'test-voice-key', MRMAK_TRANSCRIBE_PROVIDER: 'openrouter' }, fetcher: async (url, options) => {
   voiceCalls.push({ url, size: options.body.get('file').size });
   return Response.json({ text: 'A dictated follow-up.' });
 } });
@@ -136,6 +136,10 @@ try {
   await phone.getByRole('button', { name: 'Not now', exact: true }).click();
   assert.equal(await phone.getByRole('complementary', { name: 'Install Mr. Mak' }).count(), 0);
   await phone.getByRole('button', { name: 'Phone settings' }).click();
+  const speechProvider = phone.getByRole('combobox', { name: 'Dictation provider' });
+  await speechProvider.selectOption('local'); await expect(speechProvider).toHaveValue('local');
+  await phone.getByText(/Local Whisper needs setup on your computer/).waitFor();
+  await speechProvider.selectOption('openrouter'); await expect(speechProvider).toHaveValue('openrouter');
   await phone.getByRole('button', { name: 'Install Mr. Mak', exact: true }).click();
   assert.equal(await phone.evaluate(() => window.installCalls), 1);
   await phone.getByRole('button', { name: 'Phone settings' }).click();
@@ -230,7 +234,7 @@ try {
   await phone.screenshot({ path: path.join(repo, 'phone-dictation-recording.png') });
   const writesBeforeVoice = writes.length;
   await phone.getByRole('button', { name: 'Stop recording and transcribe' }).click();
-  await phone.getByText('Voice text added. Review it, then press Send.').waitFor();
+  await expect(input).toHaveValue('Existing draft\nA dictated follow-up.');
   assert.equal(await input.inputValue(), 'Existing draft\nA dictated follow-up.');
   assert.equal(writes.length, writesBeforeVoice); assert.equal(voiceCalls.length, 1); assert.ok(voiceCalls[0].size > 12);
   assert.equal(await phone.evaluate(() => window.testMicTracks.every(track => track.readyState === 'ended')), true);
@@ -245,7 +249,7 @@ try {
   await phone.unroute('**/mobile/api/transcribe'); await phone.reload();
   await phone.getByRole('button', { name: /Research ideas/ }).click();
   await phone.getByRole('button', { name: 'Transcribe recording', exact: true }).click();
-  await phone.getByText('Voice text added. Review it, then press Send.').waitFor();
+  await expect(input).toHaveValue('Existing draft\nA dictated follow-up.\nA dictated follow-up.');
   assert.equal(voiceCalls.length, 2); assert.equal(writes.length, writesBeforeVoice);
   assert.equal(await input.inputValue(), 'Existing draft\nA dictated follow-up.\nA dictated follow-up.');
   // Leaving the chat releases the microphone and saves unfinished audio in that chat.

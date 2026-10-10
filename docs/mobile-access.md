@@ -62,22 +62,40 @@ Reading a completed turn marks it seen across devices.
 
 ## Voice input
 
-1. On the computer, add `OPENROUTER_API_KEY` or `OPENAI_API_KEY` to your
-   repository's ignored `.env`. Existing configured keys can be reused.
+1. On the computer, run `powershell -ExecutionPolicy Bypass -File scripts/setup-local-dictation.ps1` once from the repository. It installs an isolated Python environment and downloads the multilingual Whisper small model into ignored `.cache/dictation`.
 2. Open a chat on the phone and tap the microphone beside the attachment button.
-   Allow microphone access when your browser asks. Use the private HTTPS page
-   in a browser that supports recording, such as current Chrome or Safari.
+   Allow microphone access. Use the private HTTPS page in Chrome or Safari.
 3. Speak, then tap **Stop**. Each recording is limited to two minutes.
 4. Review or edit the text, then press **Send** yourself.
 
-The computer submits the audio to the selected provider. API keys stay on the
-computer. This is paid speech-to-text, separate from CLI subscriptions and the
-desktop Talk to Mak coordinator. The standard model is GPT-4o Transcribe;
-speech stays in its original language, including mixed-language dictation.
+The default is free local Whisper on your computer, using CPU int8. The phone
+uploads audio over the paired private connection; transcription runs offline on
+the computer after setup. No transcription API key or credit is needed. The PC
+must remain running and reachable. Temporary server audio is removed after each
+attempt. Recordings that have not yet become text remain recoverable on the
+recording device until transcribed or discarded.
 
-OpenRouter is selected when its key is configured; otherwise OpenAI is used.
-There is no automatic provider switch after a failed request. Optional `.env`
-settings let you choose explicitly:
+Desktop chats offer a microphone in the chat toolbar. Transcription pastes
+directly into the terminal input without pressing Enter. The Workspace's Mak composer
+also supports dictation; its Send button remains a separate action. No hotkeys
+are rebound. This feature is separate from conversational Talk to Mak.
+
+Local transcription preserves the detected language; it does not translate.
+Test names and mixed-language phrases on your own microphone before relying on
+it. Optional `MRMAK_WHISPER_PYTHON` and `MRMAK_WHISPER_MODEL` point to an existing
+Python executable and downloaded model directory.
+
+To switch between Free and Paid, open the **phone icon at the top right**.
+On desktop this opens **Phone settings**, combining pairing, devices and
+speech-to-text. On mobile it opens the same provider choice alongside install
+and disconnect controls. Desktop **Settings → Speech-to-text** also has it.
+Choose **Local Whisper · Free**, **OpenAI · Paid**, **OpenRouter · Paid**, or **Off**.
+The saved choice is shared by desktop and all paired phones, updates immediately,
+and applies to the next transcription. An in-progress request finishes using
+its existing provider. Missing setup or API keys are shown beside the choice;
+keys are entered only in the computer's ignored `.env`.
+
+Paid providers remain opt-in. There is no automatic fallback to a cloud provider:
 
 ```dotenv
 MRMAK_TRANSCRIBE_PROVIDER=openrouter
@@ -99,8 +117,10 @@ download it before leaving.
 
 Retries reuse a successful transcription for up to ten minutes while the desktop
 service stays running and its bounded cache retains it. After a desktop restart
-or cache expiry, retrying may make another billable API call. Audio is not saved
-as a file on the computer; pending audio stays in the phone's browser storage.
+or cache expiry, retrying runs transcription again (billable only for an explicitly
+selected cloud provider). Local transcription uses a temporary audio file on the
+computer and deletes it after the attempt; pending recordings stay in the
+recording device's browser storage.
 Your phone keyboard's microphone remains an alternative without configuring
 Mr. Mak's transcription service.
 

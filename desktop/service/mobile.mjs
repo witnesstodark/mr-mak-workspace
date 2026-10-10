@@ -22,13 +22,13 @@ const DEVICE_TTL = 180 * 24 * 60 * 60 * 1000;
 const send = (ws, value) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(value)); };
 
 export class MobileGateway {
-  constructor({ repo, uiDir, stateDir, sessions, attachments, settings, changed, closeChat, transport = new TailscaleTransport(), dictation = new MobileDictation(repo) }) {
+  constructor({ repo, uiDir, stateDir, sessions, attachments, settings, changed, closeChat, transport = new TailscaleTransport(), dictation = new MobileDictation(repo), chooseDictation }) {
     Object.assign(this, { repo, uiDir, sessions, attachments, settings, changed, closeChat, transport });
     this.file = path.join(stateDir, 'mobile-access.json');
     this.saves = Promise.resolve(); this.pending = new Map(); this.clients = new Set(); this.inflight = new Map(); this.uploads = new Map(); this.queues = new Map();
     this.transcripts = new MobileTranscripts(); this.active = false; this.error = ''; this.origin = ''; this.rate = { at: Date.now(), count: 0 };
     this.reports = new MobileReports(this);
-    this.dictation = dictation;
+    this.dictation = dictation; this.chooseDictation = chooseDictation;
   }
   async init() {
     this.state = { enabled: false, devices: [], receipts: [], ...await readJson(this.file, {}) };
@@ -256,6 +256,8 @@ export class MobileGateway {
           return json(response, 200, { status: 'connected' });
         }
         const device = this.device(request);
+        if (method === 'GET' && route === '/mobile/api/dictation') return json(response, 200, await this.dictation.status());
+        if (method === 'POST' && route === '/mobile/api/dictation') return json(response, 200, await this.chooseDictation(data.provider));
         if (method === 'POST' && route === '/mobile/api/transcribe') return json(response, 200, await this.dictation.transcribe(request, device.id, () => this.active && this.state.devices.some(item => item.id === device.id && item.expires > Date.now())));
         if (method === 'GET' && route === '/mobile/api/reports') return json(response, 200, await this.reports.list());
         if (method === 'POST' && route === '/mobile/api/reports/open') return json(response, 200, await this.reports.open(device, data));

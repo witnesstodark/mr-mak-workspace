@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react'
 import type { AgentInfo, ChatSession } from '../desktop/types'
 import { clearVoiceDrafts, type VoiceDraft } from './voice-drafts'
 
-export interface DictationInfo { available: boolean; provider: string | null; maxSeconds: number; maxBytes: number }
+export interface DictationInfo { available: boolean; provider: string | null; providers?: { id: string; label: string; available: boolean; detail: string }[]; maxSeconds: number; maxBytes: number }
 
 interface MobileState {
   ready: boolean; authenticated: boolean; connected: boolean; error: string
@@ -10,7 +10,7 @@ interface MobileState {
   device?: { id: string; name: string }; defaultAgent?: string; defaultBypass?: boolean
   dictation?: DictationInfo
 }
-export interface MobileEvent { type: string; id?: string; session?: ChatSession; sessions?: ChatSession[]; data?: string; sequence?: number; error?: string }
+export interface MobileEvent { type: string; id?: string; session?: ChatSession; sessions?: ChatSession[]; data?: string; sequence?: number; error?: string; dictation?: DictationInfo }
 let state: MobileState = { ready: false, authenticated: false, connected: false, error: '', sessions: [], agents: [], selectedId: localStorage.getItem('mrmak.mobile.selected') }
 const listeners = new Set<() => void>(), events = new Set<(event: MobileEvent) => void>()
 let socket: WebSocket | null = null, timer = 0, heartbeat = 0, starting = false, stopped = false
@@ -33,7 +33,7 @@ export async function uploadMobileImage(file: File): Promise<{ id: string; name:
   return result
 }
 export async function transcribeMobileAudio(recording: VoiceDraft, signal: AbortSignal): Promise<{ text: string }> {
-  const response = await fetch('/mobile/api/transcribe', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': recording.audio.type, 'X-Transcription-Id': recording.id }, body: recording.audio, signal: AbortSignal.any([signal, AbortSignal.timeout(90000)]) })
+  const response = await fetch('/mobile/api/transcribe', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': recording.audio.type, 'X-Transcription-Id': recording.id }, body: recording.audio, signal: AbortSignal.any([signal, AbortSignal.timeout(270000)]) })
   const result = await response.json()
   if (!response.ok) throw new MobileError(result.error || 'Could not transcribe this recording. Try again.', response.status)
   return result
@@ -65,6 +65,7 @@ export async function startMobile() {
       lastReply = Date.now()
       if (event.type === 'connected') update({ connected: true, sessions: event.sessions || state.sessions, error: '' })
       if (event.type === 'session' && event.session) { const next = event.session; update({ sessions: state.sessions.some(item => item.id === next.id) ? state.sessions.map(item => item.id === next.id ? next : item) : [...state.sessions, next] }) }
+      if (event.type === 'dictation' && event.dictation) update({ dictation: event.dictation })
       if (event.type === 'error') update({ error: event.error || 'Connection error' })
       events.forEach(listener => listener(event))
     }
@@ -93,3 +94,5 @@ window.addEventListener('online', () => void startMobile())
 window.addEventListener('offline', () => socket?.close())
 window.addEventListener('pagehide', () => { clearTimeout(timer); socket?.close() })
 window.addEventListener('pageshow', () => { if (state.ready && state.authenticated) void startMobile() })
+
+export async function chooseMobileDictation(provider: string) { const dictation = await mobileApi<DictationInfo>('/dictation', { provider }); update({ dictation }); return dictation }

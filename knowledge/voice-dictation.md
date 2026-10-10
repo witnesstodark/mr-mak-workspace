@@ -1,10 +1,18 @@
-# Optional local dictation
+# Local dictation
 
 Dictation puts recognized text into the focused terminal or text field.
 Mr. Mak's voice assistant instead carries on a conversation and can call tools.
 You can use either, both or neither.
 
-[Wispr Local](https://github.com/nsoth/wispr-local) is one Windows option built
+Mr. Mak now has built-in microphone dictation for desktop chats, the Mak composer,
+and mobile. See [setup and behavior](../docs/mobile-access.md#voice-input).
+Run `scripts/setup-local-dictation.ps1` once to install free local faster-whisper
+and its multilingual small model. Record, stop, review, then explicitly insert
+or send. Choose Free/Paid/Off in Phone settings or desktop Settings → Speech-to-text.
+The saved provider is shared across desktop and paired phones and overrides
+the `.env` provider default. Paid keys stay in the computer’s ignored `.env`.
+
+For optional dictation into other applications, [Wispr Local](https://github.com/nsoth/wispr-local) is one Windows option built
 around whisper.cpp. Review its language and GPU build defaults before installing.
 Follow its README to select English and settings appropriate for the recipient's
 machine. The project also documents optional

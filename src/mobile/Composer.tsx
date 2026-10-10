@@ -36,7 +36,7 @@ export default function Composer({ id, connected, running }: { id: string; conne
     if (draft.voiceIds?.includes(recordingId)) return
     const next = { ...draft, text: draft.text ? `${draft.text}${/\s$/.test(draft.text) ? '' : '\n'}${text}` : text, voiceIds: [...(draft.voiceIds || []), recordingId].slice(-20) }
     localStorage.setItem(storage, JSON.stringify(next))
-    setDraft(next); setStatus('Voice text added. Review it, then press Send.')
+    setDraft(next); setStatus('')
   }
   return <form className="mobile-composer" onSubmit={event => { event.preventDefault(); void send() }}>
     {!!draft.images.length && <div className="mobile-image-chips">{draft.images.map(image => <span key={image.id}><Icon name="attach" size={13} /><span>{image.name}</span><button type="button" aria-label={`Remove ${image.name}`} disabled={busy || !!draft.requestId} onClick={() => setDraft(current => ({ ...current, images: current.images.filter(item => item.id !== image.id) }))}>×</button></span>)}</div>}

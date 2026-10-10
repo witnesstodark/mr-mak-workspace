@@ -98,3 +98,4 @@
 .mobile-app .mobile-composer textarea { background: transparent; border: none; border-radius: 0; padding: 6px 4px; }
 .mobile-app .mobile-composer textarea:focus { outline: none; }
 .mobile-composer .mobile-compose-actions { margin-top: 4px; }
+.mobile-device-settings{max-height:70dvh;overflow-y:auto;overscroll-behavior:contain}
