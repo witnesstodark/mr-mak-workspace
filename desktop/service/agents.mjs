@@ -9,7 +9,7 @@ export function wrapCommand(file, args = []) {
   if (!isWindows) return { file, args };
   const quote = value => "'" + value.replaceAll("'", "''") + "'";
   const script = `[Console]::InputEncoding = [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new(); & ${[file, ...args].map(quote).join(' ')}; exit $LASTEXITCODE`;
-  return { file: 'powershell.exe', args: ['-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')] };
+  return { file: shellCommand().file, args: ['-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')] };
 }
 
 export const AGENTS = [

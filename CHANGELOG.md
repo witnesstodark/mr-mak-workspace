@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Start agent chats and the terminal through the full Windows PowerShell path, so they still open when PowerShell's folder is missing from PATH.
+
 ## 0.5.1 - 2026-10-09
 
 - Click a card's status dot in the desktop Workspace to set Active, Done or Archived, change its category, or pin it. Changes save immediately; archived cards keep their files and can be restored through search or Show archive.
