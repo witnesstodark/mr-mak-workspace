@@ -59,7 +59,7 @@
 
 .mobile-transcript-status { padding: 12px; margin: 8px 0; border: 1px solid var(--m-line); border-radius: 9px; color: var(--m-muted); font-size: 11px; }.mobile-transcript-status p { margin: 0 0 8px; }.mobile-transcript-status button { display: flex; align-items: center; gap: 8px; font-size: 11px; }
 
-.mobile-message-pane { position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; }.mobile-app .mobile-jump-latest { position: absolute; bottom: 12px; right: 16px; display: flex; align-items: center; gap: 7px; min-height: 42px; padding: 8px 12px; background: #302632; border-color: #705268; box-shadow: 0 3px 14px #0006; color: #efd9e6; font-size: 12px; z-index: 1; }
+.mobile-message-pane { position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; }.mobile-app .mobile-jump-latest { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 7px; min-height: 42px; padding: 8px 12px; background: #302632; border-color: #705268; box-shadow: 0 3px 14px #0006; color: #efd9e6; font-size: 12px; z-index: 1; }
 
 .mobile-chat-tools .mobile-segment { flex: 1; min-width: 0; }.mobile-chat-tools .mobile-segment button { flex: 1; min-height: 36px; }
 .mobile-chat-tools .mobile-activity-status { position: relative; display: grid; place-items: center; flex: 0 0 38px; height: 38px; color: var(--m-muted); }.mobile-chat-tools .mobile-activity-status.working { color: #b6e4d2; }.mobile-chat-tools .mobile-activity-status.waiting { color: #e6c591; }.mobile-activity-unread { position: absolute; right: 0; top: 2px; width: 5px; height: 5px; border-radius: 50%; background: var(--m-accent); }
