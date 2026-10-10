@@ -3,7 +3,7 @@
 import { chromium } from '@playwright/test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { cp, copyFile, mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { cp, copyFile, mkdir, mkdtemp, writeFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
@@ -23,14 +23,31 @@ const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQ42
 await copyFile(path.join(root, 'public/assets/mak-nose.svg'), path.join(repo, 'workspace/report/nose.svg'));
 await writeFile(path.join(repo, 'workspace/report/index.html'), '<!doctype html><html lang="en" data-mak-report="document"><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="../_shared/report.css"><script defer src="../_shared/report.js"></script></head><body><main class="container"><h1>Report ready</h1><p>A readable result on your phone.</p><img src="nose.svg" alt="Report image" width="160"><p><a target="_blank" rel="noreferrer" href="https://example.com/source">Source link</a></p></main></body></html>');
 await writeFile(path.join(repo, 'workspace/report/plan.md'), '# Mobile plan\n\n**Keep the useful parts in view.**\n\n- Read results\n- Send a follow-up\n');
-await writeFile(path.join(repo, 'workspace/workspace.json'), JSON.stringify({ entities: [{ id: 'mobile-report', title: 'A useful report', folder: 'report', category: 'dev', created: '2026-10-06', steps: [{ name: 'Report', path: 'index.html' }, { name: 'Plan', path: 'plan.md' }] }] }));
+await writeFile(path.join(repo, 'workspace/workspace.json'), JSON.stringify({ entities: [
+  { id: 'mobile-report', title: 'A useful report', folder: 'report', category: 'dev', created: '2026-10-06', steps: [{ name: 'Report', path: 'index.html' }, { name: 'Plan', path: 'plan.md' }] },
+  { id: 'external-reader', title: 'External reader', folder: 'report', category: 'project', created: '2026-10-10', steps: [{ name: 'Reader', source: 'external-reader', path: 'index.html' }, { name: 'Guide', path: 'plan.md' }] },
+] }));
+const projectDir = await mkdtemp(path.join(root, '.cache/mobile-ui-project-'));
+const stateDir = await mkdtemp(path.join(root, '.cache/mobile-ui-state-'));
+const dependency = 'https://cdn.example/reader/1/reader.js';
+await writeFile(path.join(stateDir, 'live-sources.json'), JSON.stringify([{ id: 'external-reader', label: 'External reader', project: projectDir, python: process.execPath, args: ['builder.mjs'], mobileResources: { scripts: [dependency] } }]));
+await writeFile(path.join(projectDir, 'builder.mjs'), `
+  import { writeFile } from 'node:fs/promises'; import path from 'node:path';
+  if (process.argv.includes('--list-inputs')) console.log(JSON.stringify({ dirs: [], files: [] }));
+  else {
+    const out = process.argv[process.argv.indexOf('--out') + 1];
+    await writeFile(path.join(out, 'style.css'), 'h1 { color: rgb(0, 128, 0); }');
+    await writeFile(path.join(out, 'picture.svg'), '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="green"/></svg>');
+    await writeFile(path.join(out, 'index.html'), '<!doctype html><html><head><link rel="stylesheet" href="style.css"></head><body><h1>External source ready</h1><img src="picture.svg" alt="Live source image"><p id="dependency"></p><script src="${dependency}"></script><script src="https://untrusted.example/reader.js"></script></body></html>');
+  }
+`);
 const transport = { probe: async () => ({ ready: true, installed: true }), enable: async origin => ({ origin }), disable: async () => {} };
 const voiceCalls = [];
 const dictation = new MobileDictation(repo, { env: { OPENROUTER_API_KEY: 'test-voice-key' }, fetcher: async (url, options) => {
   voiceCalls.push({ url, size: options.body.get('file').size });
   return Response.json({ text: 'A dictated follow-up.' });
 } });
-const service = await createService({ repo, uiDir: path.join(repo, 'ui'), mobileOptions: { transport, dictation }, mcpOptions: { home: repo, env: {} } });
+const service = await createService({ repo, stateDir, uiDir: path.join(repo, 'ui'), mobileOptions: { transport, dictation }, mcpOptions: { home: repo, env: {} } });
 service.sessions.beginDiscovery = () => {};
 const writes = [], ids = [randomUUID(), randomUUID()];
 for (const [index, id] of ids.entries()) {
@@ -63,6 +80,9 @@ try {
   await desktop.getByAltText('Scan to connect this phone to Mr. Mak').waitFor();
   await desktop.screenshot({ path: path.join(repo, 'desktop-pairing.png') });
   const mobileContext = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
+  let dependencyRequests = 0, untrustedRequests = 0;
+  await mobileContext.route(dependency, route => { dependencyRequests++; return route.fulfill({ contentType: 'text/javascript', body: 'document.getElementById("dependency").textContent = "Approved dependency loaded";' }); });
+  await mobileContext.route('https://untrusted.example/**', route => { untrustedRequests++; return route.abort(); });
   await mobileContext.addInitScript(() => {
     const original = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
     window.testMicTracks = [];
@@ -79,9 +99,18 @@ try {
   });
   await new Promise(resolve => qrSource.listen(0, 'localhost', resolve));
   await phone.goto(`http://localhost:${qrSource.address().port}`);
-  const navigationRequest = phone.waitForRequest(request => request.url().startsWith(`${service.mobile.origin}/mobile/`) && request.isNavigationRequest());
+  // Playwright's request interception omits Sec-Fetch headers from its client
+  // snapshot. Assert the header received by the server that enforces it.
+  const navigationSite = new Promise(resolve => {
+    const inspect = request => {
+      if (request.url.startsWith('/mobile/') && request.headers['sec-fetch-dest'] === 'document') {
+        service.mobile.server.off('request', inspect); resolve(request.headers['sec-fetch-site']);
+      }
+    };
+    service.mobile.server.on('request', inspect);
+  });
   await phone.getByRole('link', { name: 'Open Mr. Mak' }).click();
-  assert.equal(await (await navigationRequest).headerValue('sec-fetch-site'), 'cross-site');
+  assert.equal(await navigationSite, 'cross-site');
   await phone.getByRole('button', { name: 'Request connection' }).click();
   await phone.getByRole('heading', { name: 'Confirm on your computer' }).waitFor();
   await desktop.getByRole('button', { name: 'Connect phone', exact: true }).click();
@@ -205,6 +234,17 @@ try {
     await phone.setViewportSize({ width, height: 844 });
     assert.equal(await phone.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, `No page overflow at ${width}px`);
   }
+  await phone.getByRole('button', { name: 'Close report', exact: true }).click();
+  await phone.getByRole('button', { name: /External reader/ }).click();
+  await frame.getByRole('heading', { name: 'External source ready' }).waitFor();
+  await frame.getByText('Approved dependency loaded', { exact: true }).waitFor();
+  assert.match(await phone.locator('iframe').getAttribute('src'), /\/live\/external-reader\/index.html$/);
+  assert.equal(await frame.getByRole('heading').evaluate(element => getComputedStyle(element).color), 'rgb(0, 128, 0)');
+  assert.equal(await frame.getByAltText('Live source image').evaluate(image => image.complete && image.naturalWidth > 0), true);
+  assert.equal(dependencyRequests, 1); assert.equal(untrustedRequests, 0);
+  await phone.screenshot({ path: path.join(repo, 'phone-live-report.png') });
+  await phone.getByRole('button', { name: 'Guide', exact: true }).click();
+  await phone.getByRole('heading', { name: 'Mobile plan' }).waitFor();
   // Close the selected desktop chat from the phone, then resume it from History.
   // Only the launch is stubbed; closing/persistence/selection use the real service.
   await phone.getByRole('button', { name: 'Chats', exact: true }).click();
@@ -239,9 +279,13 @@ try {
   await phone.getByRole('heading', { name: 'Start in Mr. Mak Chats' }).waitFor();
   assert.equal(service.sessions.get(ids[0]).status, 'running'); assert.equal(service.sessions.get(ids[1]).status, 'running');
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ ok: true, fixture: repo, checks: ['QR + desktop approval', 'independent views and PTY sizes', 'microphone permission / record / stop / cancel', 'dictation never auto-sends', 'saved recording recovery after reload and chat switch', 'lost transcription reply reuses provider result', 'lost reply / retry once', 'drafts per chat', 'offline recovery', 'image attachment', 'sandboxed report + image download', 'Markdown preview', 'long-link chat cards at 320/360/393/430/768px', '360/390/768px report layout', 'four terminal arrows and touch targets', 'close confirmation / desktop tab sync / History resume / draft retention', 'device revocation'] }));
+  console.log(JSON.stringify({ ok: true, fixture: repo, checks: ['QR + desktop approval', 'independent views and PTY sizes', 'microphone permission / record / stop / cancel', 'dictation never auto-sends', 'saved recording recovery after reload and chat switch', 'lost transcription reply reuses provider result', 'lost reply / retry once', 'drafts per chat', 'offline recovery', 'image attachment', 'sandboxed report + image download', 'Markdown preview', 'external source with CSS/image and source-specific dependency CSP', 'unapproved external script blocked', 'live card local guide', 'long-link chat cards at 320/360/393/430/768px', '360/390/768px report layout', 'four terminal arrows and touch targets', 'close confirmation / desktop tab sync / History resume / draft retention', 'device revocation'] }));
 } finally {
   if (qrSource) await new Promise(resolve => qrSource.close(resolve));
   await browser?.close(); for (const session of service.sessions.items.values()) session.process = null;
   await service.close();
+  for (const directory of [projectDir, stateDir]) {
+    assert.ok(path.dirname(directory) === path.join(root, '.cache'));
+    await rm(directory, { recursive: true, force: true });
+  }
 }

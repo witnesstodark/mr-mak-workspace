@@ -120,6 +120,43 @@ messages preserve the hash route and restore window scroll from session storage
 after the route renders. The Codex keeps its own interface and CDN dependencies.
 Browser Preview cannot run these builders.
 
+Mobile Results resolves a step's `source` through the same initialized
+`LiveSources.reportRoot()` used to create its desktop grant. It serves the
+existing generated output in place, including output under an external
+`stateDir`. The source project itself is never granted. An unknown source is
+an error; it does not fall back to the card folder. Steps without `source`,
+such as a local guide, continue to use `workspace/<folder>/<path>`.
+
+Live output roots are canonicalized and pinned at startup. Output junctions
+cannot redirect them to other folders, and mobile requests recheck the root
+and each asset's canonical containment. Mobile preview URLs use a virtual
+`live/<id>/` prefix; absolute Windows paths and desktop grants are not sent to
+the phone. Each mobile grant still expires after 30 minutes and is revoked
+when its device is disconnected.
+
+Mobile reports retain an opaque sandbox and a restrictive CSP. A source that
+needs external scripts or fonts can explicitly configure `mobileResources`
+in its local `live-sources.json` entry:
+
+```json
+"mobileResources": {
+  "scripts": [
+    "https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"
+  ],
+  "styles": ["https://fonts.googleapis.com/css2"],
+  "fonts": ["https://fonts.gstatic.com"]
+}
+```
+
+Scripts and styles require exact HTTPS paths; fonts require HTTPS origins.
+Credentials, queries, fragments, wildcards and CSP directive injection are
+rejected. The policy applies only to that source's grant. It adds no remote
+API access or same-origin privileges. Embedded subframes remain blocked;
+generated preview links can open full pages within the same grant. Missing
+dependencies are reported by the reader; Workspace does not substitute them.
+Changes take effect at the next owner-approved service restart.
+
 ## Checks
 
 ```powershell

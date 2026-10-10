@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, mkdir, writeFile, readFile, symlink } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, symlink, rename, rm, realpath } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { WebSocket } from 'ws';
@@ -11,6 +11,7 @@ import { MobileGateway } from '../mobile.mjs';
 import { Attachments } from '../attachments.mjs';
 import { transcriptMessages } from '../mobile-transcript.mjs';
 import { TailscaleTransport } from '../mobile-tailscale.mjs';
+import { LiveSources } from '../live-sources.mjs';
 
 async function fixture(t) {
   const repo = await mkdtemp(path.join(os.tmpdir(), 'mrmak-mobile-'));
@@ -214,6 +215,84 @@ test('report boundaries resolve a linked repository and still reject external fo
   assert.equal(opened.status, 200);
   assert.equal((await fetch(`${gateway.origin}${opened.data.url}`)).status, 200);
   assert.equal((await request('/reports/open', { entityId: 'external' }, device.cookie)).status, 403);
+});
+
+test('configured live reports outside the repository serve only their granted output and policy', async t => {
+  const { gateway, pair, request, repo } = await fixture(t), device = await pair();
+  const external = await mkdtemp(path.join(os.tmpdir(), 'mrmak-mobile-live-'));
+  const project = path.join(external, 'project'), stateDir = path.join(external, 'state');
+  await mkdir(project); await mkdir(stateDir);
+  await writeFile(path.join(project, 'private.html'), 'private project file');
+  await writeFile(path.join(project, 'builder.mjs'), `
+    import { mkdir, writeFile } from 'node:fs/promises'; import path from 'node:path';
+    if (process.argv.includes('--list-inputs')) console.log(JSON.stringify({ dirs: [], files: [] }));
+    else {
+      const out = process.argv[process.argv.indexOf('--out') + 1]; await mkdir(path.join(out, 'assets'));
+      for (const [file, content] of [['index.html', '<h1>Configured live reader</h1>'], ['assets/style.css', 'body { color: green; }'], ['assets/app.js', 'window.reader = true;'], ['assets/picture.svg', '<svg xmlns="http://www.w3.org/2000/svg"/>'], ['assets/data.json', '{"reader":true}'], ['assets/preview.html', '<h1>Preview</h1>'], ['guide.md', '# Live guide']]) await writeFile(path.join(out, file), content);
+    }
+  `);
+  const resources = { scripts: ['https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js'], styles: ['https://fonts.googleapis.com/css2'], fonts: ['https://fonts.gstatic.com'] };
+  await writeFile(path.join(stateDir, 'live-sources.json'), JSON.stringify([{ id: 'reader', label: 'Reader', project, python: process.execPath, args: ['builder.mjs'], mobileResources: resources }]));
+  const manager = new LiveSources({ stateDir, files: { origin: 'http://127.0.0.1:1234', grant: () => 'desktop-grant' } });
+  gateway.liveSources = await manager.init();
+  t.after(async () => {
+    await manager.close();
+    assert.ok(!path.relative(os.tmpdir(), external).startsWith('..') && path.basename(external).startsWith('mrmak-mobile-live-'));
+    await rm(external, { recursive: true, force: true });
+  });
+  const end = Date.now() + 8000;
+  while (manager.list()[0].state === 'building' && Date.now() < end) await new Promise(resolve => setTimeout(resolve, 20));
+  assert.equal(manager.list()[0].state, 'ready');
+  const root = (await manager.reportRoot('reader')).root;
+  assert.equal(root, await realpath(path.join(stateDir, 'live/reader')));
+  assert.ok(path.relative(repo, root).startsWith('..'));
+  await mkdir(path.join(repo, 'workspace/local'), { recursive: true });
+  await writeFile(path.join(repo, 'workspace/local/index.html'), '<h1>Local decoy</h1>');
+  await writeFile(path.join(repo, 'workspace/local/guide.md'), '# Local guide');
+  await writeFile(path.join(repo, 'workspace/workspace.json'), JSON.stringify({ entities: [
+    { id: 'live', title: 'Live', folder: 'local', steps: [{ name: 'Reader', source: 'reader', path: 'index.html' }, { name: 'Guide', path: 'guide.md' }, { name: 'Live guide', source: 'reader', path: 'guide.md' }, { name: 'Bad path', source: 'reader', path: '../private.html' }] },
+    { id: 'missing', title: 'Missing', folder: 'local', steps: [{ name: 'Reader', source: 'missing', path: 'index.html' }] },
+    { id: 'source-only', title: 'Source only', steps: [{ name: 'Reader', source: 'reader', path: 'index.html' }] },
+    { id: 'absolute', title: 'Absolute', folder: project, steps: [{ name: 'Private', path: 'private.html' }] },
+  ] }));
+  assert.equal((await request('/reports')).status, 401);
+  const list = await request('/reports', undefined, device.cookie);
+  assert.ok(list.data.some(item => item.id === 'source-only')); assert.ok(!JSON.stringify(list.data).includes(external));
+  const opened = await request('/reports/open', { entityId: 'live', path: path.join(project, 'private.html') }, device.cookie);
+  assert.equal(opened.status, 200); assert.match(opened.data.url, /\/live\/reader\/index.html$/);
+  const url = gateway.origin + opened.data.url;
+  const response = await fetch(url, { headers: { Origin: 'null' } });
+  assert.equal(response.status, 200); assert.match(await response.text(), /Configured live reader/);
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  const policy = response.headers.get('content-security-policy');
+  for (const entry of Object.values(resources).flat()) assert.ok(policy.includes(entry));
+  assert.ok(!policy.includes('allow-same-origin')); assert.match(policy, /frame-src 'none'/); assert.match(policy, /form-action 'none'/);
+  for (const asset of ['assets/style.css', 'assets/app.js', 'assets/picture.svg', 'assets/data.json', 'assets/preview.html']) assert.equal((await fetch(url.replace('index.html', asset))).status, 200);
+  assert.equal((await fetch(url, { method: 'HEAD' })).status, 200);
+  assert.equal((await fetch(url, { method: 'POST' })).status, 403);
+  assert.equal((await request('/reports/open', { entityId: 'live', step: 1 }, device.cookie)).data.text, '# Local guide');
+  assert.equal((await request('/reports/open', { entityId: 'live', step: 2 }, device.cookie)).data.text, '# Live guide');
+  const local = await request('/reports/open', { entityId: 'live', step: 1 }, device.cookie);
+  assert.ok(!(await fetch(gateway.origin + local.data.url)).headers.get('content-security-policy').includes('cdnjs.cloudflare.com'));
+  assert.equal((await request('/reports/open', { entityId: 'missing' }, device.cookie)).status, 404);
+  assert.equal((await request('/reports/open', { entityId: 'absolute' }, device.cookie)).status, 404);
+  assert.equal((await request('/reports/open', { entityId: 'live', step: 3 }, device.cookie)).status, 404);
+  for (const bad of ['..%5cprivate.html', '%2eenv', 'C%3A%5cprivate.html', '../private.html', 'assets/../../private.html', '../other/index.html']) assert.equal((await fetch(url.replace('index.html', bad))).status, 403);
+  await symlink(project, path.join(root, 'escape'), process.platform === 'win32' ? 'junction' : 'dir');
+  assert.equal((await fetch(url.replace('index.html', 'escape/private.html'))).status, 403);
+  await mkdir(path.join(root, '.private')); await writeFile(path.join(root, '.private/private.html'), 'private report file');
+  await symlink(path.join(root, '.private'), path.join(root, 'public-alias'), process.platform === 'win32' ? 'junction' : 'dir');
+  assert.equal((await fetch(url.replace('index.html', 'public-alias/private.html'))).status, 403);
+  await mkdir(path.join(repo, 'workspace/_shared')); await symlink(project, path.join(repo, 'workspace/_shared/escape'), process.platform === 'win32' ? 'junction' : 'dir');
+  assert.equal((await fetch(url.replace('live/reader/index.html', 'workspace/_shared/escape/private.html'))).status, 403);
+  const token = opened.data.url.split('/')[3]; gateway.reports.grants.get(token).expires = 0;
+  assert.equal((await fetch(url)).status, 401);
+  const fresh = await request('/reports/open', { entityId: 'source-only' }, device.cookie);
+  await rename(root, root + '-original'); await symlink(project, root, process.platform === 'win32' ? 'junction' : 'dir');
+  assert.equal((await fetch(gateway.origin + fresh.data.url)).status, 403);
+  assert.equal((await request('/reports/open', { entityId: 'live' }, device.cookie)).status, 403);
+  await gateway.revoke(device.pending.id);
+  assert.equal((await fetch(gateway.origin + fresh.data.url)).status, 401);
 });
 
 test('delivery receipts and device pairing survive a service restart', async t => {

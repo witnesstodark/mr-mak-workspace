@@ -141,6 +141,26 @@ device from Chats or remove it from your Tailscale account.
 
 ## Developing and checking the mobile client
 
+Results supports configured live Codex steps as well as conventional reports.
+A card step with `source` opens the existing generated output for that ID in
+the desktop service's local `live-sources.json`; it never grants the source
+project or accepts an absolute path from the phone. A local guide tab can still
+use the card folder. Unknown sources and escaping links are rejected, without
+a fallback location. See [Live Codex sources](../desktop/README.md#live-codex-sources)
+for configuration, dependency policy and output-root restrictions.
+
+Live readers retain the mobile sandbox. Fonts and scripts need explicit
+per-source `mobileResources` entries; ordinary reports keep their existing
+policy. Embedded interactive previews remain blocked, while their full-page
+links can open generated pages inside the selected report's grant.
+
+After an owner-approved app update, keep Tailscale connected, close and reopen
+the mobile page or Home Screen app, then reopen Results. The service worker
+uses the network first for the shell and assets; it does not cache report pages
+or API replies. Report grants expire after 30 minutes, so reopen a report if
+its preview asks to refresh. Clearing site data is unnecessary and removes
+pairing and local drafts.
+
 The mobile React entry is `src/mobile/`. The isolated service is
 `desktop/service/mobile.mjs`, with separate Tailscale, transcript and report
 adapters. It binds only to loopback. The desktop administrative API manages

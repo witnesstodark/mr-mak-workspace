@@ -4,8 +4,8 @@ import path from 'node:path';
 import os from 'node:os';
 import { EventEmitter } from 'node:events';
 import { WebSocket } from 'ws';
-import { mkdtemp, mkdir, writeFile, readFile, rename, rm } from 'node:fs/promises';
-import { LiveSources, validateLiveSources, validateInputs, matchesInput } from '../live-sources.mjs';
+import { mkdtemp, mkdir, writeFile, readFile, rename, rm, realpath, symlink } from 'node:fs/promises';
+import { LiveSources, validateLiveSources, validateMobileResources, validateInputs, matchesInput } from '../live-sources.mjs';
 import { createService } from '../server.mjs';
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -85,6 +85,35 @@ test('input filtering respects recursion, extensions and exact files', () => {
   assert.throws(() => validateInputs({ dirs: [], files: ['relative'] }));
 });
 
+test('mobile dependency policy accepts exact HTTPS paths and font origins only', () => {
+  const resources = { scripts: ['https://cdn.example/marked/12.0.2/marked.min.js'], styles: ['https://fonts.example/css2'], fonts: ['https://font-files.example'] };
+  assert.deepEqual(validateMobileResources(resources), resources);
+  assert.ok(Object.isFrozen(validateMobileResources(resources).scripts));
+  for (const bad of [null, [], { connect: ['https://example.com'] }, { scripts: 'https://example.com/a.js' }, { scripts: ['https://cdn.example'] }, { scripts: ['http://cdn.example/a.js'] }, { scripts: ['https://user:password@cdn.example/a.js'] }, { scripts: ['https://cdn.example/a.js; connect-src *'] }, { scripts: ['https://*.example/a.js'] }, { scripts: ['https://cdn.example/a.js#fragment'] }, { scripts: ['https://cdn.example/a.js?query=1'] }, { scripts: ['data:text/javascript,alert(1)'] }, { styles: ['https://fonts.example'] }, { fonts: ['https://font-files.example/file.woff2'] }, { scripts: Array(17).fill('https://cdn.example/a.js') }]) assert.throws(() => validateMobileResources(bad));
+});
+
+test('desktop and mobile use the same pinned configured output root', async t => {
+  const f = await fixture(t), granted = [];
+  f.manager.files.grant = root => { granted.push(root); return 'grant'; };
+  await f.manager.init(); await f.ready();
+  const output = path.join(f.stateDir, 'live/test-codex');
+  const report = await f.manager.reportRoot('test-codex');
+  assert.equal(report.root, await realpath(output)); assert.deepEqual(granted, [report.root]);
+  await assert.rejects(f.manager.reportRoot('missing'), { status: 404 });
+  await assert.rejects(f.manager.reportRoot(f.project), { status: 404 });
+  await rename(output, output + '-original');
+  await symlink(f.project, output, process.platform === 'win32' ? 'junction' : 'dir');
+  await assert.rejects(f.manager.reportRoot('test-codex'), { status: 403 });
+});
+
+test('configured live outputs cannot be junctions to unrelated folders at startup', async t => {
+  const f = await fixture(t), other = path.join(f.root, 'other');
+  await mkdir(other); await mkdir(path.join(f.stateDir, 'live'));
+  await symlink(other, path.join(f.stateDir, 'live/test-codex'), process.platform === 'win32' ? 'junction' : 'dir');
+  await assert.rejects(f.manager.init(), /output links must not leave/);
+  assert.deepEqual(await f.starts(), []);
+});
+
 test('waits one second without changes, coalesces saves and filters unrelated events', async t => {
   const f = await fixture(t, { quietMs: 1000 }); await f.manager.init(); await f.ready();
   f.trigger('ignore.txt'); await sleep(1100); assert.equal((await f.starts()).length, 1);
@@ -159,6 +188,7 @@ test('timeout kills a builder and reports failure', async t => {
 test('service exposes statuses over authenticated API and events, and output through GET/HEAD grants', async t => {
   const f = await fixture(t); await f.mode({ delay: 400 }); await mkdir(path.join(f.root, 'workspace')); await writeFile(path.join(f.root, 'workspace/workspace.json'), '{"entities":[]}');
   const service = await createService({ repo: f.root, uiDir: f.root, stateDir: f.stateDir, restoreSessions: false });
+  assert.equal(service.mobile.liveSources, service.liveSources);
   const ws = new WebSocket(service.origin.replace('http:', 'ws:') + '/events', { origin: service.origin }), events = [];
   ws.on('message', raw => events.push(JSON.parse(raw.toString())));
   try {

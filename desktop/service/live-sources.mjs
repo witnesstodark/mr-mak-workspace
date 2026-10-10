@@ -7,6 +7,25 @@ import { StringDecoder } from 'node:string_decoder';
 const tail = value => Buffer.from(value).subarray(-2048).toString('utf8').replace(/^\uFFFD+/, '').trim();
 const inside = (root, file) => { const relative = path.relative(root, file); return !relative.startsWith('..' + path.sep) && relative !== '..' && !path.isAbsolute(relative); };
 
+// Owner-configured CSP sources, never values supplied by a mobile request.
+// Scripts/styles are exact HTTPS paths; fonts may name an HTTPS origin.
+export function validateMobileResources(value = {}) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(key => !['scripts', 'styles', 'fonts'].includes(key))) throw new Error('mobileResources accepts scripts, styles and fonts only.');
+  const result = {};
+  for (const kind of ['scripts', 'styles', 'fonts']) {
+    const entries = value[kind] ?? [];
+    if (!Array.isArray(entries) || entries.length > 16) throw new Error(`mobileResources.${kind} must be an array of up to 16 HTTPS sources.`);
+    result[kind] = Object.freeze(entries.map(entry => {
+      if (typeof entry !== 'string' || entry.length > 2048 || /[\s;*'"\\]/.test(entry)) throw new Error(`Invalid mobileResources.${kind} source.`);
+      let url;
+      try { url = new URL(entry); } catch { throw new Error(`Invalid mobileResources.${kind} URL.`); }
+      if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || (kind === 'fonts' ? entry !== url.origin : url.pathname === '/' || entry !== url.href) || (kind === 'scripts' && !url.pathname.endsWith('.js'))) throw new Error(`mobileResources.${kind} requires ${kind === 'fonts' ? 'an HTTPS origin' : 'an exact HTTPS file path'} without credentials, query or fragment.`);
+      return entry;
+    }));
+  }
+  return Object.freeze(result);
+}
+
 export async function validateLiveSources(config) {
   if (!Array.isArray(config)) throw new Error('live-sources.json must contain an array.');
   const ids = new Set();
@@ -17,6 +36,7 @@ export async function validateLiveSources(config) {
     if (!Array.isArray(source.args) || source.args.some(arg => typeof arg !== 'string')) throw new Error(`${source.id}: args must be an array of strings.`);
     if (source.args.some(arg => arg === '--out' || arg.startsWith('--out='))) throw new Error(`${source.id}: Workspace supplies --out.`);
     if (typeof source.project !== 'string' || !path.isAbsolute(source.project) || !(await stat(source.project).catch(() => null))?.isDirectory()) throw new Error(`${source.id}: project must be an existing absolute folder.`);
+    validateMobileResources(source.mobileResources);
   }
   return config;
 }
@@ -45,6 +65,15 @@ export class LiveSources {
     this.sources = []; this.closed = false; this.running = null; this.child = null;
   }
   list() { return this.sources.map(({ status }) => ({ ...status })); }
+  async reportRoot(id) {
+    const source = this.sources.find(item => item.id === id);
+    if (!source) throw Object.assign(new Error('This live source is not configured.'), { status: 404 });
+    if (this.closed) throw Object.assign(new Error('Live sources are closed.'), { status: 503 });
+    // Pin the canonical directory used by the desktop grant. Retargeting a
+    // junction after startup must not turn a report into another folder grant.
+    if (path.relative(source.root, await realpath(source.outDir)) !== '') throw Object.assign(new Error('The configured report folder changed. Restart after checking its configuration.'), { status: 403 });
+    return { root: source.root, resources: source.resources };
+  }
   emit(source, values) { Object.assign(source.status, values); if (!this.closed) this.changed({ ...source.status }); }
   async init() {
     let config;
@@ -58,11 +87,16 @@ export class LiveSources {
       const stateRoot = await realpath(this.stateDir), project = await realpath(item.project);
       if (inside(project, stateRoot)) throw new Error(`${item.id}: stateDir must be outside the source project.`);
       await mkdir(outDir, { recursive: true });
-      if (inside(project, await realpath(outDir))) throw new Error(`${item.id}: output must be outside the source project.`);
+      const root = await realpath(outDir);
+      if (inside(project, root)) throw new Error(`${item.id}: output must be outside the source project.`);
+      if (path.relative(path.join(stateRoot, 'live', item.id), root) !== '') throw new Error(`${item.id}: output links must not leave the configured live output folder.`);
       const previous = await stat(path.join(outDir, 'index.html')).catch(() => null);
-      const source = { ...item, outDir, watchers: [], inputs: null, pending: true, due: 0, timer: null,
-        status: { id: item.id, label: item.label, state: 'building', builtAt: previous?.isFile() ? previous.mtime.toISOString() : null, error: null, url: `${this.files.origin}/view/${this.files.grant(outDir)}/` } };
-      this.sources.push(source); this.emit(source, {});
+      const source = { ...item, outDir, root, resources: validateMobileResources(item.mobileResources), watchers: [], inputs: null, pending: true, due: 0, timer: null,
+        status: { id: item.id, label: item.label, state: 'building', builtAt: previous?.isFile() ? previous.mtime.toISOString() : null, error: null, url: '' } };
+      this.sources.push(source);
+      const report = await this.reportRoot(item.id);
+      source.status.url = `${this.files.origin}/view/${this.files.grant(report.root)}/`;
+      this.emit(source, {});
     }
     this.pump();
     return this;
