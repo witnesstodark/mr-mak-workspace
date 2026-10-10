@@ -87,15 +87,21 @@ try {
   await desktop.getByRole('button', { name: 'Connect phone', exact: true }).click();
   await phone.getByRole('heading', { name: 'Chats', exact: true }).waitFor();
   await desktop.getByText('Connected now', { exact: true }).waitFor();
-  assert.deepEqual(await phone.locator('.mobile-header button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))), ['New chat', 'History', 'Chats', 'Results', 'Phone settings']);
+  assert.deepEqual(await phone.locator('.mobile-header button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))), ['Refresh page', 'New chat', 'History', 'Chats', 'Results', 'Phone settings']);
   await phone.getByRole('button', { name: 'History', exact: true }).click();
   await phone.getByRole('heading', { name: 'History', exact: true }).waitFor();
+  assert.deepEqual(await phone.locator('.mobile-main-nav button.active').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))), ['History']);
+  assert.equal(await phone.locator('.mobile-header-count').count(), 1);
+  assert.equal(await phone.locator('.mobile-list-count').count(), 0);
   await phone.getByRole('button', { name: 'History', exact: true }).click();
   await phone.getByRole('heading', { name: 'Chats', exact: true }).waitFor();
-  assert.equal(await phone.locator('.mobile-connection').evaluate(dot => getComputedStyle(dot).animationDuration), '3.6s');
+  assert.deepEqual(await phone.locator('.mobile-main-nav button.active').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))), ['Chats']);
+  assert.equal(await phone.locator('.mobile-connection-logo').evaluate(dot => getComputedStyle(dot).animationDuration), '3.6s');
   await phone.emulateMedia({ reducedMotion: 'reduce' });
-  assert.equal(await phone.locator('.mobile-connection').evaluate(dot => getComputedStyle(dot).animationName), 'none');
+  assert.equal(await phone.locator('.mobile-connection-logo').evaluate(dot => getComputedStyle(dot).animationName), 'none');
   await phone.emulateMedia({ reducedMotion: 'no-preference' });
+  await Promise.all([phone.waitForEvent('load'), phone.getByRole('button', { name: 'Refresh page', exact: true }).click()]);
+  await phone.getByRole('heading', { name: 'Chats', exact: true }).waitFor();
   for (const width of [320, 360, 393, 430, 768]) {
     await phone.setViewportSize({ width, height: 844 });
     const layout = await phone.evaluate(() => {

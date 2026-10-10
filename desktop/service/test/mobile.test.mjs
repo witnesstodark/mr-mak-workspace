@@ -108,8 +108,11 @@ test('QR navigation opens only the app shell; cross-site APIs, frames and socket
     assert.equal(shell.status, 200); assert.match(shell.body, /Mobile fixture/);
     assert.equal(shell.headers['x-frame-options'], 'DENY');
   }
+  // Android Home Screen launch observed as navigate + empty destination.
+  assert.equal((await get('/mobile/', { ...navigation, 'Sec-Fetch-Dest': 'empty' })).status, 200);
   for (const headers of [
     { ...navigation, 'Sec-Fetch-Dest': 'iframe' },
+    { ...navigation, 'Sec-Fetch-Dest': 'empty', 'Sec-Fetch-Mode': 'cors' },
     { ...navigation, 'Sec-Fetch-Mode': 'cors' },
     { ...navigation, Origin: 'https://unrelated.example' },
     { ...navigation, Host: 'unrelated.example' },
@@ -118,6 +121,7 @@ test('QR navigation opens only the app shell; cross-site APIs, frames and socket
   // Even a paired phone's cookie cannot turn cross-site requests into API access.
   for (const pathname of ['/mobile/api/bootstrap', '/mobile/events', '/mobile/manifest.webmanifest', '/assets/app.js']) {
     assert.equal((await get(pathname, { ...navigation, Cookie: device.cookie })).status, 403);
+    assert.equal((await get(pathname, { ...navigation, 'Sec-Fetch-Dest': 'empty', Cookie: device.cookie })).status, 403);
   }
   const qr = await gateway.newPairing();
   assert.equal((await request('/pair', { token: qr.code }, undefined, { 'Sec-Fetch-Site': 'cross-site' })).status, 403);

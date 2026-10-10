@@ -156,7 +156,7 @@ export class MobileGateway {
     const shellNavigation = !mutation && request.method === 'GET'
       && (pathname === '/mobile/' || pathname === '/mobile')
       && request.headers['sec-fetch-mode'] === 'navigate'
-      && request.headers['sec-fetch-dest'] === 'document';
+      && ['document', 'empty'].includes(request.headers['sec-fetch-dest']);
     if (request.headers['sec-fetch-site'] === 'cross-site' && !shellNavigation) fail('Cross-site requests are not allowed', 403);
   }
   session(id) {
