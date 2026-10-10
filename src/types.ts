@@ -1,6 +1,8 @@
 export interface WorkspaceStep {
   name: string
   path: string
+  /** Read-only builder output configured in the desktop service's local state. */
+  source?: string
   /**
    * Omitted = HTML in an iframe, formatted Markdown, or an image preview,
    * selected by file extension. `compare3d` = a Compare3DManifest JSON and

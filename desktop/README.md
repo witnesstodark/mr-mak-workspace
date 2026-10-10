@@ -62,6 +62,101 @@ a shared working directory. Resume passes `--session` with that recorded ID.
 A launch-specific marker prevents stale events from changing a new terminal's
 activity. Native CLI history must remain on disk for conversation restoration.
 
+## Live Codex sources
+
+The service reads `<stateDir>/live-sources.json` at startup. `stateDir` defaults
+to `<repo>/.mrmak/` and can be selected with the service's `--state` option.
+This file and all generated output are local, ignored state. Keep personal
+project paths out of committed configuration. An absent file means no sources.
+
+```json
+[
+  {
+    "id": "project-codex",
+    "label": "Project Codex",
+    "project": "<existing absolute project folder>",
+    "python": "python",
+    "args": ["-B", "Scripts/Docs/build_site.py", "--no-requests"]
+  }
+]
+```
+
+IDs must be unique and match `^[a-z0-9-]+$`. `label` and `python` are nonempty
+strings, `project` is an existing absolute folder, and `args` is an array of
+strings. Workspace owns `--out`; do not supply it in `args`. The state and
+output folders must be outside the source project. Configuration changes take
+effect at the next owner-approved service restart.
+
+The builder contract is:
+
+- Workspace launches `python` with the configured argument array, project
+  working directory, no shell, a hidden Windows process and a ten-minute timeout.
+  It appends `--out <stateDir>/live/<id>` to every invocation.
+- A successful build exits zero and writes `index.html` plus relative assets
+  into that output folder. The builder must safely replace its outputs and keep
+  the previous complete reader on failure. Workspace never edits source files.
+- Adding `--list-inputs` returns only JSON on stdout:
+  `{"dirs":[{"path":"<absolute folder>","recursive":true,"extensions":[".md",".html"]}],"files":["<absolute file>"]}`.
+  Directory extensions filter input events; an empty array accepts all files.
+  Single files are watched through their parent so replacement saves work.
+  Discovery runs before the first build and again after every successful build.
+- Nonzero exit reports stderr's last 2 KB. End diagnostics with the source file
+  and line to fix. Keep `--no-requests` in the local Codex configuration and use
+  `-B` to prevent Python bytecode writes in the project.
+
+The service builds once on startup, then waits for one second without matching
+changes. Processes run one at a time; changes during a build coalesce into one
+follow-up after the quiet period. Shutdown stops watchers, timers and builders.
+The generated folder is granted to the separate GET/HEAD-only content server.
+Authenticated `/api/bootstrap` includes `liveSources`; `GET /api/live-sources`
+returns the same status array. Each transition broadcasts a `live-source` event
+with a `source` containing `id`, `label`, `state`, `builtAt`, `error` and `url`.
+WebSocket reconnects include a fresh snapshot.
+
+Card steps can set `source` to the configured ID and `path` to `index.html`.
+The UI resolves the path against the source URL, displays build/failure status
+and reloads the existing iframe on success. Origin-checked `mrmak:reload`
+messages preserve the hash route and restore window scroll from session storage
+after the route renders. The Codex keeps its own interface and CDN dependencies.
+Browser Preview cannot run these builders.
+
+Mobile Results resolves a step's `source` through the same initialized
+`LiveSources.reportRoot()` used to create its desktop grant. It serves the
+existing generated output in place, including output under an external
+`stateDir`. The source project itself is never granted. An unknown source is
+an error; it does not fall back to the card folder. Steps without `source`,
+such as a local guide, continue to use `workspace/<folder>/<path>`.
+
+Live output roots are canonicalized and pinned at startup. Output junctions
+cannot redirect them to other folders, and mobile requests recheck the root
+and each asset's canonical containment. Mobile preview URLs use a virtual
+`live/<id>/` prefix; absolute Windows paths and desktop grants are not sent to
+the phone. Each mobile grant still expires after 30 minutes and is revoked
+when its device is disconnected.
+
+Mobile reports retain an opaque sandbox and a restrictive CSP. A source that
+needs external scripts or fonts can explicitly configure `mobileResources`
+in its local `live-sources.json` entry:
+
+```json
+"mobileResources": {
+  "scripts": [
+    "https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"
+  ],
+  "styles": ["https://fonts.googleapis.com/css2"],
+  "fonts": ["https://fonts.gstatic.com"]
+}
+```
+
+Scripts and styles require exact HTTPS paths; fonts require HTTPS origins.
+Credentials, queries, fragments, wildcards and CSP directive injection are
+rejected. The policy applies only to that source's grant. It adds no remote
+API access or same-origin privileges. Embedded subframes remain blocked;
+generated preview links can open full pages within the same grant. Missing
+dependencies are reported by the reader; Workspace does not substitute them.
+Changes take effect at the next owner-approved service restart.
+
 ## Checks
 
 ```powershell

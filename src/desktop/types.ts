@@ -17,7 +17,9 @@ export interface VoiceOwner { clientId: string; surface: 'chats' | 'workspace' }
 export interface FileEntry { name: string; path: string; directory: boolean; size: number; modifiedAt: string | null }
 export interface Folder { path: string; parent: string; entries: FileEntry[]; truncated: boolean; mode: string }
 export interface Preview { path: string; name: string; size: number; kind: 'document' | 'image' | 'video' | 'audio' | 'text' | 'unsupported'; url?: string; text?: string; revision?: string; reason?: string }
+export interface LiveSource { id: string; label: string; state: 'building' | 'ready' | 'failed'; builtAt: string | null; error: string | null; url: string }
 export interface DesktopState {
+  liveSources: LiveSource[]
   ready: boolean; connected: boolean; error: string | null; repo: string; contentBase: string
   agents: AgentInfo[]; sessions: ChatSession[]; selectedId: string | null; notices: Notice[]
   settings: Settings; coordinator: string; voice: { configured: boolean; owner: VoiceOwner | null }
@@ -25,6 +27,7 @@ export interface DesktopState {
   voiceHistory: { id: string; at: string; captions: { role: 'user' | 'assistant'; text: string; start: number; end: number }[] }[]
 }
 export interface ServiceEvent {
+  source?: LiveSource; liveSources?: LiveSource[]
   type: string; id?: string; data?: string; sequence?: number; session?: ChatSession; sessions?: ChatSession[]
   selectedId?: string; sessionId?: string; state?: string; error?: string; notice?: Notice
   operation?: Operation; settings?: Settings; owner?: VoiceOwner | null; window?: string; route?: string; preview?: Preview
