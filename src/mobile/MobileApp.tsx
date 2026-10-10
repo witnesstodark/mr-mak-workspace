@@ -8,6 +8,7 @@ import { disconnectMobile, mobileApi, mobileEvent, onMobileEvent, selectMobileCh
 import Terminal from './Terminal'
 import Composer from './Composer'
 import Results from './Results'
+import { useInstall } from './useInstall'
 import './mobile.css'
 
 interface Pending { id: string; claim: string; code: string }
@@ -103,6 +104,7 @@ function NewChat({ close, opened }: { close: () => void; opened: (id: string) =>
 }
 
 export default function MobileApp() {
+  const installation = useInstall()
   const state = useMobile(), [view, setView] = useState<'list' | 'chat' | 'results'>('list'), [history, setHistory] = useState(false), [query, setQuery] = useState(''), [creating, setCreating] = useState(false), [settings, setSettings] = useState(false)
   const [closing, setClosing] = useState(false), [closeError, setCloseError] = useState('')
   useEffect(() => {
@@ -144,9 +146,11 @@ export default function MobileApp() {
     </nav>
     <button className="mobile-icon" aria-label="Phone settings" title="Phone settings" onClick={() => setSettings(!settings)}><Icon name="phone" size={19} /></button>
   </header>
+    {installation.available && !installation.dismissed && <aside className="mobile-install" aria-label="Install Mr. Mak"><div><strong>Keep Mr. Mak on your phone</strong><p>Add the nose to your Home Screen and open it as an app.</p></div><button onClick={() => void installation.install()} disabled={installation.busy}>Install</button><button className="mobile-icon" aria-label="Not now" title="Not now" onClick={installation.dismiss}><Icon name="close" size={17} /></button></aside>}
+    {installation.error && <p className="mobile-error" role="alert">{installation.error}</p>}
     {!state.connected && <div className="mobile-offline" role="status">{state.error || 'Reconnecting… Keep Tailscale connected and your computer awake.'}</div>}
     {closeError && <div className="mobile-error" role="alert">{closeError}<button className="mobile-icon" aria-label="Dismiss close error" onClick={() => setCloseError('')}><Icon name="close" size={15} /></button></div>}
-    {settings && <div className="mobile-device-settings"><strong>{state.device?.name}</strong><p>Chats run on your computer. Switching views here leaves your desktop view alone.</p><p>Add this page to your Home Screen from your browser's menu.</p><button onClick={() => { if (window.confirm('Disconnect this phone from Mr. Mak?')) void disconnectMobile() }}>Disconnect this phone</button></div>}
+    {settings && <div className="mobile-device-settings"><strong>{state.device?.name}</strong><p>Chats run on your computer. Switching views here leaves your desktop view alone.</p>{installation.installed ? <p>Mr. Mak is installed on this phone.</p> : installation.available ? <button onClick={() => void installation.install()} disabled={installation.busy}>Install Mr. Mak</button> : <p>To add Mr. Mak to your Home Screen, open your browser’s menu and choose Install app or Add to Home Screen. On iPhone, use Safari’s Share menu.</p>}<button onClick={() => { if (window.confirm('Disconnect this phone from Mr. Mak?')) void disconnectMobile() }}>Disconnect this phone</button></div>}
     {view === 'results' ? <Results /> : view === 'chat' && session ? <Conversation key={session.id} session={session} /> : <main className="mobile-chat-list"><label className="mobile-search"><Icon name="search" size={17} /><input aria-label="Find a chat" placeholder="Find a conversation…" value={query} onChange={event => setQuery(event.target.value)} /></label><div className="mobile-list-count">{items.length} chats</div><div className="mobile-chat-cards">{items.map(item => <button className={`mobile-chat-card ${item.activity === 'working' ? 'working' : ''}`} key={item.id} onClick={() => open(item.id)} style={{ '--chat-color': item.tabColor || state.agents.find(agent => agent.id === item.agent)?.color || '#d7aabd' } as React.CSSProperties}><span className="mobile-agent-icon"><AgentLogo agent={item.agent} size={24} />{item.unread && <i />}</span><span className="mobile-card-copy"><strong>{item.name}{item.pinned && <Icon name="pin" size={12} />}</strong><small>{item.agent === 'claude' ? 'Claude' : item.agent === 'codex' ? 'Codex' : item.agent === 'opencode' ? 'OpenCode' : 'Kimi'} · {chatActivityLabel(item)}</small>{item.preview && <p>{item.preview}</p>}</span><Icon name="arrow" size={15} /></button>)}{!items.length && <p className="mobile-list-empty">{query ? 'No matching chats.' : 'Open a chat to give your next idea a place.'}</p>}</div><p className="mobile-list-foot">A thought on your phone.<br />A task on your computer.</p></main>}
     {creating && <NewChat close={() => setCreating(false)} opened={open} />}
   </div>

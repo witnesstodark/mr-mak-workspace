@@ -19,7 +19,7 @@ start an installed agent, and read Workspace reports.
    select **Request connection**.
 5. Compare the six-digit confirmation code on both screens, then choose
    **Connect phone** in Chats. A QR code alone does not grant access.
-6. Add the page to your Home Screen through your browser. If the installed
+6. After connecting, tap Install when the browser makes installation available, or open Phone settings for Install Mr. Mak. Not now dismisses the invitation for this browser session; the settings button remains available. You can also use your browser’s Install app or Add to Home Screen menu (Safari’s Share menu on iPhone). If the installed
    web app asks to connect again, enter the eight-digit connection code shown
    under a fresh desktop QR code and confirm it on the computer.
 

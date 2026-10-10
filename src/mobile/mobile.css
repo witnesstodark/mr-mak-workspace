@@ -42,3 +42,5 @@
 .mobile-voice-error { display: flex; gap: 8px; align-items: start; color: #efb5c3; font-size: 12px; }
 .mobile-voice-error button { flex-shrink: 0; background: none; border: none; padding: 5px; }
 @media (min-width: 700px) { .mobile-app { max-width: 760px; margin: 0 auto; border-inline: 1px solid #292730; }.mobile-chat-list { padding-inline: 30px; }.mobile-messages { padding-inline: 32px; }.mobile-composer { padding-inline: 25px; } }
+
+.mobile-install { flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 12px; border-bottom: 1px solid var(--m-line); background: var(--m-panel); }.mobile-install > div { flex: 1; min-width: 0; }.mobile-install strong { font-size: 12px; }.mobile-install p { font-size: 11px; color: var(--m-muted); margin: 4px 0 0; }.mobile-install > button:not(.mobile-icon) { background: var(--m-accent); color: #30202b; border: none; }

@@ -107,6 +107,35 @@ try {
   }
   await phone.setViewportSize({ width: 390, height: 844 });
   await phone.screenshot({ path: path.join(repo, 'phone-chats.png') });
+  // Browser eligibility is simulated; the native Android installation remains a phone check.
+  await phone.evaluate(() => {
+    window.installCalls = 0;
+    const event = new Event('beforeinstallprompt', { cancelable: true });
+    event.prompt = async () => { window.installCalls++; };
+    event.userChoice = Promise.resolve({ outcome: 'dismissed' });
+    window.dispatchEvent(event);
+  });
+  await phone.getByRole('complementary', { name: 'Install Mr. Mak' }).waitFor();
+  assert.equal(await phone.evaluate(() => window.installCalls), 0, 'Never open installation without a tap');
+  await phone.screenshot({ path: path.join(repo, 'phone-install.png') });
+  await phone.getByRole('button', { name: 'Not now', exact: true }).click();
+  assert.equal(await phone.getByRole('complementary', { name: 'Install Mr. Mak' }).count(), 0);
+  await phone.getByRole('button', { name: 'Phone settings' }).click();
+  await phone.getByRole('button', { name: 'Install Mr. Mak', exact: true }).click();
+  assert.equal(await phone.evaluate(() => window.installCalls), 1);
+  await phone.getByRole('button', { name: 'Phone settings' }).click();
+  await phone.evaluate(() => {
+    const event = new Event('beforeinstallprompt', { cancelable: true });
+    event.prompt = async () => { window.installCalls++; };
+    event.userChoice = Promise.resolve({ outcome: 'accepted' });
+    window.dispatchEvent(event);
+  });
+  assert.equal(await phone.getByRole('complementary', { name: 'Install Mr. Mak' }).count(), 0, 'Not now persists for this session');
+  await phone.getByRole('button', { name: 'Phone settings' }).click();
+  await phone.getByRole('button', { name: 'Install Mr. Mak', exact: true }).click();
+  await phone.getByText('Mr. Mak is installed on this phone.', { exact: true }).waitFor();
+  await phone.evaluate(() => window.dispatchEvent(new Event('appinstalled')));
+  await phone.getByRole('button', { name: 'Phone settings' }).click();
   const dimensions = ids.map(id => ({ cols: service.sessions.get(id).cols, rows: service.sessions.get(id).rows }));
   const desktopSelected = (await (await fetch(`${service.origin}/api/bootstrap`, { headers: { Authorization: `Bearer ${service.token}` } })).json()).selectedId;
   await phone.getByRole('button', { name: /Research ideas/ }).click();
