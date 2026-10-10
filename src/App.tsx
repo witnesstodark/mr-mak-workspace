@@ -8,7 +8,7 @@ import Topbar from './components/Topbar'
 import HomeGrid from './components/HomeGrid'
 import EntityControls from './components/EntityControls'
 import ReportBoundary from './components/ReportBoundary'
-import { contentUrl, isDesktop } from './desktop/client'
+import { contentUrl, isDesktop, useDesktop } from './desktop/client'
 
 const Compare3D = lazy(() => import('./components/Compare3D'))
 const ReportViewer = lazy(() => import('./components/ReportViewer'))
@@ -23,6 +23,7 @@ const byFreshness = (a: WorkspaceEntity, b: WorkspaceEntity) =>
 
 export default function App() {
   const { workspace, offline, lastSync, reload } = useWorkspace()
+  const { liveSources } = useDesktop()
   const [route, setRoute] = useState<Route>(parseHash)
   const [query, setQuery] = useState('')
   const [showArchived, setShowArchived] = useState(false)
@@ -42,7 +43,12 @@ export default function App() {
     ? resolveStep(entity.steps.length, route.step, entity.defaultStep)
     : -1
   const step = entity?.steps[stepIndex]
-  const reportUrl = entity && step ? contentUrl(`/workspace/${entity.folder}/${step.path}`) : null
+  const liveSource = step?.source ? liveSources.find(source => source.id === step.source) : undefined
+  const reportUrl = entity && step
+    ? step.source
+      ? liveSource ? new URL(step.path, liveSource.url).href : null
+      : contentUrl(`/workspace/${entity.folder}/${step.path}`)
+    : null
 
   // Hash → state: entity links navigate natively; this also covers back/forward.
   useEffect(() => {
@@ -172,7 +178,9 @@ export default function App() {
               baseUrl={reportUrl.slice(0, reportUrl.lastIndexOf('/'))}
             /></Suspense>
           ) : entity && reportUrl ? (
-            <Suspense fallback={<div className="boot"><MakLogo size={56} animated={false} /></div>}><ReportViewer key={reportUrl} url={reportUrl} title={step?.name ?? entity.title} relativePath={`workspace/${entity.folder}/${step?.path}`} /></Suspense>
+            <Suspense fallback={<div className="boot"><MakLogo size={56} animated={false} /></div>}><ReportViewer key={reportUrl} url={reportUrl} title={step?.name ?? entity.title} relativePath={`workspace/${entity.folder}/${step?.path}`} liveSource={liveSource} /></Suspense>
+          ) : entity && step?.source ? (
+            <div className="report-error" role="status">{isDesktop ? 'This live source is not configured. Check live-sources.json in the local state folder.' : 'Open this live Codex in the desktop app.'}</div>
           ) : (
             <HomeGrid
               entities={entities}

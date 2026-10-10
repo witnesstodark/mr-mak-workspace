@@ -34,6 +34,7 @@ export class Workspace {
     const result = { ...brief(entity), text: '' };
     const selected = entity.steps?.[step];
     if (!selected) return result;
+    if (selected.source) return { ...result, note: 'This step is a live reader. Open the card for its generated content.' };
     const relative = path.join(entity.folder, selected.path.split('?')[0]);
     const { file } = await realFile(path.join(this.repo, 'workspace'), relative);
     if (!/\.(html?|md|txt)$/i.test(file) || (await stat(file)).size > 3 * 1024 * 1024) return { ...result, note: 'The card uses a visual or large report. Open it for the full content.' };

@@ -16,6 +16,11 @@ const images = new Set(), videos = new Set(), arachneImages = new Set();
 for (const entity of entities) {
   if (entity.defaultStep !== undefined) assert.ok(Number.isInteger(entity.defaultStep) && entity.defaultStep >= 0 && entity.defaultStep < entity.steps.length);
   for (const step of entity.steps) {
+    if (step.source) {
+      assert.match(step.source, /^[a-z0-9-]+$/);
+      assert.ok(!path.isAbsolute(step.path) && !step.path.split(/[\\/]/).includes('..'), 'Live step paths must stay inside their generated source.');
+      continue; // External builders own generated pages; no copied report in workspace/.
+    }
     const file = path.join('workspace', entity.folder, step.path);
     const content = await read(file);
     assert.ok(content.trim(), `${file} is empty`);

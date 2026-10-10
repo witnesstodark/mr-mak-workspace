@@ -30,7 +30,9 @@ try {
     await page.getByRole('tab', { name: entity.steps[entity.defaultStep ?? entity.steps.length - 1].name, exact: true }).waitFor();
     for (const [index, step] of entity.steps.entries()) {
       await page.locator('.step-tab').nth(index).click();
-      if (/\.html$/i.test(step.path)) {
+      if (step.source) {
+        await page.getByText('Open this live Codex in the desktop app.', { exact: true }).waitFor();
+      } else if (/\.html$/i.test(step.path)) {
         await page.locator('.report-document[aria-busy=false]').waitFor();
         await page.frameLocator('iframe.report-frame').locator('h1:visible').first().waitFor();
         if (entity.id === 'my-dream-game') {
@@ -100,15 +102,17 @@ try {
   // A blocked module used to unmount the entire React tree. Keep navigation,
   // show the actual error, and let a reload recover once the block is gone.
   const failed = await browser.newPage();
+  const localReport = entities.find(entity => entity.steps.every(step => !step.source) && /\.html$/i.test(entity.steps[entity.defaultStep ?? entity.steps.length - 1].path));
+  const localCard = () => failed.locator(`.entity-card[data-entity="${localReport.id}"]`);
   failed.setDefaultTimeout(15000);
   await failed.route('**/src/components/ReportViewer.tsx*', route => route.abort('failed'));
   await failed.goto(url);
-  await failed.locator('.entity-card').first().click();
+  await localCard().click();
   await failed.getByRole('alert').waitFor();
   assert.equal(await failed.getByRole('button', { name: 'Workspace', exact: true }).count(), 1);
   await failed.getByRole('button', { name: 'Back to Workspace', exact: true }).click();
   await failed.locator('.entity-card').first().waitFor();
-  await failed.locator('.entity-card').first().click();
+  await localCard().click();
   await failed.getByRole('alert').waitFor();
   await failed.unroute('**/src/components/ReportViewer.tsx*');
   await failed.getByRole('button', { name: 'Reload page', exact: true }).click();

@@ -18,9 +18,28 @@ ${reportThemeCSS}
 (() => {
   const setTheme = theme => { if (theme === 'dark' || theme === 'light') document.documentElement.dataset.mrmakTheme = theme; };
   setTheme('${theme}');
+  const scrollKey = () => 'mrmak:scroll:' + location.pathname + location.hash;
   window.addEventListener('message', event => {
-    if (event.source === parent && event.origin === ${trustedOrigin} && event.data?.type === 'mrmak:theme') setTheme(event.data.theme);
+    if (event.source !== parent || event.origin !== ${trustedOrigin}) return;
+    if (event.data?.type === 'mrmak:theme') setTheme(event.data.theme);
+    if (event.data?.type === 'mrmak:reload') {
+      try { sessionStorage.setItem(scrollKey(), String(window.scrollY)); } catch { /* Storage can be disabled. */ }
+      location.reload();
+    }
   });
+  // Load runs after the report's route and its resources. Two frames allow the
+  // route's layout to settle before restoring the window's scroll position.
+  window.addEventListener('load', () => requestAnimationFrame(() => requestAnimationFrame(() => {
+    const key = scrollKey();
+    try {
+      const saved = sessionStorage.getItem(key);
+      if (saved !== null) {
+        const y = Number(saved);
+        if (Number.isFinite(y)) window.scrollTo({ top: y, left: 0, behavior: 'instant' });
+        sessionStorage.removeItem(key);
+      }
+    } catch { /* Storage can be disabled. */ }
+  })));
   const route = event => {
     const link = event.target.closest?.('a[href]');
     if (!link || link.hasAttribute('download') || event.defaultPrevented) return;

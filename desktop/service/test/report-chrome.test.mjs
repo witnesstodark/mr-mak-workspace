@@ -6,6 +6,7 @@ import {mkdtemp,writeFile,stat} from 'node:fs/promises';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
+import vm from 'node:vm';
 
 async function rendered(chunks) {
   const result=[];
@@ -46,4 +47,30 @@ test('HTML GET and HEAD agree on byte length while ranges remain full transforme
     const range=await fetch(url,{headers:{Range:'bytes=0-10'}});
     assert.equal(range.status,200); assert.equal(original(await range.text()),source);
   }finally{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
+});
+
+test('reload accepts only the parent UI origin, saves route-specific scroll and restores after route layout', async () => {
+  const output = [];
+  for await (const chunk of Readable.from(['<html><head></head></html>']).pipe(reportChromeStream({ parentOrigin: 'http://127.0.0.1:1234' }))) output.push(chunk);
+  const script = Buffer.concat(output).toString().match(/<script data-mrmak-links>([\s\S]*?)<\/script>/)[1];
+  const listeners = {}, frames = [], saved = new Map(), scrolls = [], parent = {};
+  let reloads = 0;
+  const location = { pathname: '/view/grant/index.html', hash: '#doc~~intro', reload: () => reloads++ };
+  const window = { scrollY: 765, addEventListener: (name, callback) => { listeners[name] = callback; }, scrollTo: options => scrolls.push(options.top) };
+  const context = { window, parent, location, document: { documentElement: { dataset: {} }, addEventListener() {} }, requestAnimationFrame: callback => frames.push(callback), sessionStorage: { setItem: (key, value) => saved.set(key, value), getItem: key => saved.get(key) ?? null, removeItem: key => saved.delete(key) } };
+  vm.runInNewContext(script, context);
+  const message = (origin, source = parent, type = 'mrmak:reload') => listeners.message({ source, origin, data: { type, theme: 'light' } });
+  message('https://attacker.example'); message('http://127.0.0.1:1234', {});
+  assert.equal(reloads, 0); assert.equal(saved.size, 0);
+  message('http://127.0.0.1:1234', parent, 'mrmak:theme');
+  assert.equal(context.document.documentElement.dataset.mrmakTheme, 'light');
+  message('http://127.0.0.1:1234'); assert.equal(reloads, 1);
+  assert.equal(location.hash, '#doc~~intro'); assert.equal(saved.get('mrmak:scroll:/view/grant/index.html#doc~~intro'), '765');
+  listeners.load(); assert.deepEqual(scrolls, []);
+  frames.shift()(); assert.deepEqual(scrolls, []);
+  frames.shift()(); assert.deepEqual(scrolls, [765]); assert.equal(saved.size, 0);
+  message('http://127.0.0.1:1234'); location.hash = '#cat.items'; listeners.load(); frames.shift()(); frames.shift()();
+  assert.equal(saved.size, 1); // a different route never consumes the saved scroll
+  context.sessionStorage.setItem = () => { throw new Error('Storage disabled'); };
+  message('http://127.0.0.1:1234'); assert.equal(reloads, 3);
 });

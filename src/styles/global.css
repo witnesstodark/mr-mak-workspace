@@ -517,6 +517,13 @@ button:focus-visible {
   opacity: 0;
 }
 .report-frame.loaded { visibility: visible; opacity: 1; }
+.live-report { display: flex; flex-direction: column; }
+.live-report > .report-frame { flex: 1; min-height: 0; }
+.live-source-status { flex: none; padding: 6px 14px; font: 12px/1.5 var(--font-body); color: var(--text-dim); background: var(--surface-1); border-bottom: 1px solid var(--hairline); }
+.live-source-status.failed { color: var(--amber); }
+.live-source-status details { display: inline; margin-left: 12px; }
+.live-source-status summary { display: inline; cursor: pointer; text-decoration: underline; }
+.live-source-status pre { max-height: 160px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text); margin: 8px 0; }
 
 /* ─── Home (витрина) ─── */
 .home {

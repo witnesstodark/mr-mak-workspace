@@ -14,6 +14,7 @@ if (isDesktop && token) {
 const listeners = new Set<() => void>()
 const events = new Set<(event: ServiceEvent) => void>()
 let state: DesktopState = {
+  liveSources: [],
   ready: false, connected: false, error: null, repo: '', contentBase: '', agents: [], sessions: [], selectedId: null, notices: [],
   settings: { defaultAgent: 'codex', defaultBypass: false }, coordinator: 'idle', voice: { configured: false, owner: null }, operations: [], preview: null, voiceHistory: [],
 }
@@ -95,6 +96,11 @@ function connect() {
   socket.onmessage = ({ data }) => {
     const event = JSON.parse(data) as ServiceEvent
     if (event.type === 'connected') update({ connected: true, sessions: event.sessions || state.sessions, selectedId: event.selectedId ?? state.selectedId, coordinator: event.state || state.coordinator, error: null })
+    if (event.type === 'connected' && event.liveSources) update({ liveSources: event.liveSources })
+    if (event.type === 'live-source' && event.source) {
+      const source = event.source
+      update({ liveSources: state.liveSources.some(item => item.id === source.id) ? state.liveSources.map(item => item.id === source.id ? source : item) : [...state.liveSources, source] })
+    }
     if (event.type === 'selection') update({ selectedId: event.selectedId || null })
     if (event.type === 'session' && event.session) {
       const next = event.session
