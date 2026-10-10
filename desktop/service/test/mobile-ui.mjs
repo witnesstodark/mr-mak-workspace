@@ -79,9 +79,18 @@ try {
   });
   await new Promise(resolve => qrSource.listen(0, 'localhost', resolve));
   await phone.goto(`http://localhost:${qrSource.address().port}`);
-  const navigationRequest = phone.waitForRequest(request => request.url().startsWith(`${service.mobile.origin}/mobile/`) && request.isNavigationRequest());
+  // Playwright's request interception omits Sec-Fetch headers from its client
+  // snapshot. Assert the header received by the server that enforces it.
+  const navigationSite = new Promise(resolve => {
+    const inspect = request => {
+      if (request.url.startsWith('/mobile/') && request.headers['sec-fetch-dest'] === 'document') {
+        service.mobile.server.off('request', inspect); resolve(request.headers['sec-fetch-site']);
+      }
+    };
+    service.mobile.server.on('request', inspect);
+  });
   await phone.getByRole('link', { name: 'Open Mr. Mak' }).click();
-  assert.equal(await (await navigationRequest).headerValue('sec-fetch-site'), 'cross-site');
+  assert.equal(await navigationSite, 'cross-site');
   await phone.getByRole('button', { name: 'Request connection' }).click();
   await phone.getByRole('heading', { name: 'Confirm on your computer' }).waitFor();
   await desktop.getByRole('button', { name: 'Connect phone', exact: true }).click();
@@ -142,10 +151,66 @@ try {
   await phone.getByText('Mr. Mak is installed on this phone.', { exact: true }).waitFor();
   await phone.evaluate(() => window.dispatchEvent(new Event('appinstalled')));
   await phone.getByRole('button', { name: 'Phone settings' }).click();
+
   const dimensions = ids.map(id => ({ cols: service.sessions.get(id).cols, rows: service.sessions.get(id).rows }));
   const desktopSelected = (await (await fetch(`${service.origin}/api/bootstrap`, { headers: { Authorization: `Bearer ${service.token}` } })).json()).selectedId;
   await phone.getByRole('button', { name: /Research ideas/ }).click();
   await phone.getByRole('heading', { name: 'Ready for review' }).waitFor();
+  const modeButtons = phone.getByRole('group', { name: 'Conversation view' });
+  async function swipeModes(dx, dy = 0, clickIndex = -1) {
+    await modeButtons.evaluate((node, { dx, dy, clickIndex }) => {
+      node.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 7, isPrimary: true, pointerType: 'touch', clientX: 120, clientY: 100 }));
+      node.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 7, isPrimary: true, pointerType: 'touch', clientX: 120 + dx, clientY: 100 + dy }));
+      if (clickIndex >= 0) node.querySelectorAll('button')[clickIndex].click();
+    }, { dx, dy, clickIndex });
+  }
+  assert.ok(await phone.locator('.mobile-chat-tools').evaluate(node => node.getBoundingClientRect().height <= 34), 'No vertical spacing around compact tabs');
+  await swipeModes(-70, 0, 0); await phone.locator('.mobile-terminal').waitFor();
+  await swipeModes(70, 0, 1); await phone.locator('.mobile-messages').waitFor();
+  await swipeModes(-15); assert.equal(await phone.locator('.mobile-terminal').count(), 0, 'Tiny movement is not a swipe');
+  await swipeModes(-60, 90); assert.equal(await phone.locator('.mobile-terminal').count(), 0, 'Vertical gesture does not switch');
+  await phone.locator('.mobile-messages').evaluate(node => {
+    node.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 9, isPrimary: true, clientX: 150, clientY: 200 }));
+    node.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 9, isPrimary: true, clientX: 50, clientY: 200 }));
+  });
+  assert.equal(await phone.locator('.mobile-terminal').count(), 0, 'Swiping conversation content never switches modes');
+  await modeButtons.getByRole('button', { name: 'Terminal', exact: true }).click(); await phone.locator('.mobile-terminal').waitFor();
+  await modeButtons.getByRole('button', { name: 'Conversation', exact: true }).click(); await phone.locator('.mobile-messages').waitFor();
+  service.sessions.nativeEvent(service.sessions.get(ids[1]), { kind: 'turn-started' });
+  await phone.locator('.mobile-activity-status.working').waitFor();
+  assert.equal(await phone.locator('.mobile-worker-hands').evaluate(node => getComputedStyle(node).animationName), 'mobile-worker-type');
+  const modeLayout = await phone.locator('.mobile-chat-tools').evaluate(node => {
+    const segment = node.querySelector('.mobile-segment').getBoundingClientRect(), status = node.querySelector('.mobile-activity-status').getBoundingClientRect();
+    const buttons = [...node.querySelectorAll('.mobile-segment button')].map(button => button.getBoundingClientRect().width);
+    return { gap: status.left - segment.right, widths: buttons };
+  });
+  assert.ok(Math.abs(modeLayout.gap - 8) < 1); assert.ok(Math.abs(modeLayout.widths[0] - modeLayout.widths[1]) < 1);
+  await phone.screenshot({ path: path.join(repo, 'phone-working.png') });
+  await phone.emulateMedia({ reducedMotion: 'reduce' });
+  assert.equal(await phone.locator('.mobile-worker-hands').evaluate(node => getComputedStyle(node).animationName), 'none');
+  await phone.emulateMedia({ reducedMotion: 'no-preference' });
+  service.sessions.nativeEvent(service.sessions.get(ids[1]), { kind: 'turn-interrupted' });
+  await phone.locator('.mobile-activity-status.working').waitFor({ state: 'detached' });
+  const readerBeforeScroll = service.mobile.transcripts.read;
+  service.mobile.transcripts.read = async () => ({ supported: true, messages: Array.from({ length: 40 }, (_, index) => ({ id: `scroll-${index}`, role: index % 2 ? 'assistant' : 'user', text: `History message ${index + 1}. A longer message to exercise conversation scrolling on the phone.`, at: new Date().toISOString() })) });
+  await phone.waitForFunction(() => document.querySelectorAll('.mobile-message').length === 40);
+  const nearBottom = () => phone.locator('.mobile-messages').evaluate(box => box.scrollHeight - box.scrollTop - box.clientHeight < 3);
+  assert.ok(await nearBottom(), 'New messages follow the end');
+  await phone.locator('.mobile-messages').evaluate(box => { box.scrollTop = 0; box.dispatchEvent(new Event('scroll')); });
+  await phone.getByRole('button', { name: 'Jump to latest' }).waitFor();
+  await phone.waitForTimeout(2400);
+  assert.equal(await phone.locator('.mobile-messages').evaluate(box => box.scrollTop), 0, 'Polling does not pull a history reader to the end');
+  await phone.getByRole('button', { name: 'Jump to latest' }).click();
+  assert.ok(await nearBottom());
+  assert.equal(await phone.getByRole('button', { name: 'Jump to latest' }).count(), 0);
+  await phone.locator('.mobile-messages').evaluate(box => { box.scrollTop = 0; box.dispatchEvent(new Event('scroll')); });
+  await phone.getByRole('button', { name: 'Terminal', exact: true }).click();
+  await phone.getByRole('button', { name: 'Conversation', exact: true }).click();
+  assert.ok(await nearBottom(), 'Returning from Terminal opens the end');
+  assert.equal(await phone.getByRole('button', { name: 'Jump to latest' }).count(), 0);
+  service.mobile.transcripts.read = readerBeforeScroll;
+  await phone.waitForFunction(() => document.querySelectorAll('.mobile-message').length === 2);
+
   assert.deepEqual(ids.map(id => ({ cols: service.sessions.get(id).cols, rows: service.sessions.get(id).rows })), dimensions);
   assert.equal((await (await fetch(`${service.origin}/api/bootstrap`, { headers: { Authorization: `Bearer ${service.token}` } })).json()).selectedId, desktopSelected);
   const input = phone.getByRole('textbox', { name: 'Message this chat' });
@@ -217,17 +282,44 @@ try {
   await mobileContext.setOffline(false); await phone.getByRole('status', { name: 'Connected to your computer', exact: true }).waitFor();
   assert.equal(await input.inputValue(), 'Keep this draft while I switch chats.');
   await phone.getByRole('button', { name: 'Terminal', exact: true }).click(); await phone.locator('.mobile-terminal .xterm-screen').waitFor();
+  // Simulate a silent application socket while the transport still looks open.
+  await phone.bringToFront();
+  const silentClients = [...service.mobile.clients];
+  assert.equal(await phone.evaluate(() => document.visibilityState), 'visible');
+  for (const ws of silentClients) {
+    ws.send = () => {};
+    const handlers = ws.listeners('message'); ws.removeAllListeners('message');
+    ws.on('message', (...args) => {
+      try { if (JSON.parse(String(args[0])).type === 'ping') return; } catch { /* Let the normal handler validate. */ }
+      for (const handler of handlers) handler.apply(ws, args);
+    });
+  }
+  const writesBeforeRecovery = writes.length;
+  await new Promise(resolve => setTimeout(resolve, 500));
+  await phone.evaluate(() => document.visibilityState);
+  await new Promise(resolve => setTimeout(resolve, 52000));
+  await phone.getByRole('status', { name: 'Connected to your computer', exact: true }).waitFor();
+  assert.ok([...service.mobile.clients].some(ws => !silentClients.includes(ws)), 'Watchdog creates a fresh connection');
+  assert.equal(writes.length, writesBeforeRecovery, 'Recovery never resends terminal input');
+  assert.equal(await input.inputValue(), 'Keep this draft while I switch chats.');
+
   const beforeKeys = writes.length;
   for (const name of ['Arrow left', 'Arrow up', 'Arrow down', 'Arrow right']) await phone.getByRole('button', { name, exact: true }).click();
   await phone.waitForTimeout(100);
   assert.deepEqual(writes.slice(beforeKeys), ['\x1b[D', '\x1b[A', '\x1b[B', '\x1b[C'].map(data => ({ id: ids[1], data })));
   for (const width of [320, 390]) {
     await phone.setViewportSize({ width, height: 844 });
-    const keyLayout = await phone.locator('.mobile-terminal-keys').evaluate(node => ({ client: node.clientWidth, scroll: node.scrollWidth, keys: [...node.querySelectorAll('button')].map(button => { const r = button.getBoundingClientRect(); return { left: r.left, right: r.right, width: r.width, height: r.height }; }) }));
+    const keyLayout = await phone.locator('.mobile-terminal-keys').evaluate(node => ({ client: node.clientWidth, scroll: node.scrollWidth, keys: [...node.querySelectorAll('button')].map(button => { const r = button.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, width: r.width, height: r.height }; }) }));
     assert.ok(keyLayout.scroll <= keyLayout.client + 1);
-    assert.ok(keyLayout.keys.every(r => r.left >= 0 && r.right <= width && r.width >= 44 && r.height >= 44));
+    assert.equal(new Set(keyLayout.keys.map(r => r.top)).size, 1, 'Terminal controls occupy one row');
+    const fitted = await phone.locator('.mobile-terminal-viewport').evaluate(node => ({ width: node.clientWidth, scroll: node.scrollWidth }));
+    assert.ok(fitted.scroll <= fitted.width + 1, `Fitted terminal needs no horizontal scrolling at ${width}px`);
+    assert.ok(keyLayout.keys.every(r => r.left >= 0 && r.right <= width && r.width >= 30 && r.height >= 44));
   }
   await phone.screenshot({ path: path.join(repo, 'phone-terminal.png') });
+  await phone.getByRole('button', { name: 'Show terminal at actual size' }).click();
+  assert.equal(await phone.locator('.mobile-terminal-surface').evaluate(node => getComputedStyle(node).transform), 'matrix(1, 0, 0, 1, 0, 0)');
+  await phone.getByRole('button', { name: 'Fit terminal to screen' }).click();
   assert.deepEqual(ids.map(id => ({ cols: service.sessions.get(id).cols, rows: service.sessions.get(id).rows })), dimensions);
   await phone.getByRole('button', { name: 'Conversation', exact: true }).click();
   await phone.locator('input[type=file]').setInputFiles({ name: 'phone.png', mimeType: 'image/png', buffer: png });
@@ -244,11 +336,21 @@ try {
   await frame.getByRole('button', { name: 'Close', exact: true }).click();
   assert.equal(await frame.locator('dialog[open]').count(), 0);
   await phone.screenshot({ path: path.join(repo, 'phone-report.png') });
+  assert.equal(await phone.locator('.mobile-report-heading, .mobile-report-tabs').count(), 0);
+  assert.equal(await phone.locator('.mobile-header h1').innerText(), 'A useful report');
+  await phone.getByLabel('Select report page', { exact: true }).click();
   await phone.getByRole('button', { name: 'Plan', exact: true }).click(); await phone.getByRole('heading', { name: 'Mobile plan' }).waitFor();
   for (const width of [360, 390, 768]) {
     await phone.setViewportSize({ width, height: 844 });
     assert.equal(await phone.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, `No page overflow at ${width}px`);
   }
+  await phone.getByLabel('Select report page', { exact: true }).click();
+  await phone.getByRole('button', { name: 'Close report', exact: true }).click();
+  await phone.getByRole('button', { name: /A useful report/ }).click();
+  await frame.getByRole('heading', { name: 'Report ready' }).waitFor();
+  await phone.getByRole('button', { name: 'Results', exact: true }).click();
+  assert.equal(await phone.locator('iframe').count(), 0);
+  await phone.getByRole('heading', { name: 'Workspace', exact: true }).waitFor();
   // Close the selected desktop chat from the phone, then resume it from History.
   // Only the launch is stubbed; closing/persistence/selection use the real service.
   await phone.getByRole('button', { name: 'Chats', exact: true }).click();

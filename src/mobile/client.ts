@@ -41,6 +41,14 @@ export async function transcribeMobileAudio(recording: VoiceDraft, signal: Abort
 export function selectMobileChat(id: string) { localStorage.setItem('mrmak.mobile.selected', id); update({ selectedId: id }) }
 export function onMobileEvent(listener: (event: MobileEvent) => void) { events.add(listener); return () => { events.delete(listener) } }
 export function mobileEvent(event: Record<string, unknown>) { if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(event)) }
+let lastReply = 0, lastPing = 0
+function recoverSocket(ws: WebSocket) {
+  if (socket !== ws) return
+  socket = null; clearInterval(heartbeat)
+  update({ connected: false, error: 'Connection stalled. Reconnecting…' })
+  events.forEach(listener => listener({ type: 'disconnected' }))
+  ws.close(); reconnect()
+}
 function reconnect() { clearTimeout(timer); if (!stopped && document.visibilityState !== 'hidden') timer = window.setTimeout(() => void startMobile(), 2500) }
 export async function startMobile() {
   if (starting || stopped || socket?.readyState === WebSocket.OPEN || socket?.readyState === WebSocket.CONNECTING) return
@@ -49,11 +57,12 @@ export async function startMobile() {
     const initial = await mobileApi<Pick<MobileState, 'sessions' | 'agents' | 'device' | 'defaultAgent' | 'defaultBypass' | 'dictation'>>('/bootstrap')
     update({ ...initial, ready: true, authenticated: true, error: '', selectedId: initial.sessions.some(item => item.id === state.selectedId) ? state.selectedId : initial.sessions.find(item => item.open)?.id || initial.sessions[0]?.id || null })
     const url = new URL('/mobile/events', location.href); url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
-    const ws = new WebSocket(url); socket = ws
+    const ws = new WebSocket(url); socket = ws; lastReply = Date.now(); lastPing = 0
     ws.onmessage = message => {
       if (socket !== ws) return
       let event: MobileEvent
       try { event = JSON.parse(message.data) } catch { return }
+      lastReply = Date.now()
       if (event.type === 'connected') update({ connected: true, sessions: event.sessions || state.sessions, error: '' })
       if (event.type === 'session' && event.session) { const next = event.session; update({ sessions: state.sessions.some(item => item.id === next.id) ? state.sessions.map(item => item.id === next.id ? next : item) : [...state.sessions, next] }) }
       if (event.type === 'error') update({ error: event.error || 'Connection error' })
@@ -61,7 +70,12 @@ export async function startMobile() {
     }
     ws.onclose = () => { if (socket !== ws) return; socket = null; clearInterval(heartbeat); update({ connected: false }); events.forEach(listener => listener({ type: 'disconnected' })); reconnect() }
     ws.onerror = () => ws.close()
-    clearInterval(heartbeat); heartbeat = window.setInterval(() => mobileEvent({ type: 'ping' }), 15000)
+    clearInterval(heartbeat); heartbeat = window.setInterval(() => {
+      if (socket !== ws || document.visibilityState === 'hidden') return
+      const now = Date.now()
+      if (now - lastReply >= 45000) { recoverSocket(ws); return }
+      if (ws.readyState === WebSocket.OPEN && now - lastPing >= 15000) { lastPing = now; mobileEvent({ type: 'ping' }) }
+    }, 5000)
   } catch (error) {
     update({ ready: true, connected: false, error: error instanceof MobileError && error.status === 401 ? '' : 'Your computer is unavailable. Keep Mr. Mak running and Tailscale connected.' })
     if (!(error instanceof MobileError && error.status === 401)) reconnect()
