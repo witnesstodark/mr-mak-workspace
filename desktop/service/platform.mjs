@@ -13,7 +13,7 @@ export function shellLabel() {
 }
 
 export function shellCommand(env = process.env) {
-  if (isWindows) return { file: 'powershell.exe', args: ['-NoLogo', '-NoProfile'] };
+  if (isWindows) return { file: path.join(env.SystemRoot || env.WINDIR || 'C:/Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'), args: ['-NoLogo', '-NoProfile'] };
   const shell = env.SHELL || (isMacOS ? '/bin/zsh' : '/bin/sh');
   return { file: shell, args: [] };
 }
