@@ -176,3 +176,11 @@ are still required to verify the complete remote connection on your network.
 Recent activity in mobile Conversation starts collapsed. Tap its heading to expand
 or collapse the latest tool names and statuses. Automatic refresh keeps the current
 choice; opening another chat starts collapsed.
+
+Conversation displays PNG, JPEG, WebP, GIF and BMP images explicitly shared in
+Claude/Codex messages, Markdown image links, and structured image tool results.
+Tap an image to enlarge it or use Download to save it. Local images are served
+through the paired connection with an expiring, device-and-chat-specific file
+grant; missing or unsupported images show an unavailable notice. Image-only
+messages are retained. External image URLs are not fetched, and terminal-only
+pixels without a saved file or transcript image record cannot be recovered.

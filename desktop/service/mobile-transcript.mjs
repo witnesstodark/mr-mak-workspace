@@ -1,5 +1,6 @@
 import { open, stat } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import { imageReferences } from './conversation-media.mjs';
 import { claudeTranscript, codexTranscript } from './native-events.mjs';
 
 export function transcriptActivity(records, agent) {
@@ -26,22 +27,32 @@ export function transcriptMessages(records, agent) {
   // Codex event messages avoid showing injected environment/instruction records.
   const hasCodexEvents = records.some(item => item.type === 'event_msg' && ['user_message', 'agent_message'].includes(item.payload?.type));
   for (const item of records) {
-    let role, text;
+    let role, text, content, imageRefs = [];
     if (agent === 'codex' && hasCodexEvents && item.type === 'event_msg') {
-      if (item.payload?.type === 'user_message') { role = 'user'; text = item.payload.message; }
+      if (item.payload?.type === 'user_message') { role = 'user'; text = item.payload.message; imageRefs = [...(item.payload.local_images || []), ...(item.payload.images || [])].filter(value => typeof value === 'string').slice(0, 12); }
       if (item.payload?.type === 'agent_message') { role = 'assistant'; text = item.payload.message; }
     } else if (agent === 'codex' && !hasCodexEvents && item.type === 'response_item' && item.payload?.type === 'message') {
-      role = item.payload.role; text = textParts(item.payload.content);
+      role = item.payload.role; content = item.payload.content; text = textParts(content);
     } else if (agent === 'claude' && !item.isSidechain && !item.isMeta && ['user', 'assistant'].includes(item.type)) {
-      role = item.type; text = textParts(item.message?.content);
+      role = item.type; content = item.message?.content; text = textParts(content);
+      if (Array.isArray(content) && content.some(part => part.type === 'tool_result')) role = 'assistant';
     }
-    if (!['user', 'assistant'].includes(role) || typeof text !== 'string' || !text.trim()) continue;
+    if (agent === 'codex' && hasCodexEvents && item.type === 'response_item' && item.payload?.type === 'message' && item.payload.role === 'assistant') { role = 'assistant'; text = ''; content = item.payload.content; }
+    if (agent === 'codex' && item.type === 'response_item' && item.payload?.type === 'function_call_output') {
+      let output = item.payload.output;
+      if (typeof output === 'string') { try { output = JSON.parse(output); } catch { output = null; } }
+      content = Array.isArray(output) ? output : output?.content;
+      role = 'assistant'; text = '';
+    }
+    text = typeof text === 'string' ? text : '';
+    imageRefs = [...new Set([...imageRefs, ...imageReferences(content, text || '')])].slice(0, 12);
+    if (!['user', 'assistant'].includes(role) || (!text?.trim() && !imageRefs.length)) continue;
     const at = item.timestamp || '';
-    const id = item.uuid || createHash('sha256').update(`${at}:${role}:${text}`).digest('hex').slice(0, 24);
+    const id = item.uuid || createHash('sha256').update(`${at}:${role}:${text}:${imageRefs.join(";")}`).digest('hex').slice(0, 24);
     // Streaming revisions of a Claude message have the same message ID.
     const nativeId = item.message?.id;
     const previous = nativeId && messages.findIndex(message => message.nativeId === nativeId);
-    const message = { id, role, text: text.slice(0, 100000), at, nativeId };
+    const message = { id, role, text: text.slice(0, 100000), at, nativeId, ...(imageRefs.length ? { imageRefs } : {}) };
     if (typeof previous === 'number' && previous >= 0) messages[previous] = message;
     else messages.push(message);
   }

@@ -19,6 +19,7 @@ await cp(path.join(root, 'dist'), path.join(repo, 'ui'), { recursive: true });
 for (const name of ['mak-nose.svg', 'mak-nose-chats.svg', 'mak-mobile-192.png', 'mak-mobile-512.png']) await copyFile(path.join(root, 'public/assets', name), path.join(repo, 'ui/assets', name));
 for (const name of ['report.css', 'report.js']) await copyFile(path.join(root, 'workspace/_shared', name), path.join(repo, 'workspace/_shared', name));
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQ42mP8/x8AAwMCAO+jvWQAAAAASUVORK5CYII='.replace('EQ42', 'EQVR42'), 'base64');
+await writeFile(path.join(repo, 'shared-picture.png'), png);
 // Use a supplied SVG as a visible report image; the PNG is only an upload fixture.
 await copyFile(path.join(root, 'public/assets/mak-nose.svg'), path.join(repo, 'workspace/report/nose.svg'));
 await writeFile(path.join(repo, 'workspace/report/index.html'), '<!doctype html><html lang="en" data-mak-report="document"><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="../_shared/report.css"><script defer src="../_shared/report.js"></script></head><body><main class="container"><h1>Report ready</h1><p>A readable result on your phone.</p><img src="nose.svg" alt="Report image" width="160"><p><a target="_blank" rel="noreferrer" href="https://example.com/source">Source link</a></p></main></body></html>');
@@ -43,7 +44,7 @@ for (const [index, id] of ids.entries()) {
 }
 service.mobile.transcripts.read = async session => ({ supported: true, activity: [{ id: 'tool-one', name: 'Read test file', status: 'completed', at: new Date().toISOString() }], messages: [
   { id: 'user', role: 'user', text: 'Can we make the next iteration easier to review?', at: new Date().toISOString() },
-  { id: 'assistant', role: 'assistant', text: '## Ready for review\n\nThe latest results are in your Workspace.\n\n- **Character:** proportions updated\n- **Motion:** timing checked\n- **Next step:** choose the version you prefer\n\n[Open the source](https://example.com/source)\n\n' + (session.id === ids[0] ? 'Your agent is still working on the computer.' : 'Send a follow-up whenever an idea comes to mind.'), at: new Date().toISOString() },
+  { id: 'assistant', role: 'assistant', imageRefs: [path.join(repo, 'shared-picture.png')], text: '## Ready for review\n\nThe latest results are in your Workspace.\n\n- **Character:** proportions updated\n- **Motion:** timing checked\n- **Next step:** choose the version you prefer\n\n[Open the source](https://example.com/source)\n\n' + (session.id === ids[0] ? 'Your agent is still working on the computer.' : 'Send a follow-up whenever an idea comes to mind.'), at: new Date().toISOString() },
 ] });
 let browser, qrSource;
 try {
@@ -181,6 +182,17 @@ try {
   await modeButtons.getByRole('button', { name: 'Terminal', exact: true }).click(); await phone.locator('.mobile-terminal').waitFor();
   await modeButtons.getByRole('button', { name: 'Conversation', exact: true }).click(); await phone.locator('.mobile-messages').waitFor();
   service.sessions.nativeEvent(service.sessions.get(ids[1]), { kind: 'turn-started' });
+  const conversationImage = phone.locator('.mobile-conversation-image img').first();
+  await conversationImage.waitFor();
+  await expect(conversationImage).toHaveJSProperty('naturalWidth', 1);
+  await phone.getByRole('button', { name: 'Enlarge shared-picture.png' }).first().click();
+  const imagePreview = phone.getByRole('dialog', { name: 'Shared image preview' });
+  await expect(imagePreview).toBeVisible();
+  const imageDownload = phone.waitForEvent('download');
+  await imagePreview.getByRole('link', { name: 'Download image' }).click();
+  assert.equal((await imageDownload).suggestedFilename(), 'shared-picture.png');
+  await imagePreview.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(imagePreview).not.toBeVisible();
   const recentActivity = phone.locator('.mobile-tool-activity');
   await recentActivity.waitFor();
   await expect(recentActivity).not.toHaveAttribute('open', '');

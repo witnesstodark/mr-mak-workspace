@@ -7,6 +7,7 @@ import { chatActivityLabel } from '../desktop/chatActivity'
 import { chooseMobileDictation, disconnectMobile, mobileApi, mobileEvent, onMobileEvent, selectMobileChat, startMobile, useMobile } from './client'
 import Terminal from './Terminal'
 import Composer from './Composer'
+import ConversationImages from './ConversationImages'
 import DictationSettings from '../components/DictationSettings'
 import Results, { type ResultsNavigation } from './Results'
 import ActivityStatus from './ActivityStatus'
@@ -15,7 +16,7 @@ import './mobile.css'
 
 interface Pending { id: string; claim: string; code: string }
 interface ToolActivity { id: string; name: string; status: 'running' | 'completed' | 'failed'; at: string }
-interface Message { id: string; role: 'user' | 'assistant'; text: string; at: string }
+interface Message { id: string; role: 'user' | 'assistant'; text: string; at: string; images?: { url?: string; name: string; unavailable?: boolean }[] }
 function getPairToken() {
   const token = new URLSearchParams(location.hash.slice(1)).get('pair')
   if (token) { sessionStorage.setItem('mrmak.mobile.pair', token); history.replaceState(null, '', location.pathname) }
@@ -108,7 +109,7 @@ function Conversation({ session }: { session: ChatSession }) {
     {mode === 'terminal' ? <Terminal id={session.id} /> : <div className="mobile-message-pane"><div className="mobile-messages" ref={scroller} onScroll={() => { const box = scroller.current; if (box) { const nearEnd = box.scrollHeight - box.scrollTop - box.clientHeight < 100; follow.current = nearEnd; setShowJump(!nearEnd) } }}>
       <div className="mobile-history-note">{checkedAt ? `Transcript checked ${new Date(checkedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Loading conversation…'}{messages[messages.length - 1]?.at && ` · Last message ${new Date(messages[messages.length - 1].at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}</div>
       {(readError || (session.activity === 'working' && now - changedAt >= 45000)) && <div className="mobile-transcript-status" role="status"><p>{readError || 'Conversation has not updated recently. The terminal may have newer output.'}</p><button onClick={() => setMode('terminal')}>Open terminal<Icon name="arrow" size={15} /></button></div>}
-      {messages.map(message => <article className={`mobile-message ${message.role}`} key={message.id}><header>{message.role === 'user' ? 'You' : <><AgentLogo agent={session.agent} size={15} />{session.agent === 'claude' ? 'Claude' : 'Codex'}</>}{message.at && <time>{new Date(message.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time>}</header><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({ href, children }) => <a href={href} target="_blank" rel="noreferrer">{children}</a> }}>{message.text}</ReactMarkdown></article>)}
+      {messages.map(message => <article className={`mobile-message ${message.role}`} key={message.id}><header>{message.role === 'user' ? 'You' : <><AgentLogo agent={session.agent} size={15} />{session.agent === 'claude' ? 'Claude' : 'Codex'}</>}{message.at && <time>{new Date(message.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time>}</header><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ img: () => null, a: ({ href, children }) => <a href={href} target="_blank" rel="noreferrer">{children}</a> }}>{message.text}</ReactMarkdown><ConversationImages images={message.images} /></article>)}
       {!messages.length && <div className="mobile-chat-empty"><Icon name="chats" size={30} /><h2>{supported ? 'Ready for your next thought' : 'This chat is in the terminal'}</h2><p>{supported ? 'Messages will appear here as your agent writes its conversation history.' : 'Open the live terminal to read the conversation or respond to a CLI prompt.'}</p><button onClick={() => setMode('terminal')}>Open terminal<Icon name="arrow" size={15} /></button></div>}
       {!!activity.length && <details className="mobile-tool-activity" aria-label="Recent tool activity"><summary>Recent activity</summary>{activity.map(item => <div key={item.id}><Icon name={item.status === 'running' ? 'terminal' : item.status === 'failed' ? 'bell' : 'history'} size={14} /><span>{item.name}</span><small>{item.status === 'running' && !running ? 'Interrupted' : item.status}{item.at && ` · ${new Date(item.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}</small></div>)}</details>}
       {session.activity === 'working' && <p className="mobile-agent-working"><i />Agent is working on your computer…</p>}

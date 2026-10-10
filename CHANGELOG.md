@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Show shared conversation images on mobile with an enlarged preview and downloads through paired, scoped image access.
+
 - Mobile Recent activity starts collapsed and expands with a tap, keeping conversation messages in view.
 
 - Add free local Whisper dictation on desktop and mobile, shared Free/Paid provider settings in Phone settings, and direct desktop terminal insertion without automatic submission. Default terminal appearance to Original CLI colors.

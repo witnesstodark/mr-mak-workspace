@@ -106,3 +106,15 @@
 .mobile-tool-activity > div { display: flex; align-items: center; gap: 6px; padding: 4px 0; }
 .mobile-tool-activity > div > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .mobile-tool-activity small { font-size: 10px; }
+
+.mobile-conversation-images { margin-top: 12px; display: grid; gap: 12px; }
+.mobile-conversation-image { margin: 0; min-width: 0; }
+.mobile-conversation-image > button { display: block; width: 100%; padding: 0; overflow: hidden; background: #17171d; border: 1px solid var(--m-line); border-radius: 10px; }
+.mobile-conversation-image img { display: block; width: 100%; max-height: 340px; object-fit: contain; }
+.mobile-conversation-image figcaption { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; margin-top: 5px; font-size: 11px; color: var(--m-muted); overflow-wrap: anywhere; }
+.mobile-image-unavailable { color: var(--m-muted); font-size: 12px; }
+.mobile-image-dialog { position: fixed; inset: 0; margin: auto; width: calc(100% - 24px); max-width: 900px; max-height: 90dvh; padding: 12px; color: var(--m-text); background: #17171d; border: 1px solid var(--m-line); border-radius: 12px; }
+.mobile-image-dialog::backdrop { background: #000c; }
+.mobile-image-dialog header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; overflow-wrap: anywhere; }
+.mobile-image-dialog img { display: block; max-width: 100%; max-height: 68dvh; margin: auto; object-fit: contain; }
+.mobile-image-dialog > a { display: block; margin-top: 12px; color: var(--m-accent); }
