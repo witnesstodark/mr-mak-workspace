@@ -46,5 +46,7 @@
 
 .mobile-install { flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 12px; border-bottom: 1px solid var(--m-line); background: var(--m-panel); }.mobile-install > div { flex: 1; min-width: 0; }.mobile-install strong { font-size: 12px; }.mobile-install p { font-size: 11px; color: var(--m-muted); margin: 4px 0 0; }.mobile-install > button:not(.mobile-icon) { background: var(--m-accent); color: #30202b; border: none; }
 
-.mobile-app .mobile-nose-refresh { flex-shrink: 0; margin-left: 5px; width: 34px; height: 42px; display: grid; place-items: center; border: none; background: transparent; padding: 0; transition: transform 160ms ease-out; }.mobile-app .mobile-nose-refresh.refreshing { transform: scale(1.18); opacity: 1; }
+.mobile-app .mobile-nose-refresh { -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; flex-shrink: 0; margin-left: 5px; width: 34px; height: 42px; display: grid; place-items: center; border: none; background: transparent; padding: 0; transition: transform 160ms ease-out; }.mobile-app .mobile-nose-refresh.refreshing { transform: scale(1.5); opacity: 1; }
 @media (prefers-reduced-motion: reduce) { .mobile-app .mobile-nose-refresh { transition: none; }.mobile-app .mobile-nose-refresh.refreshing { transform: none; } }
+
+.mobile-app .mobile-nose-refresh:focus:not(:focus-visible) { outline: none; }
