@@ -2,6 +2,23 @@ import { open, stat } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { claudeTranscript, codexTranscript } from './native-events.mjs';
 
+export function transcriptActivity(records, agent) {
+  const tools = new Map();
+  for (const record of records) {
+    if (record.isSidechain || record.isMeta) continue;
+    if (agent === 'claude') for (const part of Array.isArray(record.message?.content) ? record.message.content : []) {
+      if (part.type === 'tool_use' && typeof part.id === 'string') tools.set(part.id, { id: part.id, name: String(part.name || 'Tool').replace(/[^a-zA-Z0-9_.:-]/g, '').slice(0, 80), status: 'running', at: record.timestamp || '' });
+      if (part.type === 'tool_result' && tools.has(part.tool_use_id)) Object.assign(tools.get(part.tool_use_id), { status: part.is_error ? 'failed' : 'completed', at: record.timestamp || '' });
+    }
+    const p = record.payload;
+    if (agent === 'codex' && record.type === 'response_item') {
+      if (p?.type === 'function_call' && typeof p.call_id === 'string') tools.set(p.call_id, { id: p.call_id, name: String(p.name || 'Tool').replace(/[^a-zA-Z0-9_.:-]/g, '').slice(0, 80), status: 'running', at: record.timestamp || '' });
+      if (p?.type === 'function_call_output' && tools.has(p.call_id)) Object.assign(tools.get(p.call_id), { status: 'completed', at: record.timestamp || '' });
+    }
+  }
+  return [...tools.values()].slice(-8);
+}
+
 const textParts = content => typeof content === 'string' ? content : Array.isArray(content) ? content.filter(part => ['text', 'input_text', 'output_text'].includes(part?.type)).map(part => part.text || '').join('\n') : '';
 
 export function transcriptMessages(records, agent) {
@@ -50,7 +67,7 @@ export class MobileTranscripts {
       } finally { await handle.close(); }
       if (truncated) text = text.slice(text.indexOf('\n') + 1);
       const records = text.split('\n').flatMap(line => { try { return [JSON.parse(line)]; } catch { return []; } });
-      const value = { supported: true, messages: transcriptMessages(records, session.agent), truncated };
+      const value = { supported: true, messages: transcriptMessages(records, session.agent), activity: transcriptActivity(records, session.agent), truncated };
       this.cache.set(session.id, { size: info.size, mtime: info.mtimeMs, value });
       if (this.cache.size > 25) this.cache.delete(this.cache.keys().next().value);
       return value;

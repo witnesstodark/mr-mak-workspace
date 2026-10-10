@@ -41,7 +41,7 @@ for (const [index, id] of ids.entries()) {
   session.preview = 'Latest notes: [Review the animation](C:/Projects/game/characters/' + 'very-long-character-name-'.repeat(12) + '/review.html) and https://example.com/research/' + 'reference'.repeat(40);
   await new Promise(resolve => session.terminal.write(Array.from({ length: 90 }, (_, line) => `Line ${line + 1}: live agent output\r\n`).join(''), resolve));
 }
-service.mobile.transcripts.read = async session => ({ supported: true, messages: [
+service.mobile.transcripts.read = async session => ({ supported: true, activity: [{ id: 'tool-one', name: 'Read test file', status: 'completed', at: new Date().toISOString() }], messages: [
   { id: 'user', role: 'user', text: 'Can we make the next iteration easier to review?', at: new Date().toISOString() },
   { id: 'assistant', role: 'assistant', text: '## Ready for review\n\nThe latest results are in your Workspace.\n\n- **Character:** proportions updated\n- **Motion:** timing checked\n- **Next step:** choose the version you prefer\n\n[Open the source](https://example.com/source)\n\n' + (session.id === ids[0] ? 'Your agent is still working on the computer.' : 'Send a follow-up whenever an idea comes to mind.'), at: new Date().toISOString() },
 ] });
@@ -181,6 +181,16 @@ try {
   await modeButtons.getByRole('button', { name: 'Terminal', exact: true }).click(); await phone.locator('.mobile-terminal').waitFor();
   await modeButtons.getByRole('button', { name: 'Conversation', exact: true }).click(); await phone.locator('.mobile-messages').waitFor();
   service.sessions.nativeEvent(service.sessions.get(ids[1]), { kind: 'turn-started' });
+  const recentActivity = phone.locator('.mobile-tool-activity');
+  await recentActivity.waitFor();
+  await expect(recentActivity).not.toHaveAttribute('open', '');
+  await expect(phone.getByText('Read test file', { exact: true })).toBeHidden();
+  await recentActivity.locator('summary').click();
+  await expect(phone.getByText('Read test file', { exact: true })).toBeVisible();
+  await phone.waitForTimeout(2400);
+  await expect(phone.getByText('Read test file', { exact: true })).toBeVisible();
+  await recentActivity.locator('summary').click();
+  await expect(phone.getByText('Read test file', { exact: true })).toBeHidden();
   await phone.locator('.mobile-activity-status.working').waitFor();
   assert.equal(await phone.locator('.mobile-worker-hands').evaluate(node => getComputedStyle(node).animationName), 'mobile-worker-type');
   const modeLayout = await phone.locator('.mobile-chat-tools').evaluate(node => {

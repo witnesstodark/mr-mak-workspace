@@ -99,3 +99,10 @@
 .mobile-app .mobile-composer textarea:focus { outline: none; }
 .mobile-composer .mobile-compose-actions { margin-top: 4px; }
 .mobile-device-settings{max-height:70dvh;overflow-y:auto;overscroll-behavior:contain}
+
+.mobile-tool-activity { margin: 16px 0; padding: 10px 12px; border: 1px solid var(--m-line); border-radius: 10px; color: var(--m-muted); font-size: 11px; }
+.mobile-tool-activity > summary { cursor: pointer; font-weight: 600; padding: 6px 0; }
+.mobile-tool-activity[open] > summary { margin-bottom: 6px; }
+.mobile-tool-activity > div { display: flex; align-items: center; gap: 6px; padding: 4px 0; }
+.mobile-tool-activity > div > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.mobile-tool-activity small { font-size: 10px; }

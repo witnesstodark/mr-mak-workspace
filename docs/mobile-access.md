@@ -172,3 +172,7 @@ and route ownership. After `npm run build`, run
 tests use an isolated transport and stub CLI processes, without touching your
 Tailscale setup or starting a model request. A real phone and Tailscale sign-in
 are still required to verify the complete remote connection on your network.
+
+Recent activity in mobile Conversation starts collapsed. Tap its heading to expand
+or collapse the latest tool names and statuses. Automatic refresh keeps the current
+choice; opening another chat starts collapsed.

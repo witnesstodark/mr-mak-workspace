@@ -14,6 +14,7 @@ import { useInstall } from './useInstall'
 import './mobile.css'
 
 interface Pending { id: string; claim: string; code: string }
+interface ToolActivity { id: string; name: string; status: 'running' | 'completed' | 'failed'; at: string }
 interface Message { id: string; role: 'user' | 'assistant'; text: string; at: string }
 function getPairToken() {
   const token = new URLSearchParams(location.hash.slice(1)).get('pair')
@@ -59,6 +60,7 @@ function Connect() {
 function Conversation({ session }: { session: ChatSession }) {
   const [mode, setMode] = useState<'messages' | 'terminal'>(['codex', 'claude'].includes(session.agent) ? 'messages' : 'terminal')
   const [messages, setMessages] = useState<Message[]>([]), [supported, setSupported] = useState(true), [error, setError] = useState('')
+  const [activity, setActivity] = useState<ToolActivity[]>([])
   const scroller = useRef<HTMLDivElement>(null), follow = useRef(true), state = useMobile()
   const [showJump, setShowJump] = useState(false)
   function jumpToLatest() { follow.current = true; setShowJump(false); const box = scroller.current; if (box) box.scrollTop = box.scrollHeight }
@@ -72,11 +74,11 @@ function Conversation({ session }: { session: ChatSession }) {
       if (working || document.visibilityState === 'hidden') return
       working = true
       try {
-        const result = await mobileApi<{ messages: Message[]; supported: boolean }>(`/sessions/${session.id}/messages`)
+        const result = await mobileApi<{ messages: Message[]; supported: boolean; activity?: ToolActivity[] }>(`/sessions/${session.id}/messages`)
         if (!stopped) {
           const at = Date.now(), fingerprint = JSON.stringify(result.messages)
           if (fingerprint !== transcriptFingerprint.current) { transcriptFingerprint.current = fingerprint; setChangedAt(at) }
-          setMessages(result.messages); setSupported(result.supported); setCheckedAt(at); setNow(at); setReadError('')
+          setMessages(result.messages); setActivity(result.activity || []); setSupported(result.supported); setCheckedAt(at); setNow(at); setReadError('')
         }
       } catch { if (!stopped) { setReadError('Conversation could not refresh. Your previous messages are still shown.'); setNow(Date.now()) } }
       finally { working = false }
@@ -108,6 +110,7 @@ function Conversation({ session }: { session: ChatSession }) {
       {(readError || (session.activity === 'working' && now - changedAt >= 45000)) && <div className="mobile-transcript-status" role="status"><p>{readError || 'Conversation has not updated recently. The terminal may have newer output.'}</p><button onClick={() => setMode('terminal')}>Open terminal<Icon name="arrow" size={15} /></button></div>}
       {messages.map(message => <article className={`mobile-message ${message.role}`} key={message.id}><header>{message.role === 'user' ? 'You' : <><AgentLogo agent={session.agent} size={15} />{session.agent === 'claude' ? 'Claude' : 'Codex'}</>}{message.at && <time>{new Date(message.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time>}</header><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({ href, children }) => <a href={href} target="_blank" rel="noreferrer">{children}</a> }}>{message.text}</ReactMarkdown></article>)}
       {!messages.length && <div className="mobile-chat-empty"><Icon name="chats" size={30} /><h2>{supported ? 'Ready for your next thought' : 'This chat is in the terminal'}</h2><p>{supported ? 'Messages will appear here as your agent writes its conversation history.' : 'Open the live terminal to read the conversation or respond to a CLI prompt.'}</p><button onClick={() => setMode('terminal')}>Open terminal<Icon name="arrow" size={15} /></button></div>}
+      {!!activity.length && <details className="mobile-tool-activity" aria-label="Recent tool activity"><summary>Recent activity</summary>{activity.map(item => <div key={item.id}><Icon name={item.status === 'running' ? 'terminal' : item.status === 'failed' ? 'bell' : 'history'} size={14} /><span>{item.name}</span><small>{item.status === 'running' && !running ? 'Interrupted' : item.status}{item.at && ` · ${new Date(item.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}</small></div>)}</details>}
       {session.activity === 'working' && <p className="mobile-agent-working"><i />Agent is working on your computer…</p>}
     </div>{showJump && <button className="mobile-jump-latest" onClick={jumpToLatest}><Icon name="down" size={16} />Jump to latest</button>}</div>}
     {!running && <div className="mobile-resume"><span>This conversation is saved.</span><button disabled={!state.connected} onClick={async () => { try { await mobileApi(`/sessions/${session.id}/resume`, {}); setError('') } catch (err) { setError(err instanceof Error ? err.message : String(err)) } }}>Resume chat</button></div>}
