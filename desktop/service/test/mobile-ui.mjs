@@ -43,7 +43,10 @@ for (const [index, id] of ids.entries()) {
   await new Promise(resolve => session.terminal.write(Array.from({ length: 90 }, (_, line) => `Line ${line + 1}: live agent output\r\n`).join(''), resolve));
 }
 service.mobile.transcripts.read = async session => ({ supported: true, activity: [{ id: 'tool-one', name: 'Read test file', status: 'completed', at: new Date().toISOString() }], messages: [
+  { id: 'old-user', role: 'user', text: 'Older request excluded from speech.', at: '' },
+  { id: 'old-agent', role: 'assistant', text: 'Older answer excluded from speech.', at: '' },
   { id: 'user', role: 'user', text: 'Can we make the next iteration easier to review?', at: new Date().toISOString() },
+  { id: 'progress', role: 'assistant', text: 'Intermediate agent progress is included.', at: '' },
   { id: 'assistant', role: 'assistant', imageRefs: [path.join(repo, 'shared-picture.png')], text: '## Ready for review\n\nThe latest results are in your Workspace.\n\n- **Character:** proportions updated\n- **Motion:** timing checked\n- **Next step:** choose the version you prefer\n\n[Open the source](https://example.com/source)\n\n' + (session.id === ids[0] ? 'Your agent is still working on the computer.' : 'Send a follow-up whenever an idea comes to mind.'), at: new Date().toISOString() },
 ] });
 let browser, qrSource;
@@ -223,8 +226,19 @@ try {
   await expect(imagePreview).not.toBeVisible();
   const readButton = phone.locator('.mobile-message.assistant').getByRole('button', { name: 'Read aloud', exact: true }).first();
   assert.equal(await phone.evaluate(() => window.testSpeech.spoken.length), 0, 'No automatic playback');
+  await expect(phone.getByRole('button', { name: 'Read aloud', exact: true })).toHaveCount(1);
+  await expect(phone.locator('.mobile-message').last().getByRole('button', { name: 'Read aloud', exact: true })).toBeVisible();
   await readButton.click();
-  assert.ok((await phone.evaluate(() => window.testSpeech.spoken[0].text)).includes('Ready for review'));
+  assert.ok((await phone.evaluate(() => window.testSpeech.spoken[0].text)).startsWith('Can we make'));
+  const spokenRange = await phone.evaluate(() => {
+    for (let index = 0; index < 100 && window.testSpeech.current; index++) { const current = window.testSpeech.current; window.testSpeech.current = null; current.onend?.(); }
+    return window.testSpeech.spoken.map(part => part.text).join(' ');
+  });
+  assert.ok(spokenRange.includes('Intermediate agent progress is included.'));
+  assert.ok(spokenRange.includes('Ready for review'));
+  assert.ok(!spokenRange.includes('Older request'));
+  assert.ok(!spokenRange.includes('Older answer'));
+  await readButton.click();
   await phone.getByRole('button', { name: 'Pause reading' }).click();
   assert.equal(await phone.evaluate(() => window.testSpeech.paused), true);
   await phone.getByRole('button', { name: 'Resume reading' }).click();
@@ -280,7 +294,7 @@ try {
   assert.ok(await nearBottom(), 'Returning from Terminal opens the end');
   assert.equal(await phone.getByRole('button', { name: 'Jump to latest' }).count(), 0);
   service.mobile.transcripts.read = readerBeforeScroll;
-  await phone.waitForFunction(() => document.querySelectorAll('.mobile-message').length === 2);
+  await phone.waitForFunction(() => document.querySelectorAll('.mobile-message').length === 5);
 
   assert.deepEqual(ids.map(id => ({ cols: service.sessions.get(id).cols, rows: service.sessions.get(id).rows })), dimensions);
   assert.equal((await (await fetch(`${service.origin}/api/bootstrap`, { headers: { Authorization: `Bearer ${service.token}` } })).json()).selectedId, desktopSelected);

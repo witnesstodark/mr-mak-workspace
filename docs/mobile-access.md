@@ -187,7 +187,10 @@ grant; missing or unsupported images show an unavailable notice. Image-only
 messages are retained. External image URLs are not fetched, and terminal-only
 pixels without a saved file or transcript image record cannot be recovered.
 
-Agent text replies have a Read aloud button with Pause, Resume and Stop controls.
+Read aloud appears once at the end of the latest agent message, after its media.
+It reads your most recent message and all following agent messages through that
+reply, with Pause, Resume and Stop controls. New replies do not extend speech
+already playing; tap Read aloud again to include them.
 Speech uses the browser/device voice service and needs no Mr. Mak API key or paid
 provider. The voice selector lists available languages and marks on-device/online
 voices; availability and offline operation depend on the device voice service.
