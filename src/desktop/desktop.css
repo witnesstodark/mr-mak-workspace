@@ -140,3 +140,22 @@
 .file-entry{position:relative}.file-entry.has-reveal>.file-row{padding-right:32px}.file-reveal{position:absolute;right:3px;top:50%;transform:translateY(-50%);display:flex;align-items:center;justify-content:center;width:26px;height:26px;padding:0;border:0;border-radius:4px;background:transparent;color:#b79eb8;opacity:0;pointer-events:none;transition:opacity .1s ease}.file-entry:hover>.file-reveal,.file-entry:focus-within>.file-reveal{opacity:1;pointer-events:auto}.file-reveal:hover{color:#f1cee1;background:#e8a4b516}.file-reveal:focus-visible{outline:1px solid #d3a0c2;outline-offset:-1px}
 .voice-settings{padding:6px 16px 9px;border-bottom:1px solid #ffffff07;display:flex;align-items:center;gap:8px;font-size:9px;color:#938098}.voice-settings select{font:inherit;color:#c8afce;background:#211c28;border:1px solid #ffffff10;border-radius:5px;padding:4px 6px;max-width:140px}.voice-settings label{display:flex;align-items:center;gap:7px}.voice-settings>span{margin-left:auto;color:#817187}
 .previous-voice{font-size:10px;color:#9a7d9f;margin-bottom:16px}.previous-voice summary{cursor:pointer;padding:8px 0 12px}.previous-voice[open]{border-bottom:1px solid #ffffff09}
+
+/* Microphone recording controls in the Mak composer. */
+.mak-composer .mobile-mic{padding:8px;border:1px solid #ffffff22;border-radius:6px;background:#27232c;color:#eee}
+.mak-composer .mobile-voice{display:contents}
+.mak-composer .mobile-voice-panel,.mak-composer .mobile-voice-error{flex-basis:100%;order:10;font-size:12px;padding:8px;overflow-wrap:anywhere}
+.mak-composer .mobile-voice-panel small{display:block;margin-top:6px;color:#bdb3c4}
+.mak-composer .recording .mobile-mic{background:#833148;color:#fff}
+.mak-composer .voice-compose{flex-wrap:wrap}
+
+.terminal-dictation{position:relative;flex-shrink:0}
+.terminal-dictation .mobile-voice{display:flex;align-items:center}
+.terminal-dictation .mobile-mic{display:flex;align-items:center;justify-content:center;width:30px;height:30px;border:0;border-radius:5px;background:transparent;color:#b6aabe;cursor:pointer}
+.terminal-dictation .mobile-mic:hover{background:#ffffff0a}
+.terminal-dictation .mobile-mic:disabled{opacity:.4}
+.terminal-dictation .recording .mobile-mic{background:#833148;color:#fff}
+.terminal-dictation .mobile-voice-panel,.terminal-dictation .mobile-voice-error{position:absolute;right:0;top:34px;width:min(340px,80vw);padding:12px;border:1px solid #503648;border-radius:8px;background:#211822;z-index:30;font-size:12px;white-space:normal}
+.terminal-dictation .mobile-voice-panel small{display:block;margin-top:8px;color:#b6aabe}
+.terminal-dictation .mobile-voice-panel button{margin:8px 5px 0 0;padding:6px;border:1px solid #503648;background:#302332;color:#eee;border-radius:4px}
+.terminal-dictation .saved .mobile-voice-error{top:155px}

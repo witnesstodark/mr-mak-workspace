@@ -1,8 +1,11 @@
 import { useRef, useState } from 'react'
-import { api, uploadImage } from './client'
+import { api, uploadImage, transcribeDesktopAudio } from './client'
 import { Icon } from './Icons'
 import { ZoomImage } from '../components/ImagePreview'
 import type { Preview } from './types'
+
+import VoiceInput from '../mobile/VoiceInput'
+import { useDictation } from './useDictation'
 
 const maxImages = 12
 
@@ -11,10 +14,13 @@ export default function MakComposer({ connected, sending, onSend }: {
   sending: boolean
   onSend: (text: string, images: string[]) => Promise<void>
 }) {
+  const [voiceBusy, setVoiceBusy] = useState(false)
+  const { info: dictation } = useDictation()
   const [draft, setDraft] = useState('')
   const [images, setImages] = useState<Preview[]>([])
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
+  const voiceIds = useRef(new Set<string>())
   const busy = useRef(false)
   const picker = useRef<HTMLInputElement>(null)
   const disabled = sending || uploading || !connected
@@ -35,7 +41,7 @@ export default function MakComposer({ connected, sending, onSend }: {
 
   async function send(event: React.FormEvent) {
     event.preventDefault()
-    if (disabled || busy.current || (!draft.trim() && !images.length)) return
+    if (disabled || voiceBusy || busy.current || (!draft.trim() && !images.length)) return
     busy.current = true; setError('')
     try {
       await onSend(draft.trim() || 'Please review the attached images.', images.map(image => image.path))
@@ -56,7 +62,8 @@ export default function MakComposer({ connected, sending, onSend }: {
       <textarea value={draft} rows={2} onChange={event => setDraft(event.target.value)} placeholder="Or tell Mak here…" aria-label="Message Mr. Mak" aria-describedby="mak-compose-hint" disabled={disabled}
         onPaste={event => { const files = Array.from(event.clipboardData.files).filter(file => file.type.startsWith('image/')); if (files.length) { event.preventDefault(); void attach(files) } }}
         onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && event.nativeEvent.keyCode !== 229) { event.preventDefault(); event.currentTarget.form?.requestSubmit() } }} />
-      <button type="submit" title="Send to Mr. Mak" aria-label="Send to Mr. Mak" disabled={disabled || (!draft.trim() && !images.length)}><Icon name="send" size={17} /></button>
+      <VoiceInput id="desktop-mak" connected={connected} disabled={disabled} config={dictation} transcriber={transcribeDesktopAudio} onBusy={setVoiceBusy} onText={(text, recordingId) => { if (voiceIds.current.has(recordingId)) return; voiceIds.current.add(recordingId); setDraft(current => current ? `${current}\n${text}` : text) }} />
+      <button type="submit" title="Send to Mr. Mak" aria-label="Send to Mr. Mak" disabled={disabled || voiceBusy || (!draft.trim() && !images.length)}><Icon name="send" size={17} /></button>
     </form>
     <div className="voice-compose-hint" id="mak-compose-hint" role="status">{uploading ? 'Saving images in inbox…' : 'Enter to send · Shift+Enter for a new line · Paste images'}</div>
   </div>

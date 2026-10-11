@@ -19,7 +19,7 @@ start an installed agent, and read Workspace reports.
    select **Request connection**.
 5. Compare the six-digit confirmation code on both screens, then choose
    **Connect phone** in Chats. A QR code alone does not grant access.
-6. Add the page to your Home Screen through your browser. If the installed
+6. After connecting, tap Install when the browser makes installation available, or open Phone settings for Install Mr. Mak. Not now dismisses the invitation for this browser session; the settings button remains available. You can also use your browser’s Install app or Add to Home Screen menu (Safari’s Share menu on iPhone). If the installed
    web app asks to connect again, enter the eight-digit connection code shown
    under a fresh desktop QR code and confirm it on the computer.
 
@@ -62,22 +62,40 @@ Reading a completed turn marks it seen across devices.
 
 ## Voice input
 
-1. On the computer, add `OPENROUTER_API_KEY` or `OPENAI_API_KEY` to your
-   repository's ignored `.env`. Existing configured keys can be reused.
+1. On the computer, run `powershell -ExecutionPolicy Bypass -File scripts/setup-local-dictation.ps1` once from the repository. It installs an isolated Python environment and downloads the multilingual Whisper small model into ignored `.cache/dictation`.
 2. Open a chat on the phone and tap the microphone beside the attachment button.
-   Allow microphone access when your browser asks. Use the private HTTPS page
-   in a browser that supports recording, such as current Chrome or Safari.
+   Allow microphone access. Use the private HTTPS page in Chrome or Safari.
 3. Speak, then tap **Stop**. Each recording is limited to two minutes.
 4. Review or edit the text, then press **Send** yourself.
 
-The computer submits the audio to the selected provider. API keys stay on the
-computer. This is paid speech-to-text, separate from CLI subscriptions and the
-desktop Talk to Mak coordinator. The standard model is GPT-4o Transcribe;
-speech stays in its original language, including mixed-language dictation.
+The default is free local Whisper on your computer, using CPU int8. The phone
+uploads audio over the paired private connection; transcription runs offline on
+the computer after setup. No transcription API key or credit is needed. The PC
+must remain running and reachable. Temporary server audio is removed after each
+attempt. Recordings that have not yet become text remain recoverable on the
+recording device until transcribed or discarded.
 
-OpenRouter is selected when its key is configured; otherwise OpenAI is used.
-There is no automatic provider switch after a failed request. Optional `.env`
-settings let you choose explicitly:
+Desktop chats offer a microphone in the chat toolbar. Transcription pastes
+directly into the terminal input without pressing Enter. The Workspace's Mak composer
+also supports dictation; its Send button remains a separate action. No hotkeys
+are rebound. This feature is separate from conversational Talk to Mak.
+
+Local transcription preserves the detected language; it does not translate.
+Test names and mixed-language phrases on your own microphone before relying on
+it. Optional `MRMAK_WHISPER_PYTHON` and `MRMAK_WHISPER_MODEL` point to an existing
+Python executable and downloaded model directory.
+
+To switch between Free and Paid, open the **phone icon at the top right**.
+On desktop this opens **Phone settings**, combining pairing, devices and
+speech-to-text. On mobile it opens the same provider choice alongside install
+and disconnect controls. Desktop **Settings → Speech-to-text** also has it.
+Choose **Local Whisper · Free**, **OpenAI · Paid**, **OpenRouter · Paid**, or **Off**.
+The saved choice is shared by desktop and all paired phones, updates immediately,
+and applies to the next transcription. An in-progress request finishes using
+its existing provider. Missing setup or API keys are shown beside the choice;
+keys are entered only in the computer's ignored `.env`.
+
+Paid providers remain opt-in. There is no automatic fallback to a cloud provider:
 
 ```dotenv
 MRMAK_TRANSCRIBE_PROVIDER=openrouter
@@ -99,8 +117,10 @@ download it before leaving.
 
 Retries reuse a successful transcription for up to ten minutes while the desktop
 service stays running and its bounded cache retains it. After a desktop restart
-or cache expiry, retrying may make another billable API call. Audio is not saved
-as a file on the computer; pending audio stays in the phone's browser storage.
+or cache expiry, retrying runs transcription again (billable only for an explicitly
+selected cloud provider). Local transcription uses a temporary audio file on the
+computer and deletes it after the attempt; pending recordings stay in the
+recording device's browser storage.
 Your phone keyboard's microphone remains an alternative without configuring
 Mr. Mak's transcription service.
 
@@ -152,3 +172,27 @@ and route ownership. After `npm run build`, run
 tests use an isolated transport and stub CLI processes, without touching your
 Tailscale setup or starting a model request. A real phone and Tailscale sign-in
 are still required to verify the complete remote connection on your network.
+
+Recent activity in mobile Conversation starts collapsed. Tap its heading to expand
+or collapse the latest tool names and statuses. Automatic refresh keeps the current
+choice; opening another chat starts collapsed.
+
+Conversation displays PNG, JPEG, WebP, GIF and BMP images explicitly shared in
+Claude/Codex messages, Markdown image links, and structured image tool results.
+Tap an image to open a separate full-screen viewer. Pinch to zoom the image,
+drag to pan, double-tap to zoom/reset, or use the zoom buttons. Close returns
+to the same conversation. Download saves the image. Local images are served
+through the paired connection with an expiring, device-and-chat-specific file
+grant; missing or unsupported images show an unavailable notice. Image-only
+messages are retained. External image URLs are not fetched, and terminal-only
+pixels without a saved file or transcript image record cannot be recovered.
+
+Read aloud appears once at the end of the latest agent message, after its media.
+It reads your most recent message and all following agent messages through that
+reply, with Pause, Resume and Stop controls. New replies do not extend speech
+already playing; tap Read aloud again to include them.
+Speech uses the browser/device voice service and needs no Mr. Mak API key or paid
+provider. The voice selector lists available languages and marks on-device/online
+voices; availability and offline operation depend on the device voice service.
+Code blocks, inline code and tables are skipped. Playback starts only after a tap,
+and stops when changing chats, opening Terminal or leaving Conversation.

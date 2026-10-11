@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Open shared images in a full-screen viewer with image-only pinch zoom/pan, and read agent replies aloud using available device voices.
+
+- Show shared conversation images on mobile with an enlarged preview and downloads through paired, scoped image access.
+
+- Mobile Recent activity starts collapsed and expands with a tap, keeping conversation messages in view.
+
+- Add free local Whisper dictation on desktop and mobile, shared Free/Paid provider settings in Phone settings, and direct desktop terminal insertion without automatic submission. Default terminal appearance to Original CLI colors.
+
 ## 0.5.1 - 2026-10-09
 
 - Click a card's status dot in the desktop Workspace to set Active, Done or Archived, change its category, or pin it. Changes save immediately; archived cards keep their files and can be restored through search or Show archive.

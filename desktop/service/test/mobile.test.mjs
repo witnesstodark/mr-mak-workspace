@@ -108,8 +108,11 @@ test('QR navigation opens only the app shell; cross-site APIs, frames and socket
     assert.equal(shell.status, 200); assert.match(shell.body, /Mobile fixture/);
     assert.equal(shell.headers['x-frame-options'], 'DENY');
   }
+  // Android Home Screen launch observed as navigate + empty destination.
+  assert.equal((await get('/mobile/', { ...navigation, 'Sec-Fetch-Dest': 'empty' })).status, 200);
   for (const headers of [
     { ...navigation, 'Sec-Fetch-Dest': 'iframe' },
+    { ...navigation, 'Sec-Fetch-Dest': 'empty', 'Sec-Fetch-Mode': 'cors' },
     { ...navigation, 'Sec-Fetch-Mode': 'cors' },
     { ...navigation, Origin: 'https://unrelated.example' },
     { ...navigation, Host: 'unrelated.example' },
@@ -118,6 +121,7 @@ test('QR navigation opens only the app shell; cross-site APIs, frames and socket
   // Even a paired phone's cookie cannot turn cross-site requests into API access.
   for (const pathname of ['/mobile/api/bootstrap', '/mobile/events', '/mobile/manifest.webmanifest', '/assets/app.js']) {
     assert.equal((await get(pathname, { ...navigation, Cookie: device.cookie })).status, 403);
+    assert.equal((await get(pathname, { ...navigation, 'Sec-Fetch-Dest': 'empty', Cookie: device.cookie })).status, 403);
   }
   const qr = await gateway.newPairing();
   assert.equal((await request('/pair', { token: qr.code }, undefined, { 'Sec-Fetch-Site': 'cross-site' })).status, 403);
@@ -254,4 +258,30 @@ test('Tailscale setup preserves other routes and refuses a public Funnel route',
   await transport.disable({ hostname: 'pc.example.ts.net', port: 8443, target: 'http://127.0.0.1:12345' }); assert.equal(calls.length, 1);
   config.AllowFunnel = { 'pc.example.ts.net:8444': true };
   await assert.rejects(transport.enable('http://127.0.0.1:12346', saved), /publicly shared/);
+});
+
+
+test('conversation images require pairing and grants belong to the requesting phone and chat', async t => {
+  const { gateway, request, pair, repo, id, session } = await fixture(t);
+  session.cwd = repo;
+  const image = path.join(repo, 'shared.png');
+  const bytes = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jvWQAAAAASUVORK5CYII=', 'base64');
+  await writeFile(image, bytes);
+  gateway.transcripts.read = async () => ({ supported: true, messages: [{ id: 'image', role: 'assistant', text: '', at: '', imageRefs: [image] }] });
+  const device = await pair();
+  const result = await request(`/sessions/${id}/messages`, undefined, device.cookie);
+  assert.equal(result.status, 200);
+  assert.equal(result.data.messages[0].imageRefs, undefined);
+  const url = gateway.origin + result.data.messages[0].images[0].url;
+  assert.equal((await fetch(url)).status, 401);
+  assert.equal((await fetch(url, { headers: { Cookie: device.cookie, Origin: 'https://untrusted.example' } })).status, 403);
+  const response = await fetch(url, { headers: { Cookie: device.cookie } });
+  assert.equal(response.status, 200); assert.deepEqual(Buffer.from(await response.arrayBuffer()), bytes);
+  const download = await fetch(url + '?download=1', { headers: { Cookie: device.cookie } });
+  assert.match(download.headers.get('content-disposition'), /^attachment;/);
+  const second = await pair();
+  assert.equal((await fetch(url, { headers: { Cookie: second.cookie } })).status, 404);
+  assert.equal((await fetch(url.replace(/media\/[^/]+$/, 'media/' + 'a'.repeat(43)), { headers: { Cookie: device.cookie } })).status, 404);
+  await gateway.revoke(device.pending.id);
+  assert.equal((await fetch(url, { headers: { Cookie: device.cookie } })).status, 401);
 });

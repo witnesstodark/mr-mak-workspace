@@ -12,7 +12,7 @@ const request = (id = randomUUID(), bytes = audio, extra = {}) => Object.assign(
 async function fixture(t, options = {}) {
   const repo = await mkdtemp(path.join(os.tmpdir(), 'mrmak-dictation-'));
   const calls = [];
-  const dictation = new MobileDictation(repo, { env: { OPENROUTER_API_KEY: 'test-key' }, fetcher: async (url, options) => { calls.push({ url, options }); return Response.json({ text: ' A spoken thought. ' }); }, ...options });
+  const dictation = new MobileDictation(repo, { env: { OPENROUTER_API_KEY: 'test-key', MRMAK_TRANSCRIBE_PROVIDER: 'openrouter' }, fetcher: async (url, options) => { calls.push({ url, options }); return Response.json({ text: ' A spoken thought. ' }); }, ...options });
   t.after(() => dictation.close()); return { dictation, calls, repo };
 }
 
@@ -31,7 +31,7 @@ test('dictation uses the desktop key, supported multipart audio and returns only
 });
 
 test('explicit provider, legacy key aliases and changes to .env work without exposing credentials', async t => {
-  const { dictation, repo, calls } = await fixture(t, { env: {} });
+  const { dictation, repo, calls } = await fixture(t, { env: { MRMAK_TRANSCRIBE_PROVIDER: 'openai' } });
   assert.equal((await dictation.status()).available, false);
   await assert.rejects(dictation.transcribe(request(), 'phone'), /needs OPENROUTER_API_KEY/);
   await writeFile(path.join(repo, '.env'), 'OPENAI_KEY=private-key\nOPENROUTER_KEY=router-key\nMRMAK_TRANSCRIBE_PROVIDER=openai\n');
@@ -79,4 +79,26 @@ test('revoking a device aborts its paid request and clears cached text', async t
   const rejected = assert.rejects(pending);
   await started; dictation.revoke('phone'); await rejected;
   assert.equal(dictation.jobs.size, 0); assert.equal(dictation.controllers.size, 0);
+});
+
+
+test('local default ignores cloud keys and retries failures without any cloud call', async t => {
+  let attempts = 0;
+  const { dictation, calls } = await fixture(t, { env: { OPENAI_API_KEY: 'unused-key' }, localStatus: async () => true,
+    localRunner: async () => { attempts++; if (attempts === 1) throw new Error('Local failure'); return { text: ' Local draft. ' }; } });
+  assert.equal((await dictation.status()).provider, 'local');
+  const id = randomUUID();
+  await assert.rejects(dictation.transcribe(request(id), 'desktop'));
+  assert.deepEqual(await dictation.transcribe(request(id), 'desktop'), { text: 'Local draft.' });
+  assert.deepEqual(await dictation.transcribe(request(id), 'desktop'), { text: 'Local draft.' });
+  assert.equal(attempts, 2); assert.equal(calls.length, 0);
+});
+
+test('uninstalled local engine and silence never fall back to cloud', async t => {
+  const { dictation, calls } = await fixture(t, { env: { OPENAI_API_KEY: 'unused-key' }, localStatus: async () => false });
+  await assert.rejects(dictation.transcribe(request(), 'phone'), error => error.status === 503);
+  assert.equal(calls.length, 0);
+  dictation.localStatus = async () => true; dictation.localRunner = async () => ({ text: '' });
+  await assert.rejects(dictation.transcribe(request(), 'phone'), error => error.status === 422);
+  assert.equal(calls.length, 0);
 });

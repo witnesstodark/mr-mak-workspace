@@ -135,3 +135,10 @@ function connect() {
 // Exposing a capability through a DOM attribute would give report pages access to it.
 // It lives only in this UI origin, which is separate from the report server.
 window.addEventListener('pagehide', () => { token = ''; socket?.close(); clearTimeout(reconnectTimer) })
+
+export async function transcribeDesktopAudio(recording: import('../mobile/voice-drafts').VoiceDraft, signal: AbortSignal): Promise<{ text: string }> {
+  const response = await fetch('/api/transcribe', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': recording.audio.type, 'X-Transcription-Id': recording.id }, body: recording.audio, signal: AbortSignal.any([signal, AbortSignal.timeout(270000)]) })
+  const result = await response.json()
+  if (!response.ok) throw new Error(result.error || 'Could not transcribe this recording.')
+  return result
+}

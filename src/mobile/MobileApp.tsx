@@ -1,17 +1,23 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { AgentLogo, Icon, Nose } from '../desktop/Icons'
 import type { ChatSession } from '../desktop/types'
 import { chatActivityLabel } from '../desktop/chatActivity'
-import { disconnectMobile, mobileApi, mobileEvent, onMobileEvent, selectMobileChat, startMobile, useMobile } from './client'
+import { chooseMobileDictation, disconnectMobile, mobileApi, mobileEvent, onMobileEvent, selectMobileChat, startMobile, useMobile } from './client'
 import Terminal from './Terminal'
 import Composer from './Composer'
-import Results from './Results'
+import ConversationImages from './ConversationImages'
+import { spokenText, useReadAloud } from './useReadAloud'
+import DictationSettings from '../components/DictationSettings'
+import Results, { type ResultsNavigation } from './Results'
+import ActivityStatus from './ActivityStatus'
+import { useInstall } from './useInstall'
 import './mobile.css'
 
 interface Pending { id: string; claim: string; code: string }
-interface Message { id: string; role: 'user' | 'assistant'; text: string; at: string }
+interface ToolActivity { id: string; name: string; status: 'running' | 'completed' | 'failed'; at: string }
+interface Message { id: string; role: 'user' | 'assistant'; text: string; at: string; images?: { url?: string; name: string; unavailable?: boolean }[] }
 function getPairToken() {
   const token = new URLSearchParams(location.hash.slice(1)).get('pair')
   if (token) { sessionStorage.setItem('mrmak.mobile.pair', token); history.replaceState(null, '', location.pathname) }
@@ -54,36 +60,69 @@ function Connect() {
 }
 
 function Conversation({ session }: { session: ChatSession }) {
+  const speech = useReadAloud(), stopReading = speech.stop
   const [mode, setMode] = useState<'messages' | 'terminal'>(['codex', 'claude'].includes(session.agent) ? 'messages' : 'terminal')
+  useEffect(() => { if (mode === 'terminal') stopReading() }, [mode, stopReading])
   const [messages, setMessages] = useState<Message[]>([]), [supported, setSupported] = useState(true), [error, setError] = useState('')
+  let readStart = 0
+  for (let index = 0; index < messages.length; index++) if (messages[index].role === 'user') readStart = index
+  const readEnd = messages.length - 1, latestUserId = messages[readStart]?.role === 'user' ? messages[readStart].id : null
+  useEffect(() => () => stopReading(), [latestUserId, stopReading])
+  const [activity, setActivity] = useState<ToolActivity[]>([])
   const scroller = useRef<HTMLDivElement>(null), follow = useRef(true), state = useMobile()
+  const [showJump, setShowJump] = useState(false)
+  function jumpToLatest() { follow.current = true; setShowJump(false); const box = scroller.current; if (box) box.scrollTop = box.scrollHeight }
+  function showConversation() { follow.current = true; setShowJump(false); setMode('messages') }
+  const modeGesture = useRef<{ x: number; y: number; id: number } | null>(null), suppressModeClick = useRef(false)
+  const [checkedAt, setCheckedAt] = useState(0), [changedAt, setChangedAt] = useState(() => Date.now()), [readError, setReadError] = useState(''), [now, setNow] = useState(() => Date.now())
+  const transcriptFingerprint = useRef('')
   useEffect(() => {
     let stopped = false, working = false
     const load = async () => {
       if (working || document.visibilityState === 'hidden') return
       working = true
       try {
-        const result = await mobileApi<{ messages: Message[]; supported: boolean }>(`/sessions/${session.id}/messages`)
-        if (!stopped) { setMessages(result.messages); setSupported(result.supported); setError('') }
-      } catch { /* Keep the readable history while the connection recovers. */ }
+        const result = await mobileApi<{ messages: Message[]; supported: boolean; activity?: ToolActivity[] }>(`/sessions/${session.id}/messages`)
+        if (!stopped) {
+          const at = Date.now(), fingerprint = JSON.stringify(result.messages)
+          if (fingerprint !== transcriptFingerprint.current) { transcriptFingerprint.current = fingerprint; setChangedAt(at) }
+          setMessages(result.messages); setActivity(result.activity || []); setSupported(result.supported); setCheckedAt(at); setNow(at); setReadError('')
+        }
+      } catch { if (!stopped) { setReadError('Conversation could not refresh. Your previous messages are still shown.'); setNow(Date.now()) } }
       finally { working = false }
     }
     void load(); const timer = window.setInterval(load, 2200)
     const seen = () => { mobileEvent({ type: 'subscribe', id: session.id }); if (document.visibilityState === 'visible') mobileEvent({ type: 'seen', id: session.id, completionVersion: session.completionVersion }) }
-    seen(); const off = onMobileEvent(event => { if (event.type === 'connected') seen() })
+    seen(); const off = onMobileEvent(event => { if (event.type === 'connected') { seen(); void load() } })
     return () => { stopped = true; clearInterval(timer); off() }
   }, [session.id, session.completionVersion])
-  useEffect(() => { if (follow.current && scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight }, [messages])
+  useLayoutEffect(() => { if (mode === 'messages' && scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight }, [mode])
+  useLayoutEffect(() => { if (follow.current && scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight }, [messages])
   const running = session.status === 'running'
   return <>
-    <div className="mobile-chat-tools"><div className="mobile-segment" role="group" aria-label="Conversation view"><button className={mode === 'messages' ? 'active' : ''} onClick={() => setMode('messages')}>Conversation</button><button className={mode === 'terminal' ? 'active' : ''} onClick={() => setMode('terminal')}>Terminal</button></div><span className={session.activity === 'working' ? 'mobile-working' : ''}>{chatActivityLabel(session)}</span></div>
-    {mode === 'terminal' ? <Terminal id={session.id} /> : <div className="mobile-messages" ref={scroller} onScroll={() => { const box = scroller.current; if (box) follow.current = box.scrollHeight - box.scrollTop - box.clientHeight < 100 }}>
-      <div className="mobile-history-note">Recent conversation · the terminal keeps the live CLI view</div>
-      {messages.map(message => <article className={`mobile-message ${message.role}`} key={message.id}><header>{message.role === 'user' ? 'You' : <><AgentLogo agent={session.agent} size={15} />{session.agent === 'claude' ? 'Claude' : 'Codex'}</>}{message.at && <time>{new Date(message.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time>}</header><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({ href, children }) => <a href={href} target="_blank" rel="noreferrer">{children}</a> }}>{message.text}</ReactMarkdown></article>)}
-      {!messages.length && <div className="mobile-chat-empty"><Icon name="chats" size={30} /><h2>{supported ? 'Ready for your next thought' : 'This chat is in the terminal'}</h2><p>{supported ? 'Messages will appear here as your agent writes its conversation history.' : 'Open the live terminal to read the conversation or respond to a CLI prompt.'}</p><button onClick={() => setMode('terminal')}>Open terminal<Icon name="arrow" size={15} /></button></div>}
+    <div className="mobile-chat-tools"><div className="mobile-segment" role="group" aria-label="Conversation view"
+      onPointerDown={event => { suppressModeClick.current = false; modeGesture.current = event.isPrimary ? { x: event.clientX, y: event.clientY, id: event.pointerId } : null }}
+      onPointerCancel={() => { modeGesture.current = null }}
+      onPointerUp={event => {
+        const start = modeGesture.current; modeGesture.current = null
+        if (!start || start.id !== event.pointerId) return
+        const dx = event.clientX - start.x, dy = event.clientY - start.y
+        if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy) * 1.5) return
+        suppressModeClick.current = true
+        if (dx < 0) setMode('terminal'); else showConversation()
+      }}
+      onClickCapture={event => { if (suppressModeClick.current) { event.preventDefault(); event.stopPropagation(); suppressModeClick.current = false } }}
+    ><button className={mode === 'messages' ? 'active' : ''} onClick={showConversation}>Conversation</button><button className={mode === 'terminal' ? 'active' : ''} onClick={() => { speech.stop(); setMode('terminal') }}>Terminal</button></div><ActivityStatus session={session} connected={state.connected} /></div>
+    {mode === 'terminal' ? <Terminal id={session.id} /> : <div className="mobile-message-pane"><div className="mobile-messages" ref={scroller} onScroll={() => { const box = scroller.current; if (box) { const nearEnd = box.scrollHeight - box.scrollTop - box.clientHeight < 100; follow.current = nearEnd; setShowJump(!nearEnd) } }}>
+      <div className="mobile-history-note">{checkedAt ? `Transcript checked ${new Date(checkedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Loading conversation…'}{messages[messages.length - 1]?.at && ` · Last message ${new Date(messages[messages.length - 1].at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}</div>
+      {(readError || (session.activity === 'working' && now - changedAt >= 45000)) && <div className="mobile-transcript-status" role="status"><p>{readError || 'Conversation has not updated recently. The terminal may have newer output.'}</p><button onClick={() => { speech.stop(); setMode('terminal') }}>Open terminal<Icon name="arrow" size={15} /></button></div>}
+      {messages.map((message, index) => <article className={`mobile-message ${message.role}`} key={message.id}><header>{message.role === 'user' ? 'You' : <><AgentLogo agent={session.agent} size={15} />{session.agent === 'claude' ? 'Claude' : 'Codex'}</>}{message.at && <time>{new Date(message.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time>}</header><div className="mobile-message-copy"><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ img: () => null, a: ({ href, children }) => <a href={href} target="_blank" rel="noreferrer">{children}</a> }}>{message.text}</ReactMarkdown></div><ConversationImages images={message.images} />{index === readEnd && message.role === 'assistant' && messages.slice(readStart).some(item => item.text.trim()) && <div className="mobile-read-aloud"><button type="button" disabled={!speech.supported} title={!speech.supported ? 'Read aloud is unavailable in this browser' : 'Read from your last message to this reply'} onClick={() => speech.read(message.id, Array.from(scroller.current?.querySelectorAll<HTMLElement>('.mobile-message-copy') || []).slice(readStart, readEnd + 1).map(spokenText).filter(Boolean).join('\n\n'))}>Read aloud</button>{speech.activeId && <><button type="button" onClick={speech.togglePause}>{speech.paused ? 'Resume reading' : 'Pause reading'}</button><button type="button" onClick={speech.stop}>Stop reading</button><label>Voice<select aria-label="Reading voice" value={speech.voiceId} onChange={event => speech.chooseVoice(event.target.value)}><option value="">Device default</option>{speech.voices.map(voice => <option key={voice.voiceURI} value={voice.voiceURI}>{voice.name} · {voice.lang}{voice.localService ? ' · on device' : ' · online'}</option>)}</select></label></>}</div>}</article>)}
+      {!messages.length && <div className="mobile-chat-empty"><Icon name="chats" size={30} /><h2>{supported ? 'Ready for your next thought' : 'This chat is in the terminal'}</h2><p>{supported ? 'Messages will appear here as your agent writes its conversation history.' : 'Open the live terminal to read the conversation or respond to a CLI prompt.'}</p><button onClick={() => { speech.stop(); setMode('terminal') }}>Open terminal<Icon name="arrow" size={15} /></button></div>}
+      {!!activity.length && <details className="mobile-tool-activity" aria-label="Recent tool activity"><summary>Recent activity</summary>{activity.map(item => <div key={item.id}><Icon name={item.status === 'running' ? 'terminal' : item.status === 'failed' ? 'bell' : 'history'} size={14} /><span>{item.name}</span><small>{item.status === 'running' && !running ? 'Interrupted' : item.status}{item.at && ` · ${new Date(item.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}</small></div>)}</details>}
       {session.activity === 'working' && <p className="mobile-agent-working"><i />Agent is working on your computer…</p>}
-    </div>}
+    </div>{showJump && <button className="mobile-jump-latest" onClick={jumpToLatest}><Icon name="down" size={16} />Jump to latest</button>}</div>}
     {!running && <div className="mobile-resume"><span>This conversation is saved.</span><button disabled={!state.connected} onClick={async () => { try { await mobileApi(`/sessions/${session.id}/resume`, {}); setError('') } catch (err) { setError(err instanceof Error ? err.message : String(err)) } }}>Resume chat</button></div>}
+    {speech.error && <p className="mobile-error" role="alert">{speech.error}</p>}
     {error && <p className="mobile-error" role="alert">{error}</p>}
     <Composer key={session.id} id={session.id} connected={state.connected} running={running} />
   </>
@@ -103,8 +142,18 @@ function NewChat({ close, opened }: { close: () => void; opened: (id: string) =>
 }
 
 export default function MobileApp() {
+  const installation = useInstall()
+  const resultsNavigation = useRef<ResultsNavigation>(null)
+  const [resultsHeader, setResultsHeader] = useState<HTMLDivElement | null>(null)
   const state = useMobile(), [view, setView] = useState<'list' | 'chat' | 'results'>('list'), [history, setHistory] = useState(false), [query, setQuery] = useState(''), [creating, setCreating] = useState(false), [settings, setSettings] = useState(false)
   const [closing, setClosing] = useState(false), [closeError, setCloseError] = useState('')
+  const [refreshing, setRefreshing] = useState(false), refreshTimer = useRef<number | undefined>(undefined)
+  useEffect(() => () => window.clearTimeout(refreshTimer.current), [])
+  function refreshPage() {
+    if (refreshTimer.current !== undefined) return
+    setRefreshing(true)
+    refreshTimer.current = window.setTimeout(() => window.location.reload(), window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 180)
+  }
   useEffect(() => {
     document.title = 'Mr. Mak Mobile'; document.documentElement.dataset.makTheme = 'dark'
     const manifest = document.createElement('link'); manifest.rel = 'manifest'; manifest.href = '/mobile/manifest.webmanifest'; document.head.append(manifest)
@@ -132,12 +181,25 @@ export default function MobileApp() {
   if (!state.ready) return <div className="mobile-app mobile-loading"><Nose size={52} /><p>Connecting to Mr. Mak…</p></div>
   if (!state.authenticated) return <div className="mobile-app"><Connect /></div>
   const items = [...state.sessions].filter(item => (history || item.open) && `${item.name} ${item.agent}`.toLowerCase().includes(query.toLowerCase())).sort((a, b) => Number(b.pinned) - Number(a.pinned) || (history ? b.updatedAt.localeCompare(a.updatedAt) : a.tabOrder - b.tabOrder))
-  return <div className="mobile-app"><header className="mobile-header">{view === 'chat' ? <button className="mobile-icon" aria-label="Back to chats" onClick={() => setView('list')}><Icon name="back" /></button> : <Nose size={31} />}<div><strong>{view === 'chat' && session ? session.name : 'Mr. Mak'}</strong><small><i className={state.connected ? 'online' : ''} />{state.connected ? 'Connected to your computer' : 'Reconnecting · your agents keep working'}</small></div>{view === 'chat' && session?.open && <button className="mobile-icon" aria-label="Close chat" title="Close chat" disabled={!state.connected || closing} onClick={() => void closeChat()}><Icon name="close" size={19} /></button>}<button className="mobile-icon" aria-label="Phone settings" onClick={() => setSettings(!settings)}><Icon name="phone" size={19} /></button></header>
+  const title = view === 'chat' && session ? session.name : view === 'results' ? 'Workspace' : history ? 'History' : 'Chats'
+  return <div className="mobile-app"><header className={`mobile-header ${view === 'chat' ? 'mobile-header-chat' : ''}`}>
+    {view === 'chat' && <button className="mobile-icon" aria-label="Back to chats" onClick={() => setView('list')}><Icon name="back" /></button>}
+    <button className={`mobile-nose-refresh ${refreshing ? 'refreshing' : ''}`} aria-label="Refresh page" title="Refresh page" onClick={refreshPage} disabled={refreshing}><span className={`mobile-connection-logo ${state.connected ? 'online' : ''}`} role="status" aria-label={state.connected ? 'Connected to your computer' : 'Reconnecting · your agents keep working'} title={state.connected ? 'Connected to your computer' : 'Reconnecting · your agents keep working'}><Nose size={26} /></span></button>
+    <div className="mobile-header-title" ref={setResultsHeader} id={view === 'results' ? 'mobile-results-header' : undefined}>{view !== 'results' && <h1>{title}</h1>}{view === 'list' && <span className="mobile-header-count" aria-label={`${items.length} ${items.length === 1 ? 'chat' : 'chats'}`}>· {items.length}</span>}</div>
+    {view === 'chat' && session?.open && <button className="mobile-icon" aria-label="Close chat" title="Close chat" disabled={!state.connected || closing} onClick={() => void closeChat()}><Icon name="trash" size={19} /></button>}
+    <nav className="mobile-main-nav" aria-label="Mobile sections">
+      {view === 'list' && <><button className="mobile-icon" aria-label="New chat" title="New chat" onClick={() => setCreating(true)} disabled={!state.connected}><Icon name="plus" size={19} /></button><button className={`mobile-icon ${history ? 'active' : ''}`} aria-label="History" title={history ? 'Show active chats' : 'Chat history'} aria-pressed={history} onClick={() => setHistory(!history)}><Icon name="history" size={19} /></button></>}
+      <button className={`mobile-icon ${view === 'chat' || (view === 'list' && !history) ? 'active' : ''}`} aria-label="Chats" title="Chats" aria-current={view === 'chat' || (view === 'list' && !history) ? 'page' : undefined} onClick={() => { setHistory(false); setView('list') }}><Icon name="chats" size={19} /></button>
+      <button className={`mobile-icon ${view === 'results' ? 'active' : ''}`} aria-label="Results" title="Workspace" aria-current={view === 'results' ? 'page' : undefined} onClick={() => { resultsNavigation.current?.closeReport(); setView('results') }}><Icon name="workspace" size={19} /></button>
+    </nav>
+    <button className="mobile-icon" aria-label="Phone settings" title="Phone settings" onClick={() => setSettings(!settings)}><Icon name="phone" size={19} /></button>
+  </header>
+    {installation.available && !installation.dismissed && <aside className="mobile-install" aria-label="Install Mr. Mak"><div><strong>Keep Mr. Mak on your phone</strong><p>Add the nose to your Home Screen and open it as an app.</p></div><button onClick={() => void installation.install()} disabled={installation.busy}>Install</button><button className="mobile-icon" aria-label="Not now" title="Not now" onClick={installation.dismiss}><Icon name="close" size={17} /></button></aside>}
+    {installation.error && <p className="mobile-error" role="alert">{installation.error}</p>}
     {!state.connected && <div className="mobile-offline" role="status">{state.error || 'Reconnecting… Keep Tailscale connected and your computer awake.'}</div>}
     {closeError && <div className="mobile-error" role="alert">{closeError}<button className="mobile-icon" aria-label="Dismiss close error" onClick={() => setCloseError('')}><Icon name="close" size={15} /></button></div>}
-    {settings && <div className="mobile-device-settings"><strong>{state.device?.name}</strong><p>Chats run on your computer. Switching views here leaves your desktop view alone.</p><p>Add this page to your Home Screen from your browser's menu.</p><button onClick={() => { if (window.confirm('Disconnect this phone from Mr. Mak?')) void disconnectMobile() }}>Disconnect this phone</button></div>}
-    {view !== 'chat' && <nav className="mobile-main-nav" aria-label="Mobile sections"><button className={view === 'list' ? 'active' : ''} onClick={() => setView('list')}><Icon name="chats" size={16} />Chats</button><button className={view === 'results' ? 'active' : ''} onClick={() => setView('results')}><Icon name="workspace" size={16} />Results</button></nav>}
-    {view === 'results' ? <Results /> : view === 'chat' && session ? <Conversation key={session.id} session={session} /> : <main className="mobile-chat-list"><div className="mobile-list-title"><div><span className="mobile-eyebrow">A LITTLE ROOM TO THINK</span><h1>Your chats</h1></div><button className="mobile-new" aria-label="New chat" onClick={() => setCreating(true)} disabled={!state.connected}><Icon name="plus" size={23} /></button></div><label className="mobile-search"><Icon name="search" size={17} /><input aria-label="Find a chat" placeholder="Find a conversation…" value={query} onChange={event => setQuery(event.target.value)} /></label><div className="mobile-list-tabs"><button className={!history ? 'active' : ''} onClick={() => setHistory(false)}>Active</button><button className={history ? 'active' : ''} onClick={() => setHistory(true)}>History</button><span>{items.length} chats</span></div><div className="mobile-chat-cards">{items.map(item => <button className={`mobile-chat-card ${item.activity === 'working' ? 'working' : ''}`} key={item.id} onClick={() => open(item.id)} style={{ '--chat-color': item.tabColor || state.agents.find(agent => agent.id === item.agent)?.color || '#d7aabd' } as React.CSSProperties}><span className="mobile-agent-icon"><AgentLogo agent={item.agent} size={24} />{item.unread && <i />}</span><span className="mobile-card-copy"><strong>{item.name}{item.pinned && <Icon name="pin" size={12} />}</strong><small>{item.agent === 'claude' ? 'Claude' : item.agent === 'codex' ? 'Codex' : item.agent === 'opencode' ? 'OpenCode' : 'Kimi'} · {chatActivityLabel(item)}</small>{item.preview && <p>{item.preview}</p>}</span><Icon name="arrow" size={15} /></button>)}{!items.length && <p className="mobile-list-empty">{query ? 'No matching chats.' : 'Open a chat to give your next idea a place.'}</p>}</div><p className="mobile-list-foot">A thought on your phone.<br />A task on your computer.</p></main>}
+    {settings && <div className="mobile-device-settings"><strong>{state.device?.name}</strong><p>Chats run on your computer. Switching views here leaves your desktop view alone.</p>{installation.installed ? <p>Mr. Mak is installed on this phone.</p> : installation.available ? <button onClick={() => void installation.install()} disabled={installation.busy}>Install Mr. Mak</button> : <p>To add Mr. Mak to your Home Screen, open your browser’s menu and choose Install app or Add to Home Screen. On iPhone, use Safari’s Share menu.</p>}<DictationSettings info={state.dictation} onChange={chooseMobileDictation} disabled={!state.connected} /><button onClick={() => { if (window.confirm('Disconnect this phone from Mr. Mak?')) void disconnectMobile() }}>Disconnect this phone</button></div>}
+    {view === 'results' ? <Results header={resultsHeader} navigationRef={resultsNavigation} /> : view === 'chat' && session ? <Conversation key={session.id} session={session} /> : <main className="mobile-chat-list"><label className="mobile-search"><Icon name="search" size={17} /><input aria-label="Find a chat" placeholder="Find a conversation…" value={query} onChange={event => setQuery(event.target.value)} /></label><div className="mobile-chat-cards">{items.map(item => <button className={`mobile-chat-card ${item.activity === 'working' ? 'working' : ''}`} key={item.id} onClick={() => open(item.id)} style={{ '--chat-color': item.tabColor || state.agents.find(agent => agent.id === item.agent)?.color || '#d7aabd' } as React.CSSProperties}><span className="mobile-agent-icon"><AgentLogo agent={item.agent} size={24} />{item.unread && <i />}</span><span className="mobile-card-copy"><strong>{item.name}{item.pinned && <Icon name="pin" size={12} />}</strong><small>{item.agent === 'claude' ? 'Claude' : item.agent === 'codex' ? 'Codex' : item.agent === 'opencode' ? 'OpenCode' : 'Kimi'} · {chatActivityLabel(item)}</small>{item.preview && <p>{item.preview}</p>}</span><Icon name="arrow" size={15} /></button>)}{!items.length && <p className="mobile-list-empty">{query ? 'No matching chats.' : 'Open a chat to give your next idea a place.'}</p>}</div><p className="mobile-list-foot">A thought on your phone.<br />A task on your computer.</p></main>}
     {creating && <NewChat close={() => setCreating(false)} opened={open} />}
   </div>
 }

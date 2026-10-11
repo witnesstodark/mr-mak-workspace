@@ -4,9 +4,10 @@ import { transcribeMobileAudio, type DictationInfo } from './client'
 import { deleteVoiceDraft, readVoiceDraft, saveVoiceDraft, type VoiceDraft } from './voice-drafts'
 
 type Phase = 'idle' | 'permission' | 'recording' | 'transcribing' | 'saved'
-export default function VoiceInput({ id, connected, disabled, config, onText, onBusy }: {
+export default function VoiceInput({ id, connected, disabled, config, onText, onBusy, transcriber = transcribeMobileAudio }: {
   id: string; connected: boolean; disabled: boolean; config?: DictationInfo
-  onText: (text: string, recordingId: string) => void; onBusy: (busy: boolean) => void
+  transcriber?: typeof transcribeMobileAudio
+  onText: (text: string, recordingId: string) => void | Promise<void>; onBusy: (busy: boolean) => void
 }) {
   const [phase, setPhase] = useState<Phase>('idle'), [seconds, setSeconds] = useState(0), [error, setError] = useState('')
   const [recording, setRecording] = useState<VoiceDraft | null>(null), [recovered, setRecovered] = useState(false)
@@ -38,10 +39,10 @@ export default function VoiceInput({ id, connected, disabled, config, onText, on
     setPhase('transcribing'); setError(''); busyHandler.current(true)
     const abort = new AbortController(); controller.current = abort
     try {
-      const result = await transcribeMobileAudio(saved, abort.signal)
+      const result = await transcriber(saved, abort.signal)
       if (!alive.current || request !== serial.current) return
       // The parent persists the text before removing the recoverable recording.
-      textHandler.current(result.text, saved.id)
+      await textHandler.current(result.text, saved.id)
       await deleteVoiceDraft(id)
       if (!alive.current || request !== serial.current) return
       setRecording(null); setPhase('idle'); setError('')
@@ -52,7 +53,7 @@ export default function VoiceInput({ id, connected, disabled, config, onText, on
   }
   async function start() {
     if (disabled || !connected || !recovered || phase !== 'idle') return
-    if (!config?.available) { setError('Voice input needs a transcription API key on your computer. You can also use your keyboard microphone.'); return }
+    if (!config?.available) { setError(config?.provider === 'off' ? 'Dictation is off. Choose a provider in Phone settings or desktop Settings.' : config?.provider === 'openai' || config?.provider === 'openrouter' ? 'The selected paid provider needs an API key on your computer. Choose Local Whisper for free dictation.' : 'Set up local Whisper on your computer to enable free voice input.'); return }
     if (!supported) { setError('Microphone recording is unavailable in this browser. Open the HTTPS page in Chrome or Safari, or use your keyboard microphone.'); return }
     setPhase('permission'); setError(''); busyHandler.current(true); discard.current = false
     const request = ++serial.current
@@ -116,7 +117,7 @@ export default function VoiceInput({ id, connected, disabled, config, onText, on
       <span>{phase === 'permission' ? 'Allow microphone access…' : phase === 'recording' ? `Recording ${clock} · tap Stop when finished` : phase === 'transcribing' ? 'Transcribing… Your message will stay a draft.' : `Saved recording · ${clock}`}</span>
       {phase === 'recording' && <button type="button" onClick={() => stop(true)}>Cancel recording</button>}
       {phase === 'saved' && <div><button type="button" disabled={!connected || disabled} onClick={() => recording && void transcribe(recording)}>Transcribe recording</button><button type="button" onClick={download}>Download audio</button><button type="button" onClick={() => void remove()}>Discard recording</button></div>}
-      {phase === 'recording' && <small>Up to {config?.maxSeconds || 120} seconds. Transcription uses {config?.provider === 'openrouter' ? 'OpenRouter' : 'OpenAI'} API credit.</small>}
+      {phase === 'recording' && <small>Up to {config?.maxSeconds || 120} seconds. Transcription uses {config?.provider === 'local' ? 'local Whisper on your computer; no API credit' : config?.provider === 'openrouter' ? 'OpenRouter API credit' : 'OpenAI API credit'}.</small>}
     </div>}
     {error && <div className="mobile-voice-error" role="alert">{error}<button type="button" aria-label="Dismiss voice input error" onClick={() => setError('')}><Icon name="close" size={14} /></button></div>}
   </div>

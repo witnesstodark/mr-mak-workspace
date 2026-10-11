@@ -44,6 +44,22 @@ both mouse tracking and the requested SGR encoding, including saved screens,
 so switching tabs or reconnecting does not disable its mouse wheel. Classic
 Claude and Codex continue using local terminal scrollback.
 
+## Local microphone dictation
+
+Desktop chats, the Mak composer and paired mobile chats support free local Whisper
+dictation. Follow [setup and review behavior](../docs/mobile-access.md#voice-input).
+The local engine is the default. Choose Free/Paid/Off in the top-right phone
+button (**Phone settings**) or **Settings → Speech-to-text**. The choice is saved
+and shared with paired phones. Paid providers require an API key on the computer.
+
+## Terminal appearance
+
+Settings → Chats → Terminal appearance offers **Original CLI colors** (the default)
+and **Mr. Mak Focus** (muted colors). Original preserves CLI diff colors for added
+and removed lines. The choice is saved for all desktop chats and applies to open
+terminals immediately without restarting sessions. Existing saved preferences
+are retained. The same choice is available in each chat’s options menu.
+
 ## OpenCode terminals
 
 The service detects installed OpenCode 1.x or 2.x and launches its real TUI.
