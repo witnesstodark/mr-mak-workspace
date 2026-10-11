@@ -179,8 +179,17 @@ choice; opening another chat starts collapsed.
 
 Conversation displays PNG, JPEG, WebP, GIF and BMP images explicitly shared in
 Claude/Codex messages, Markdown image links, and structured image tool results.
-Tap an image to enlarge it or use Download to save it. Local images are served
+Tap an image to open a separate full-screen viewer. Pinch to zoom the image,
+drag to pan, double-tap to zoom/reset, or use the zoom buttons. Close returns
+to the same conversation. Download saves the image. Local images are served
 through the paired connection with an expiring, device-and-chat-specific file
 grant; missing or unsupported images show an unavailable notice. Image-only
 messages are retained. External image URLs are not fetched, and terminal-only
 pixels without a saved file or transcript image record cannot be recovered.
+
+Agent text replies have a Read aloud button with Pause, Resume and Stop controls.
+Speech uses the browser/device voice service and needs no Mr. Mak API key or paid
+provider. The voice selector lists available languages and marks on-device/online
+voices; availability and offline operation depend on the device voice service.
+Code blocks, inline code and tables are skipped. Playback starts only after a tap,
+and stops when changing chats, opening Terminal or leaving Conversation.

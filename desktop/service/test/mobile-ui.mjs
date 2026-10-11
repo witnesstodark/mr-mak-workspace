@@ -72,6 +72,18 @@ try {
       const stream = await original(options); window.testMicTracks.push(...stream.getTracks()); return stream;
     };
   });
+  await mobileContext.addInitScript(() => {
+    const service = new EventTarget();
+    window.testSpeech = { spoken: [], cancelled: 0, paused: false, current: null };
+    Object.assign(service, {
+      getVoices: () => [{ voiceURI: 'local-en', name: 'Test English', lang: 'en-US', localService: true, default: true }, { voiceURI: 'local-tr', name: 'Test Turkish', lang: 'tr-TR', localService: true, default: false }],
+      speak: utterance => { window.testSpeech.spoken.push({ text: utterance.text, voice: utterance.voice?.voiceURI }); window.testSpeech.current = utterance; },
+      cancel: () => { window.testSpeech.cancelled++; window.testSpeech.current = null; },
+      pause: () => { window.testSpeech.paused = true; }, resume: () => { window.testSpeech.paused = false; },
+    });
+    Object.defineProperty(window, 'speechSynthesis', { configurable: true, value: service });
+    Object.defineProperty(window, 'SpeechSynthesisUtterance', { configurable: true, value: class { constructor(text) { this.text = text; } } });
+  });
   const phone = await mobileContext.newPage(); phone.setDefaultTimeout(12000); phone.on('pageerror', error => errors.push(error.message));
   // Open from another site like a QR scanner, rather than an address-bar visit.
   qrSource = http.createServer((_request, response) => {
@@ -188,11 +200,44 @@ try {
   await phone.getByRole('button', { name: 'Enlarge shared-picture.png' }).first().click();
   const imagePreview = phone.getByRole('dialog', { name: 'Shared image preview' });
   await expect(imagePreview).toBeVisible();
+  const viewerSize = await imagePreview.boundingBox();
+  assert.equal(Math.round(viewerSize.width), 390); assert.equal(Math.round(viewerSize.height), 844);
+  await imagePreview.getByRole('button', { name: 'Zoom in', exact: true }).click();
+  await expect(imagePreview.getByRole('button', { name: 'Reset image zoom' })).toHaveText('150%');
+  await imagePreview.getByRole('button', { name: 'Reset image zoom' }).click();
+  const touch = await mobileContext.newCDPSession(phone);
+  const stage = await imagePreview.locator('.mobile-image-stage').boundingBox();
+  const cx = stage.x + stage.width / 2, cy = stage.y + stage.height / 2;
+  const points = offset => [{ x: cx - offset, y: cy, id: 1 }, { x: cx + offset, y: cy, id: 2 }];
+  await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: points(40) });
+  await touch.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: points(80) });
+  await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await expect(imagePreview.getByRole('button', { name: 'Reset image zoom' })).toHaveText('200%');
+  assert.equal(await phone.evaluate(() => window.visualViewport.scale), 1, 'Pinch affects only the image');
+  await phone.screenshot({ path: path.join(repo, 'phone-image-viewer.png') });
+  await touch.detach();
   const imageDownload = phone.waitForEvent('download');
   await imagePreview.getByRole('link', { name: 'Download image' }).click();
   assert.equal((await imageDownload).suggestedFilename(), 'shared-picture.png');
-  await imagePreview.getByRole('button', { name: 'Close', exact: true }).click();
+  await imagePreview.getByRole('button', { name: 'Close image', exact: true }).click();
   await expect(imagePreview).not.toBeVisible();
+  const readButton = phone.locator('.mobile-message.assistant').getByRole('button', { name: 'Read aloud', exact: true }).first();
+  assert.equal(await phone.evaluate(() => window.testSpeech.spoken.length), 0, 'No automatic playback');
+  await readButton.click();
+  assert.ok((await phone.evaluate(() => window.testSpeech.spoken[0].text)).includes('Ready for review'));
+  await phone.getByRole('button', { name: 'Pause reading' }).click();
+  assert.equal(await phone.evaluate(() => window.testSpeech.paused), true);
+  await phone.getByRole('button', { name: 'Resume reading' }).click();
+  assert.equal(await phone.evaluate(() => window.testSpeech.paused), false);
+  await phone.getByRole('combobox', { name: 'Reading voice' }).selectOption('local-tr');
+  await readButton.click();
+  assert.equal(await phone.evaluate(() => window.testSpeech.spoken.at(-1).voice), 'local-tr');
+  await phone.getByRole('button', { name: 'Stop reading' }).click();
+  assert.equal(await phone.evaluate(() => window.testSpeech.current), null);
+  await readButton.click();
+  await modeButtons.getByRole('button', { name: 'Terminal', exact: true }).click();
+  assert.equal(await phone.evaluate(() => window.testSpeech.current), null, 'Opening terminal stops speech');
+  await modeButtons.getByRole('button', { name: 'Conversation', exact: true }).click();
   const recentActivity = phone.locator('.mobile-tool-activity');
   await recentActivity.waitFor();
   await expect(recentActivity).not.toHaveAttribute('open', '');

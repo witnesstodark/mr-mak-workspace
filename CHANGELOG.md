@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Open shared images in a full-screen viewer with image-only pinch zoom/pan, and read agent replies aloud using available device voices.
+
 - Show shared conversation images on mobile with an enlarged preview and downloads through paired, scoped image access.
 
 - Mobile Recent activity starts collapsed and expands with a tap, keeping conversation messages in view.
