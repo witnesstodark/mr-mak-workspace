@@ -54,7 +54,7 @@ jobs:
       - run: cargo test --manifest-path src-tauri/Cargo.toml login_path::tests
       - run: python3 scripts/test-local-voice-setup.py
       - name: Upload Linux AppImage
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: mr-mak-workspace-linux-appimage
           path: src-tauri/target/release/bundle/appimage/*.AppImage
@@ -94,7 +94,7 @@ jobs:
         run: |
           ditto -c -k --sequesterRsrc --keepParent "src-tauri/target/release/bundle/macos/Mr. Mak Workspace.app" mr-mak-workspace-macos.zip
       - name: Upload macOS app
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: mr-mak-workspace-macos-app
           path: mr-mak-workspace-macos.zip
