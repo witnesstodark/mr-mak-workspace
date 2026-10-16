@@ -45,7 +45,10 @@ export class TailscaleTransport {
     if (!port) throw new Error('Tailscale HTTPS ports 8443–8446 are already in use. Free one of these ports and try again.');
     if (config.AllowFunnel?.[`${status.hostname}:${port}`]) throw new Error('This Tailscale port is publicly shared. Turn off Funnel for this port before connecting Mr. Mak.');
     try { await this.command(['serve', '--bg', '--yes', `--https=${port}`, target]); }
-    catch { throw new Error('Tailscale Serve could not start. Enable HTTPS for this device in Tailscale and check its Serve permissions. Windows may require an administrator terminal for the initial Serve setup. See the setup instructions below.'); }
+    catch {
+      const hint = process.platform === 'win32' ? ' Windows may require an administrator terminal for the initial Serve setup.' : process.platform === 'darwin' ? ' Make sure the Tailscale app is running and signed in.' : '';
+      throw new Error(`Tailscale Serve could not start. Enable HTTPS for this device in Tailscale and check its Serve permissions.${hint} See the setup instructions below.`);
+    }
     const saved = { port, hostname: status.hostname, target };
     const verified = await this.config();
     if (!this.owns(verified, saved) || verified.AllowFunnel?.[`${saved.hostname}:${port}`]) throw new Error('The private Tailscale route could not be verified. Mobile access remains off.');

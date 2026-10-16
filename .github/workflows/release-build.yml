@@ -150,6 +150,9 @@ jobs:
       - name: Build app and DMG
         run: npm exec -- tauri build --ci --bundles app,dmg --config src-tauri/release-config.json
 
+      - name: Verify the app's code signature
+        run: codesign --verify --deep --strict --verbose=2 src-tauri/target/release/bundle/macos/*.app
+
       - name: Stage macOS assets
         run: |
           mkdir -p release-assets

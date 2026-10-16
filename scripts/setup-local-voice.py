@@ -1,10 +1,15 @@
 """Optional local voice setup. Run explicitly with Python 3.10-3.12; no app restart."""
 import argparse
+import functools
 import hashlib
 import os
 from pathlib import Path
+import platform
+import shutil
+import ssl
 import subprocess
 import sys
+import urllib.error
 import urllib.request
 import venv
 
@@ -56,21 +61,77 @@ def download(file, url, size, digest, opener=urllib.request.urlopen):
     finally:
         temporary.unlink(missing_ok=True)
 
+# On Apple Silicon the pinned wheels start at av 16.1.0 (macOS 14) and onnxruntime (macOS 13);
+# below that pip falls back to a source build that fails.
+MACOS_MINIMUM = {'dictation': (14, 0), 'read-aloud': (13, 0)}
+
+def macos_too_old(feature, version=None, machine=None):
+    if sys.platform != 'darwin' or (machine or platform.machine()) != 'arm64':
+        return None
+    version = version or platform.mac_ver()[0] or '0'
+    minimum = MACOS_MINIMUM[feature]
+    if tuple(int(part) for part in version.split('.')[:2]) >= minimum:
+        return None
+    return f'Local {feature} needs macOS {minimum[0]} or later on Apple Silicon; this Mac runs macOS {version}.'
+
+SUPPORTED = 'import sys; sys.exit(not (3, 10) <= sys.version_info[:2] <= (3, 12))'
+
+def macos_python():
+    """A Python 3.10-3.12 on this Mac: plain python3 is usually 3.9 (Xcode) or 3.13+ (Homebrew)."""
+    names = ['python3.12', 'python3.11', 'python3.10']
+    found = [shutil.which(name) for name in names]
+    found += [f'{prefix}/bin/{name}' for name in names for prefix in ('/opt/homebrew', '/usr/local')]
+    if shutil.which('uv'):
+        uv = subprocess.run(['uv', 'python', 'find', '>=3.10,<3.13'], capture_output=True, text=True)
+        found.append(uv.stdout.strip() if uv.returncode == 0 else None)
+    for candidate in filter(None, found):
+        if os.access(candidate, os.X_OK) and subprocess.run([candidate, '-c', SUPPORTED], capture_output=True).returncode == 0:
+            return candidate
+    return None
+
+def tls_context():
+    context = ssl.create_default_context()
+    # python.org macOS builds trust no CA until 'Install Certificates.command' runs; use the system bundle then.
+    if sys.platform == 'darwin' and not context.cert_store_stats()['x509_ca'] and os.path.exists('/etc/ssl/cert.pem'):
+        context.load_verify_locations('/etc/ssl/cert.pem')
+    return context
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('feature', choices=MODELS)
     args = parser.parse_args()
+    if too_old := macos_too_old(args.feature):
+        parser.error(too_old)
     if not (3, 10) <= sys.version_info[:2] <= (3, 12):
-        parser.error('Use Python 3.10-3.12 (3.12 recommended) for the pinned local voice packages.')
+        if sys.platform == 'darwin' and not os.environ.get('MRMAK_VOICE_SETUP_REEXEC'):
+            candidate = macos_python()
+            if candidate:
+                print(f'Python {sys.version.split()[0]} is not supported; using {candidate}.', flush=True)
+                os.environ['MRMAK_VOICE_SETUP_REEXEC'] = '1'
+                os.execv(candidate, [candidate, str(Path(__file__).resolve()), *sys.argv[1:]])
+        hint = ''
+        if sys.platform == 'darwin':
+            hint = (' On macOS: brew install python@3.12 (or uv python install 3.12), then run'
+                    f' python3.12 scripts/setup-local-voice.py {args.feature} (plain python3 also finds it).')
+        parser.error(f'Use Python 3.10-3.12 (3.12 recommended) for the pinned local voice packages; this is {sys.version.split()[0]}.' + hint)
     root = Path(__file__).resolve().parent.parent / '.cache' / args.feature
     root.mkdir(parents=True, exist_ok=True)
     python = python_path(root)
     if not python.exists():
         venv.EnvBuilder(with_pip=True).create(root / 'venv')
-    subprocess.run([str(python), '-m', 'pip', 'install', *PACKAGES[args.feature]], check=True)
+    # Fail fast with 'no matching distribution' instead of a long source build on a Mac.
+    binary = ['--only-binary', 'av,onnxruntime,ctranslate2'] if sys.platform == 'darwin' else []
+    subprocess.run([str(python), '-m', 'pip', 'install', *binary, *PACKAGES[args.feature]], check=True)
+    opener = functools.partial(urllib.request.urlopen, context=tls_context())
     for name, url, size, digest in MODELS[args.feature]:
         print('Verifying ' + name, flush=True)
-        download(root / name, url, size, digest)
+        try:
+            download(root / name, url, size, digest, opener)
+        except urllib.error.URLError as error:
+            if sys.platform == 'darwin' and isinstance(error.reason, ssl.SSLCertVerificationError):
+                sys.exit('TLS certificate verification failed. With the python.org installer, run'
+                         ' "Install Certificates.command" in /Applications/Python 3.12, or use Homebrew python@3.12; then rerun.')
+            raise
     if args.feature == 'dictation':
         probe = 'from faster_whisper import WhisperModel; import sys; WhisperModel(sys.argv[1], device="cpu", compute_type="int8", local_files_only=True)'
         subprocess.run([str(python), '-c', probe, str(root / 'model')], check=True)

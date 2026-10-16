@@ -22,7 +22,7 @@
     "test:template": "node scripts/check-template.mjs && node scripts/sync-skills.mjs --check && npm run test:assets",
     "test:assets": "node --test scripts/asset-delivery/test/*.test.mjs",
     "skills:sync": "node scripts/sync-skills.mjs",
-    "skills:pack": "python scripts/package_skills.py"
+    "skills:pack": "node scripts/run-python.mjs scripts/package_skills.py"
   },
   "dependencies": {
     "@types/three": "^0.185.4",

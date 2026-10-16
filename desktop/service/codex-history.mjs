@@ -1,4 +1,4 @@
-import { open, readdir } from 'node:fs/promises';
+import { open, readdir, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 
@@ -62,12 +62,16 @@ async function* transcriptFiles(folders, recursive) {
 
 export async function findCodexChat(session, { full = false, now = Date.now(), home = codexHome() } = {}) {
   const folders = full ? [path.join(home, 'sessions')] : recentFolders(home, [now, session.startedAt, Date.parse(session.createdAt)]);
+  // Codex records getcwd(). Chats saved before working folders were stored
+  // resolved may still hold a symlinked or differently normalised spelling.
+  const cwds = [session.cwd];
+  if (process.platform !== 'win32' && typeof session.cwd === 'string') cwds.push(await realpath(session.cwd).catch(() => session.cwd));
   const matches = [];
   for await (const file of transcriptFiles(folders, full)) {
     const meta = await readCodexMetadata(file);
     // The per-terminal owner is proof. Never substitute another recent chat in
     // the same folder, or a subagent, merely because its timestamp looks close.
-    if (meta?.originator === `mrmak_chat_${session.id}` && meta.source === 'cli' && sameFolder(meta.cwd, session.cwd)) matches.push({ ...meta, file });
+    if (meta?.originator === `mrmak_chat_${session.id}` && meta.source === 'cli' && cwds.some(cwd => sameFolder(meta.cwd, cwd))) matches.push({ ...meta, file });
   }
   return matches.length === 1 ? matches[0] : null;
 }

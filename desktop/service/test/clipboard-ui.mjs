@@ -24,7 +24,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 900, height: 700 } });
   await page.addInitScript(() => {
     window.copied = [];
-    Object.defineProperty(navigator, 'clipboard', { value: { writeText: async text => window.copied.push(text) }, configurable: true });
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText: async text => window.copied.push(text), write: async items => window.copied.push(await (await items[0].getType('text/plain')).text()) }, configurable: true });
   });
   await page.goto(service.urls.chats);
   const terminal = page.locator('.terminal-host .xterm-screen'); await terminal.waitFor();

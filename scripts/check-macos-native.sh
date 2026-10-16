@@ -79,7 +79,7 @@ for i in 1 2; do as 'click (first button of window 1 whose subrole is "AXCloseBu
 open -a "$APP"; sleep 1.5
 w=$(windows); [[ "$w" == *Chats* && "$w" == *Workspace* ]] && ok "Dock reopen restores both windows" || bad "Dock reopen" "$w"
 
-# Global recall shortcut: enable, hide, press ⌃⌥Space from Finder, restore the setting.
+# Global recall shortcut: enable, hide, press ⌃⌥⌘Space from Finder, restore the setting.
 pref="$HOME/Library/Application Support/com.mrmak.workspace/windows-key.json"
 was=$(cat "$pref" 2>/dev/null || echo false)
 # The toggle lives in Workspace › Settings (rail checkbox "Toggle settings").
@@ -101,13 +101,13 @@ if [ "$(cat "$pref" 2>/dev/null)" = true ]; then
   for i in 1 2; do as 'click (first button of window 1 whose subrole is "AXCloseButton")' >/dev/null; sleep 0.5; done
   osascript -e 'tell application "Finder" to activate'; sleep 0.8
   if [ "$(front)" = Finder ]; then
-    osascript -e 'tell application "System Events" to key code 49 using {control down, option down}'; sleep 1.5
-    w=$(windows); [[ "$w" == *Chats* && "$w" == *Workspace* && "$(front)" == "$PROC" ]] && ok "⌃⌥Space recalls both windows from Finder" || bad "⌃⌥Space" "front=$(front) windows=$w"
-  else skp "⌃⌥Space" "focus:$(front)"; open -a "$APP"; fi
+    osascript -e 'tell application "System Events" to key code 49 using {control down, option down, command down}'; sleep 1.5
+    w=$(windows); [[ "$w" == *Chats* && "$w" == *Workspace* && "$(front)" == "$PROC" ]] && ok "⌃⌥⌘Space recalls both windows from Finder" || bad "⌃⌥⌘Space" "front=$(front) windows=$w"
+  else skp "⌃⌥⌘Space" "focus:$(front)"; open -a "$APP"; fi
   [ "$was" != true ] && { toggle >/dev/null; sleep 0.8; }
   [ "$(cat "$pref")" = "$was" ] && ok "recall shortcut setting restored ($was)" || bad "restore recall setting" "$(cat "$pref")"
   [ -n "${opened_settings:-}" ] && press "Toggle settings" 1 >/dev/null
-else skp "⌃⌥Space" "could not enable it (Settings toggle: ${t:-n/a}; open Workspace › Settings once)"; fi
+else skp "⌃⌥⌘Space" "could not enable it (Settings toggle: ${t:-n/a}; open Workspace › Settings once)"; fi
 
 echo "== $pass passed, $fail failed, $skip skipped"
 exit $((fail>0))

@@ -31,7 +31,7 @@ connecting another machine. Each recipient uses their own account and credential
 ## Run and retain the job
 
 1. Inspect the selected input files. Upload only the references needed for the
-   requested task. A hosted MCP cannot read a local Windows path: use the upload
+   requested task. A hosted MCP cannot read a local file path: use the upload
    helper or a client-side upload tool, then pass the resulting URL.
 2. Prepare inputs from the live schema. Fields such as `image_urls`, `image_url`,
    `aspect_ratio`, `image_size`, `resolution` and duration differ by endpoint.

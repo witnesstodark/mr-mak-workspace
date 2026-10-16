@@ -1,13 +1,14 @@
 # Update an existing Workspace
 
 The application and your project folder are separate. The Windows installer
-updates the app and its local service. It does not replace your cards, skills,
-context, credentials or agent conversations.
+(or, on macOS and Linux, a fresh build) updates the app and its local service.
+It does not replace your cards, skills, context, credentials or agent
+conversations.
 
 ## Application
 
 1. Finish active agent tasks, then choose Quit from Mr. Mak's tray menu.
-2. Install **Mr. Mak Workspace 0.5.0** for Windows x64.
+2. Install **Mr. Mak Workspace 0.5.1** for Windows x64.
 3. Open the same repository you were using before. Your cards, settings and
    History remain in that folder.
 
@@ -15,6 +16,35 @@ For a desktop build from source, run `Setup.ps1 -Mode Update` in an external
 Windows PowerShell window opened from Start, outside Mr. Mak. It replaces these steps:
 it builds the current source, waits for you to quit Mr. Mak, installs the build
 silently and starts Mr. Mak again. See [getting started](getting-started.md).
+Update mode is Windows-only.
+
+### macOS (source build)
+
+macOS has no installer or Update mode. Run these steps in Terminal, outside
+Mr. Mak, from your repository folder:
+
+1. Merge the source changes, for example with `git pull`.
+2. Run `./setup.sh desktop`. Mr. Mak can stay open while it builds.
+3. Finish active agent tasks, then choose **Quit Mr. Mak and stop terminals**
+   from the menu-bar icon.
+4. Replace the installed app with the new build:
+
+   ```bash
+   rm -rf "/Applications/Mr. Mak Workspace.app"
+   ditto "src-tauri/target/release/bundle/macos/Mr. Mak Workspace.app" "/Applications/Mr. Mak Workspace.app"
+   ```
+
+   The build is already signed ad hoc. Only if macOS still will not open the
+   copy, sign it again: `codesign --force --deep --sign - "/Applications/Mr. Mak Workspace.app"`.
+5. Double-click **Start Mr. Mak.command**. It prefers the copy in Applications,
+   so skipping step 4 starts the old version; it warns when the build folder
+   holds a newer app and prints the replace command from step 4.
+
+With a downloaded `.dmg` instead, quit Mr. Mak the same way, drag the new app
+from the disk image over the one in Applications and choose Replace.
+
+macOS asks again for permissions such as microphone access after each rebuild,
+because the ad-hoc signature changes. See [macOS notes](macos.md).
 
 The 0.5.1 source update preserves your selected dictation provider, custom model
 and terminal appearance. Fresh setups default to local Whisper, which requires
@@ -55,7 +85,8 @@ voice remains optional and uses a separately billed OpenAI API connection.
 ## Skills and source
 
 For a browser-only preview, merge the source fixes, stop your Preview server,
-then run `Setup.ps1 -Mode Preview` and reload the browser. Setup runs `npm ci`
+then run `Setup.ps1 -Mode Preview` (macOS/Linux: `./setup.sh preview`) and
+reload the browser. Setup runs `npm ci`
 and starts Vite. Rust is not required for this mode. Root `npm ci` also installs
 the local service dependencies.
 

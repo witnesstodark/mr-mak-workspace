@@ -43,15 +43,19 @@ fi
 
 # Every gate's exit code is captured rather than allowed to abort the run. A failing gate is the
 # expected outcome on a model with defects, and stopping at the first one would hide the rest --
-# which is the opposite of what an audit is for.
-declare -A STATUS
+# which is the opposite of what an audit is for. Parallel indexed arrays rather than `declare -A`,
+# so this runs on macOS's stock /bin/bash (3.2).
+GATE_NAMES=()
+GATE_CODES=()
 
 run_gate() {
   local name="$1"; shift
   echo
   echo "== $name =="
   "$@" --json > "$OUT/$name.json" 2> "$OUT/$name.err"
-  STATUS[$name]=$?
+  local code=$?
+  GATE_NAMES+=("$name")
+  GATE_CODES+=("$code")
   # Human-readable copy alongside the JSON, since the JSON is for diffing and this is for reading.
   "$@" > "$OUT/$name.txt" 2>/dev/null
   head -20 "$OUT/$name.txt" 2>/dev/null || cat "$OUT/$name.err"
@@ -64,8 +68,9 @@ run_gate uv                python3 "$ROOT/forge/stage3_build/uv_unwrap.py" "$MES
 echo
 echo "== summary =="
 FAILED=0
-for name in "${!STATUS[@]}"; do
-  code="${STATUS[$name]}"
+for i in "${!GATE_NAMES[@]}"; do
+  name="${GATE_NAMES[$i]}"
+  code="${GATE_CODES[$i]}"
   case "$code" in
     0) verdict="clean" ;;
     1) verdict="GATE FAILURE"; FAILED=1 ;;

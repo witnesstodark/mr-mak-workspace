@@ -567,11 +567,11 @@ try {
   assert.deepEqual(writes.slice(beforeKeys), ['\x1b[D', '\x1b[A', '\x1b[B', '\x1b[C'].map(data => ({ id: ids[1], data })));
   for (const width of [320, 390]) {
     await phone.setViewportSize({ width, height: 844 });
+    // The terminal refits in a ResizeObserver callback after the resize resolves.
+    await expect.poll(() => phone.locator('.mobile-terminal-viewport').evaluate(node => node.scrollWidth - node.clientWidth), { message: `Fitted terminal needs no horizontal scrolling at ${width}px` }).toBeLessThanOrEqual(1);
     const keyLayout = await phone.locator('.mobile-terminal-keys').evaluate(node => ({ client: node.clientWidth, scroll: node.scrollWidth, keys: [...node.querySelectorAll('button')].map(button => { const r = button.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, width: r.width, height: r.height }; }) }));
     assert.ok(keyLayout.scroll <= keyLayout.client + 1);
     assert.equal(new Set(keyLayout.keys.map(r => r.top)).size, 1, 'Terminal controls occupy one row');
-    const fitted = await phone.locator('.mobile-terminal-viewport').evaluate(node => ({ width: node.clientWidth, scroll: node.scrollWidth }));
-    assert.ok(fitted.scroll <= fitted.width + 1, `Fitted terminal needs no horizontal scrolling at ${width}px`);
     assert.ok(keyLayout.keys.every(r => r.left >= 0 && r.right <= width && r.width >= 30 && r.height >= 44));
   }
   await phone.screenshot({ path: path.join(repo, 'phone-terminal.png') });

@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, appendFile, readFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, appendFile, readFile, realpath, symlink } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { findCodexChat, readCodexMetadata, codexTranscript } from '../codex-history.mjs';
 import { Sessions } from '../sessions.mjs';
+import { claudeTranscript } from '../native-events.mjs';
 
 const cwd = path.resolve('test-project');
 const now = Date.parse('2026-09-29T19:12:57Z'); // September 30 in Bangkok.
@@ -106,5 +107,43 @@ test('closing immediately captures a native ID before terminating the process; a
   } finally {
     await sessions?.close();
     if (priorHome === undefined) delete process.env.CODEX_HOME; else process.env.CODEX_HOME = priorHome;
+  }
+});
+
+test('working folders reached through a symlink match the resolved folder the CLIs record', { skip: process.platform === 'win32' && 'needs POSIX symlinks' }, async () => {
+  const home = await fixture();
+  // os.tmpdir() is itself under the /var -> /private/var link on macOS.
+  const name = 'Görsel project';
+  const real = path.join(home, process.platform === 'darwin' ? name.normalize('NFD') : name);
+  await mkdir(real);
+  const link = path.join(home, 'linked');
+  await symlink(real, link);
+  const recorded = await realpath(real);
+  const priorCodex = process.env.CODEX_HOME, priorClaude = process.env.CLAUDE_CONFIG_DIR;
+  process.env.CODEX_HOME = home;
+  process.env.CLAUDE_CONFIG_DIR = path.join(home, 'claude');
+  let sessions;
+  try {
+    // Chats saved before folders were stored resolved still find both transcripts.
+    const saved = { ...chat, id: 'linked-chat', cwd: link };
+    const expected = await transcript(home, { owner: saved.id, directory: recorded });
+    assert.equal((await findCodexChat(saved, { home, now })).id, expected.id);
+    const nativeId = randomUUID();
+    const project = path.join(home, 'claude', 'projects', recorded.replace(/[^a-zA-Z0-9]/g, '-'));
+    await mkdir(project, { recursive: true });
+    assert.equal(await claudeTranscript(link, nativeId), path.join(project, `${nativeId}.jsonl`));
+    assert.equal(await claudeTranscript(recorded, nativeId), path.join(project, `${nativeId}.jsonl`));
+
+    // New and imported chats store the spelling the CLI reports from getcwd().
+    sessions = await new Sessions(cwd, path.join(home, 'mrmak')).init();
+    sessions.launch = async session => { session.status = 'running'; };
+    assert.equal((await sessions.create({ agent: 'codex', name: 'Linked folder', cwd: link })).cwd, recorded);
+    assert.equal((await sessions.importConversation({ agent: 'codex', nativeId: randomUUID(), name: 'Imported linked folder', cwd: link })).cwd, recorded);
+    // Typed (NFC) names reach the folder macOS stored in NFD.
+    if (process.platform === 'darwin') assert.equal((await sessions.create({ agent: 'codex', name: 'Typed folder', cwd: path.join(home, name.normalize('NFC')) })).cwd, recorded);
+  } finally {
+    await sessions?.close();
+    if (priorCodex === undefined) delete process.env.CODEX_HOME; else process.env.CODEX_HOME = priorCodex;
+    if (priorClaude === undefined) delete process.env.CLAUDE_CONFIG_DIR; else process.env.CLAUDE_CONFIG_DIR = priorClaude;
   }
 });

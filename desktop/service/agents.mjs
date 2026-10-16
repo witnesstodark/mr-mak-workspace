@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { parse as parseEnv } from 'dotenv';
-import { isWindows, resolveCommand, shellCommand, shellLabel } from './platform.mjs';
+import { isWindows, macLocale, resolveCommand, shellCommand, shellLabel } from './platform.mjs';
 import { validAntigravityId } from './antigravity.mjs';
 
 export { shellCommand };
@@ -102,7 +102,7 @@ export function terminalCommand(agent, { bypass = false, resumeId, nativeId, eff
 }
 
 export function childEnvironment(repo) {
-  const env = { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor' };
+  const env = { ...process.env, ...macLocale(), TERM: 'xterm-256color', COLORTERM: 'truecolor' };
   // Forward only explicitly named MCP credentials. Voice and unrelated API keys
   // stay private to the service; CLI subscription authentication is unchanged.
   if (repo) {

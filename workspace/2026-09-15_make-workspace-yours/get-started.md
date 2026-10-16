@@ -28,9 +28,23 @@ repository. It opens Workspace and Chats as separate windows with separate
 taskbar identities. Closing a chat saves it to History; restoring its full
 conversation also relies on that CLI's native session files.
 
+On an Apple Silicon Mac, download the macOS `.dmg` from GitHub Releases, or build
+the app from source with Node.js 22.20+, Rust and the Xcode Command Line Tools:
+
+```bash
+./setup.sh check      # report prerequisites
+./setup.sh desktop    # build Mr. Mak Workspace.app and a .dmg
+```
+
+Drag **Mr. Mak Workspace.app** to Applications, then double-click
+**Start Mr. Mak.command** in the cloned folder. The app is ad-hoc signed but
+not notarised; a copy you build yourself opens without a prompt. Shortcuts use
+⌘ instead of Ctrl, and ⌘C/⌘V copy and paste in terminals. See the [macOS notes](../../docs/macos.md).
+
 ## Connect one agent
 
-Install at least one required CLI using its current official Windows instructions:
+Install at least one required CLI using its current official instructions for
+your operating system:
 
 - [Codex CLI](https://developers.openai.com/codex/cli)
 - [Claude Code](https://code.claude.com/docs/en/setup)
@@ -113,6 +127,8 @@ powershell -ExecutionPolicy Bypass -File .\Setup.ps1 -Mode Check
 powershell -ExecutionPolicy Bypass -File .\Setup.ps1 -Mode Desktop
 ```
 
+On macOS and Linux, `./setup.sh check` and `./setup.sh desktop` do the same.
+
 Check only reports prerequisites. Desktop installs project dependencies and
 builds an installer in `src-tauri/target/release/bundle/nsis`. It does not install
 or restart the app for you. An agent should prepare updates, then ask before
@@ -123,6 +139,8 @@ For a report-only browser preview:
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\Setup.ps1 -Mode Preview
 ```
+
+On macOS or Linux, run `./setup.sh preview`.
 
 That starts Vite and links `public/workspace` to the real Workspace folder.
 It does not start managed terminals or the voice service.

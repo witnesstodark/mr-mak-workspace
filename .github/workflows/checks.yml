@@ -76,17 +76,12 @@ jobs:
       - run: npm test
       - run: npm run test:template
       - run: npm run build
-      # The macOS app renders with WKWebView, so its UI checks run in WebKit.
-      - run: npx playwright install webkit
-      - run: npm run test:preview
-      - run: node desktop/service/test/theme-ui.mjs
-      - run: node desktop/service/test/voice-ui.mjs
-      - run: node desktop/service/test/mobile-ui.mjs
-      - run: node desktop/service/test/workspace-edit-ui.mjs
+      # Package and upload the app before the browser UI suites, so a UI timing
+      # failure still fails the job but cannot hide whether the app builds.
       - run: npm run desktop:build -- --bundles app
+      - name: Verify the app's code signature
+        run: codesign --verify --deep --strict --verbose=2 "src-tauri/target/release/bundle/macos/Mr. Mak Workspace.app"
       - run: cargo test --manifest-path src-tauri/Cargo.toml login_path::tests
-      - run: node desktop/service/test/clipboard-ui.mjs
-      - run: node desktop/service/test/desktop-dictation-ui.mjs
       - run: python3 scripts/test-local-voice-setup.py
       - name: Verify packaged Node and native terminals
         run: '"src-tauri/target/release/bundle/macos/Mr. Mak Workspace.app/Contents/Resources/runtime/node" scripts/check-bundled-runtime.mjs'
@@ -100,3 +95,12 @@ jobs:
           path: mr-mak-workspace-macos.zip
           if-no-files-found: error
           retention-days: 14
+      # The macOS app renders with WKWebView, so its UI checks run in WebKit.
+      - run: npx playwright install webkit
+      - run: npm run test:preview
+      - run: node desktop/service/test/theme-ui.mjs
+      - run: node desktop/service/test/voice-ui.mjs
+      - run: node desktop/service/test/mobile-ui.mjs
+      - run: node desktop/service/test/workspace-edit-ui.mjs
+      - run: node desktop/service/test/clipboard-ui.mjs
+      - run: node desktop/service/test/desktop-dictation-ui.mjs

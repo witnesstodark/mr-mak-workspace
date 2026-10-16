@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- Document each setup path for macOS next to the Windows one: the Apple Silicon `.dmg` in Releases, Open Anyway and quarantine removal for a downloaded copy, `./setup.sh preview`, macOS update steps, Python 3.12 (`python3.12`) for local dictation and Read aloud, Playwright WebKit for the UI tests, and macOS/Linux virtual environment commands for the video-watch and fal.ai helpers.
+- Describe macOS behavior in the in-app Help, the Make Workspace Yours card and the voice coordinator's guide: ⌘C/⌘V copy and paste while Ctrl+C reaches the CLI, Finder and the Trash, the Settings recall shortcut and the Option key.
+- Change the macOS recall shortcut to ⌃⌥⌘Space. ⌃⌥Space is macOS's "Select next source in Input menu"; an enabled shortcut moves to the new chord automatically.
+- macOS terminals: Option types the keyboard layout's characters (@, {, | and so on) by default; Settings > Chats can turn Option into a Meta key. OSC 52 copies now reach the clipboard in WKWebView.
+- macOS app: ad-hoc signed and sealed builds (CI verifies the signature), login-shell import of CLI config folders and the locale, Move to Trash without a Finder Automation prompt, downloads saved to `~/Downloads`, Show in Finder selects packages, correct drop positions on Retina displays, a template menu-bar icon, system light/dark title bars, minimized windows counted as open for recall, and a startup error dialog instead of a crash.
+- Files rail: ⌘⌫ moves to the Trash on macOS, backslashes stay part of macOS file names, accented names match typed searches, `~` expands in path boxes and new-chat folders, and `.m4a`/`.m4v` (plus `.mov`/`.heic` on macOS) preview with a fallback card when the webview cannot play them.
+- Service: chats save the folder's real path, so History finds Codex and Claude transcripts through symlinks, `/tmp` and accented folder names; stopping a chat also ends its grandchildren; command lookup ignores folders, non-executables and relative PATH entries; the macOS Shell tab is a login shell with a UTF-8 locale; Godot is found in Applications.
+- Setup: `./setup.sh check` reports the Xcode Command Line Tools, the build bundles only a self-contained Node and raises the macOS minimum to what it needs, `skills:pack` finds `python3` or `python`, local voice setup on macOS switches to an installed Python 3.10–3.12 and handles missing python.org certificates, `Start Mr. Mak.command` warns about an older installed app, and the `public/workspace` link repairs itself after a move.
+- Fix WebKit timing in the mobile report-position restore and the mobile terminal fit test, and support WebKit before 17.4 without `AbortSignal.any`.
+
 ## 0.5.1 - 2026-10-14
 
 - Add Antigravity CLI chats with Google sign-in, reasoning effort, per-chat native history recovery and MCP inventory. Install `agy` separately, then choose it in New chat. Model access remains controlled by Google.

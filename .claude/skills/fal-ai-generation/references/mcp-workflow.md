@@ -57,7 +57,8 @@ text-to-image endpoint; do not accidentally omit references from an edit.
 
 ## Local reference upload
 
-For the hosted server, `file_path` is not the agent's local filesystem. Use:
+For the hosted server, `file_path` is not the agent's local filesystem. Use
+(on macOS or Linux, run it with `.venv/bin/python` from [setup](setup.md)):
 
 ```text
 python scripts/fal_job.py --env /path/to/project/.env upload --file /path/to/reference.png --out /path/to/output/reference-upload.json

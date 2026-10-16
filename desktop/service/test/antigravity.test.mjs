@@ -21,14 +21,14 @@ test('Antigravity is discoverable before the app refreshes PATH', async () => {
   const bin = process.platform === 'win32' ? path.join(local, 'agy/bin') : path.join(home, '.local/bin');
   await mkdir(bin, { recursive: true });
   const file = path.join(bin, process.platform === 'win32' ? 'agy.exe' : 'agy');
-  await writeFile(file, '');
+  await writeFile(file, '', { mode: 0o755 });
   assert.ok(commandSearchRoots({ LOCALAPPDATA: local }, home).includes(bin));
   assert.equal(resolveCommand('agy', { PATH: '', LOCALAPPDATA: local }, home), file);
 });
 
 test('Antigravity command preserves permissions, explicit effort and an exact conversation target', async () => {
   const bin = await mkdtemp(path.join(os.tmpdir(), 'mrmak-agy-command-'));
-  await writeFile(path.join(bin, process.platform === 'win32' ? 'agy.cmd' : 'agy'), '');
+  await writeFile(path.join(bin, process.platform === 'win32' ? 'agy.cmd' : 'agy'), '', { mode: 0o755 });
   const previous = process.env.PATH;
   process.env.PATH = bin;
   try {

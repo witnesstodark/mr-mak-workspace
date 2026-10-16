@@ -1,12 +1,14 @@
-//! macOS counterpart of the Win-key recall: a global ⌃⌥Space shortcut brings
+//! macOS counterpart of the Win-key recall: a global ⌃⌥⌘Space shortcut brings
 //! back the open Mr. Mak windows. Only this one chord is registered; no other
-//! key input is observed.
+//! key input is observed. macOS ships no binding for it: ⌃Space and ⌃⌥Space
+//! switch input sources, ⌘Space and ⌥⌘Space are Spotlight and Finder search,
+//! and ⌃⌘Space is the emoji picker.
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
 
-pub const LABEL: &str = "⌃⌥Space";
+pub const LABEL: &str = "⌃⌥⌘Space";
 
-pub fn shortcut() -> Shortcut { Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::Space) }
+pub fn shortcut() -> Shortcut { Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT | Modifiers::SUPER), Code::Space) }
 
 pub struct RecallShortcut { app: tauri::AppHandle, enabled: AtomicBool }
 

@@ -19,7 +19,7 @@ test('Markdown knowledge provider searches and retrieves source-scoped documents
   await assert.rejects(provider.retrieve('../outside.md'), /leaves its provider root/);
 });
 
-test('Markdown knowledge search does not expose files symlinked from outside its root', { skip: process.platform !== 'linux' }, async () => {
+test('Markdown knowledge search does not expose files symlinked from outside its root', { skip: process.platform === 'win32' && 'needs POSIX symlinks' }, async () => {
   const parent = await mkdtemp(path.join(os.tmpdir(), 'mrmak-knowledge-link-'));
   const root = path.join(parent, 'knowledge');
   const outside = path.join(parent, 'outside.md');

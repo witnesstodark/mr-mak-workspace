@@ -93,7 +93,7 @@ test('OpenCode configuration keeps provider, model, plugin and permission choice
 test('OpenCode launch flags preserve native permissions and never pass Codex reasoning flags', async () => {
   await mkdir(directory, { recursive: true });
   const bin = await mkdtemp(path.join(directory, 'opencode-bin-'));
-  await writeFile(path.join(bin, process.platform === 'win32' ? 'opencode.cmd' : 'opencode'), '');
+  await writeFile(path.join(bin, process.platform === 'win32' ? 'opencode.cmd' : 'opencode'), '', { mode: 0o755 });
   const previous = process.env.PATH;
   process.env.PATH = bin + path.delimiter + (previous || '');
   try {
@@ -123,7 +123,7 @@ test('OpenCode version detection executes the resolved CLI with --version', asyn
   assert.equal(await opencodeVersion(env), 2);
 });
 
-test('OpenCode chat creation and resume both pass through version detection and launch the CLI', { skip: process.platform !== 'linux' }, async () => {
+test('OpenCode chat creation and resume both pass through version detection and launch the CLI', { skip: process.platform === 'win32' && 'uses a /bin/sh shim' }, async () => {
   const sandbox = await mkdtemp(path.join(directory, 'opencode-chat-flow-'));
   const repo = path.join(sandbox, 'project');
   const stateDir = path.join(sandbox, 'state');

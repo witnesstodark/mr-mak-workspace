@@ -8,21 +8,29 @@ import WorkspaceSettings from './WorkspaceSettings'
 import McpPanel from './McpPanel'
 import { ZoomImage } from '../components/ImagePreview'
 import ReportFrame from '../components/ReportFrame'
-import { fileManager, trashName } from './platform'
+import { fileManager, isMac, trashName } from './platform'
 
 export function FilePreview({ file }: { file: Preview }) {
-  return <div className="file-preview"><header><span><Icon name="files" size={16} /><strong title={file.name}>{file.name}</strong><small>{Math.max(1, Math.round(file.size / 1024)).toLocaleString()} KB</small></span><div><button className="desk-icon" onClick={() => api('/reveal', { path: file.path }).catch(reportError)} title={`Show in ${fileManager}`}><Icon name="external" size={17} /></button><button className="desk-icon" onClick={() => setPreview(null)} title="Back to Workspace" aria-label="Close file preview"><Icon name="close" size={18} /></button></div></header><div className={`file-preview-body ${file.kind}`}>
+  // A format the webview cannot play (ProRes, HEIC before Safari 17, odd codecs) falls back to the desktop-app card.
+  const [failed, setFailed] = useState('')
+  const kind = file.url && failed === file.url ? 'unsupported' : file.kind
+  const reason = kind === file.kind ? file.reason : 'Open this file in its desktop application.'
+  const fail = () => setFailed(file.url || '')
+  return <div className="file-preview"><header><span><Icon name="files" size={16} /><strong title={file.name}>{file.name}</strong><small>{Math.max(1, Math.round(file.size / 1024)).toLocaleString()} KB</small></span><div><button className="desk-icon" onClick={() => api('/reveal', { path: file.path }).catch(reportError)} title={`Show in ${fileManager}`}><Icon name="external" size={17} /></button><button className="desk-icon" onClick={() => setPreview(null)} title="Back to Workspace" aria-label="Close file preview"><Icon name="close" size={18} /></button></div></header><div className={`file-preview-body ${kind}`}>
     {file.kind === 'text' && (/\.md$/i.test(file.name) ? <MarkdownDocument key={`${file.path}:${file.revision}`} file={file} /> : <pre>{file.text}</pre>)}
     {file.kind === 'document' && file.url && <ReportFrame url={file.url} title={file.name} sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads" />}
-    {file.kind === 'image' && <ZoomImage src={file.url} alt={file.name} />}
-    {file.kind === 'video' && <video src={file.url} controls />}
-    {file.kind === 'audio' && <audio src={file.url} controls />}
-    {file.kind === 'unsupported' && <div className="file-unsupported"><Icon name="files" size={38} /><h2>{file.name}</h2><p>{file.reason}</p><button className="desk-secondary" onClick={() => api('/reveal', { path: file.path }).catch(reportError)}>Show in {fileManager}</button></div>}
+    {kind === 'image' && <ZoomImage src={file.url} alt={file.name} onError={fail} />}
+    {kind === 'video' && <video src={file.url} controls onError={fail} />}
+    {kind === 'audio' && <audio src={file.url} controls onError={fail} />}
+    {kind === 'unsupported' && <div className="file-unsupported"><Icon name="files" size={38} /><h2>{file.name}</h2><p>{reason}</p><button className="desk-secondary" onClick={() => api('/reveal', { path: file.path }).catch(reportError)}>Show in {fileManager}</button></div>}
   </div></div>
 }
 
-const pathKey = (path: string) => path.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase()
-const fileName = (path: string) => path.replace(/[\\/]$/, '').split(/[\\/]/).pop() || path
+// A backslash is a legal file-name character on macOS, not a separator.
+const separator = isMac ? /\// : /[\\/]/
+const pathKey = (path: string) => (isMac ? path : path.replace(/\\/g, '/')).replace(/\/$/, '').toLowerCase()
+const fileName = (path: string) => path.replace(isMac ? /\/$/ : /[\\/]$/, '').split(separator).pop() || path
+const parentPath = (path: string) => path.replace(isMac ? /\/[^/]+$/ : /[\\/][^\\/]+$/, '')
 const message = (error: unknown) => error instanceof Error ? error.message : String(error)
 function RevealFolder({ path, name }: { path: string; name: string }) {
   return <button className="file-reveal" title={`Show ${name} in ${fileManager}`} aria-label={`Show ${name} in ${fileManager}`} onClick={event => { event.stopPropagation(); api('/reveal', { path }).catch(reportError) }}><Icon name="external" size={14} /></button>
@@ -55,7 +63,7 @@ function FolderBranch({ path, mode = 'all', depth = 1, ancestors = [], tree, onL
   if (!folder) return <p className="file-tree-note">Loading folder…</p>
   if (ancestors.includes(pathKey(folder.path))) return <p className="file-tree-note">Linked folder already shown above.</p>
   if (depth > 20) return <button className="file-tree-note" onClick={() => api('/reveal', { path }).catch(reportError)}>Open this deep folder in {fileManager}</button>
-  const entries = folder.entries.filter(entry => entry.directory || entry.name.toLowerCase().includes(tree.query.toLowerCase()))
+  const entries = folder.entries.filter(entry => entry.directory || entry.name.normalize('NFC').toLowerCase().includes(tree.query.normalize('NFC').toLowerCase()))
   return <div role="group" {...tree.dropProps(folder.path)}>{entries.map(entry => {
     const expanded = tree.expanded.has(pathKey(entry.path))
     return <div role="none" key={entry.path}>
@@ -148,7 +156,7 @@ export default function FilesRail() {
       setStatus(`${fileName(result.path)} moved to ${trashName}.`)
       const preview = desktopState().preview
       if (preview && (pathKey(preview.path) === pathKey(result.path) || pathKey(preview.path).startsWith(pathKey(result.path) + '/'))) setPreview(null)
-      const parent = result.path.replace(/[\\/][^\\/]+$/, '')
+      const parent = parentPath(result.path)
       setSelected(parent); setDestination(parent); refresh()
     }
     window.addEventListener('mrmak-native-drag-result', complete)
@@ -205,7 +213,8 @@ export default function FilesRail() {
     await copy(Array.from(event.dataTransfer.files), folder)
   }, [copy, refresh])
   const deleteKey = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== 'Delete') { treeKeys(event); return }
+    // Mac keyboards have no forward Delete key; accept Finder's ⌘⌫ as well.
+    if (event.key !== 'Delete' && !(isMac && event.metaKey && event.key === 'Backspace')) { treeKeys(event); return }
     event.preventDefault(); event.stopPropagation()
     const path = (event.target as HTMLElement).closest('[role="treeitem"]')?.getAttribute('data-path')
     if (event.repeat || !path || recycleLock.current || copyLock.current) return
@@ -228,7 +237,7 @@ export default function FilesRail() {
   })
   const tree: TreeControls = {
     expanded, selected, dropTarget, query, revision, toggle, dropProps,
-    preview: entry => { setSelected(entry.path); setDestination(entry.path.replace(/[\\/][^\\/]+$/, '')); api<Preview>(`/preview?path=${encodeURIComponent(entry.path)}`).then(setPreview).catch(reportError) },
+    preview: entry => { setSelected(entry.path); setDestination(parentPath(entry.path)); api<Preview>(`/preview?path=${encodeURIComponent(entry.path)}`).then(setPreview).catch(reportError) },
     drag: (event, path, directory) => {
       // Hand the held mouse gesture to the OS (Windows OLE / macOS drag session) with real file paths.
       event.preventDefault(); internalDrag.current = { path, directory, handled: false }; setError(''); setStatus(directory ? 'Drop into Chats to insert this folder path. Esc cancels.' : 'Drop into Chats to insert a path, or into another folder to move. Esc cancels.')
@@ -251,7 +260,7 @@ export default function FilesRail() {
         <div role="none" className="file-entry has-reveal" {...dropProps(root)}><button role="treeitem" aria-level={1} aria-expanded="true" aria-selected={pathKey(selected) === pathKey(root)} className={`file-row file-root-row ${dropTarget === pathKey(root) ? 'drop-target' : ''}`} onClick={() => { setSelected(root); setDestination(root) }} {...dropProps(root)} title={root}><Icon name="arrow" size={11} style={{ transform: 'rotate(90deg)' }} /><Icon name="folder" size={15} /><span>{pathKey(root) === pathKey(repo) ? 'MR-MAK' : fileName(root)}</span></button><RevealFolder path={root} name={pathKey(root) === pathKey(repo) ? 'MR-MAK' : fileName(root)} /></div>
         <FolderBranch key={`${root}:${mode}`} path={root} mode={mode} tree={tree} onLoad={loaded} />
       </div>
-      <div className="file-transfer-status" aria-live="polite">{error && <p className="desk-error-inline">{error}</p>}{status && <p>{status}</p>}<small title={destination}>{copying ? 'Transferring files…' : `Drag to move · Delete to ${trashName}`}</small></div>
+      <div className="file-transfer-status" aria-live="polite">{error && <p className="desk-error-inline">{error}</p>}{status && <p>{status}</p>}<small title={destination}>{copying ? 'Transferring files…' : `Drag to move · ${isMac ? '⌘⌫' : 'Delete'} to ${trashName}`}</small></div>
       <footer><button onClick={() => navigate(repo)}>MR-MAK root</button></footer>
     </div>}
     <div className="files-rail">{(['files', 'skills', 'mcp', 'settings'] as const).map(name => <button key={name} className={`rail-tool ${open && panel === name ? 'active' : ''}`} onClick={() => showPanel(name)} title={name === 'mcp' ? 'MCP' : name[0].toUpperCase() + name.slice(1)} aria-label={`Toggle ${name}`} aria-pressed={open && panel === name}><Icon name={name === 'files' ? 'folder' : name} size={18} /><span>{name === 'mcp' ? 'MCP' : name}</span></button>)}<button className="rail-tool" title="Workspace help" aria-label="Open Workspace help" onClick={() => api<Preview>('/preview?path=workspace%2F_shared%2Fhelp.md').then(setPreview).catch(reportError)}><Icon name="help" size={18} /><span>Help</span></button><div className="rail-spacer" /><button className="desk-icon" title="Show Chats" onClick={() => windowAction('chats')}><Icon name="chats" size={18} /></button></div>

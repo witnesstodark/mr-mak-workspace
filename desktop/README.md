@@ -9,7 +9,7 @@ xterm.js. The windows share sessions and settings but minimize independently.
 | --- | --- |
 | `src/` | React Workspace, document previews, files, chat and voice UI |
 | `desktop/service/` | HTTP/WebSocket service, PTYs, session history, tools, voice connection |
-| `src-tauri/src/` | Cross-platform shell integration plus Windows taskbar identities, native drag and optional system shortcut |
+| `src-tauri/src/` | Cross-platform shell integration plus Windows taskbar identities, macOS login-shell PATH and key handling, native drag and optional system shortcut |
 | `workspace/workspace.json` | Card registry |
 | `workspace/_shared/` | Report CSS, image viewer and Help |
 | `.mrmak/` | Local runtime state; ignored by Git |
@@ -36,8 +36,9 @@ origin marker. Shared working directories alone are not proof of ownership.
 
 New Codex and Claude chats default to `xhigh`; explicit saved effort choices are
 preserved. Terminal URLs and OSC 8 links use xterm link handlers. New-window
-requests from both app windows open HTTP(S) links through the Windows default
-browser association, while the current app view stays open.
+requests from both app windows open HTTP(S) links in the system default browser
+(the Windows shell association, `open` on macOS, `xdg-open` on Linux), while the
+current app view stays open.
 
 Fullscreen Claude scrolls its own conversation. Terminal snapshots preserve
 both mouse tracking and the requested SGR encoding, including saved screens,
@@ -90,14 +91,23 @@ npm run desktop:test:ui
 npm run test:preview
 ```
 
+The same commands run in zsh or bash on macOS and Linux.
+
 The root install also installs the locked `desktop/service` dependencies. If
 you deliberately use `npm ci --ignore-scripts`, run
-`npm --prefix desktop/service ci` before tests or the local service.
+`npm --prefix desktop/service ci` before tests or the local service, and on
+macOS also `node scripts/fix-pty-permissions.mjs`: npm can unpack node-pty's
+`spawn-helper` without the execute bit, and terminals then fail with
+`posix_spawnp failed`.
 
-UI tests use an isolated repository and fake terminals. Edge must be available
-on Windows, or set `MRMAK_TEST_BROWSER` to a Playwright browser channel you have
-installed. Live voice and subscription smoke checks are separate scripts with
-explicit opt-in flags; they are never part of the default test command.
+UI tests use an isolated repository and fake terminals. They run in the engine
+of each platform's app: Edge (WebView2) must be available on Windows; on macOS
+they use Playwright WebKit (WKWebView), so run `npx playwright install webkit`
+once after `npm ci`, as the macOS CI job does. Set `MRMAK_TEST_BROWSER` to
+`msedge`, `chrome`, `chromium` or `webkit` to override; `chromium` and `webkit`
+need `npx playwright install <name>` first. Live voice and subscription smoke
+checks are separate scripts with explicit opt-in flags; they are never part of
+the default test command.
 
 OpenCode has a separate no-account integration test against a local mock model:
 
@@ -105,16 +115,27 @@ OpenCode has a separate no-account integration test against a local mock model:
 node desktop/service/test-opencode-native.mjs --binary C:\path\to\opencode.exe --tui
 ```
 
+On macOS or Linux:
+
+```sh
+node desktop/service/test-opencode-native.mjs --binary "$(command -v opencode)" --tui
+```
+
 It isolates the CLI's home and data directories, verifies two separate native
 histories, then closes and resumes a real terminal. Tested with OpenCode 1.18.3
 and 2.0.21 on Windows. No paid model calls are made.
 
-Windows x64 and Linux are supported native targets. macOS remains a future target;
-the shared platform boundary avoids making Linux behavior a prerequisite for it.
+Windows x64, Linux and macOS are supported native targets. The macOS app is
+ad-hoc signed (not notarised) and Apple Silicon only; build steps and limits are in
+[docs/macos.md](../docs/macos.md).
 
 Read aloud uses fixed, free local voices: Michael (US man) and Emma (UK woman).
 Run `powershell -ExecutionPolicy Bypass -File scripts/setup-local-read-aloud.ps1`
-on Windows once. Models and the CPU Python environment stay under the ignored
+on Windows once. On macOS, run `brew install python@3.12`, then
+`python3.12 scripts/setup-local-voice.py read-aloud`; on Linux, use any
+Python 3.10-3.12. See
+[local voice setup](../docs/mobile-access.md#local-voice-setup-on-the-computer).
+Models and the CPU Python environment stay under the ignored
 `.cache/read-aloud` folder; no cloud speech key or paid account is needed.
 Phone settings stores the voice choice. The mobile service lazily starts its
 own voice worker and releases it after idle time; updating service files requires

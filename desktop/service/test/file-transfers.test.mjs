@@ -104,4 +104,15 @@ test('internal drops move files, same-folder drops do nothing, collisions retain
   assert.deepEqual(await readdir(folder), []);
   await assert.rejects(recyclePath(repo, repo), /repository/);
   assert.equal(await recyclePath(result.path, repo), result.path);
+  if (process.platform === 'darwin') {
+    // The default APFS volume ignores case: another spelling is still the repository.
+    const variant = name => name.replace(/[a-z]/g, letter => letter.toUpperCase());
+    await assert.rejects(recyclePath(path.join(path.dirname(repo), variant(path.basename(repo))), repo), /repository/);
+    await assert.rejects(recyclePath(path.join(path.dirname(path.dirname(repo)), variant(path.basename(path.dirname(repo)))), repo), /repository/);
+    // The Data volume's firmlink spelling names the same folders.
+    if (repo.startsWith('/private/') || repo.startsWith('/Users/')) {
+      await assert.rejects(recyclePath('/System/Volumes/Data' + repo, repo), /repository/);
+      await assert.rejects(recyclePath('/System/Volumes/Data' + path.dirname(repo), repo), /repository/);
+    }
+  }
 });

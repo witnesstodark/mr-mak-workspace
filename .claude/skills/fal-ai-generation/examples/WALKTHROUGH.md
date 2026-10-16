@@ -6,7 +6,8 @@ ID. I will choose whether to make an edit after reviewing it."
 
 The agent selects a model from current discovery, or uses one you named. The
 included input is a Nano Banana Pro example, not a standing model preference.
-From this skill directory, rehearse locally:
+From this skill directory, rehearse locally (on macOS or Linux, use `python3` or
+the `.venv/bin/python` from [setup](../references/setup.md) instead of `python`):
 
 ```text
 python scripts/fal_job.py submit --endpoint fal-ai/nano-banana-pro --input examples/concept.json --out output/robot --dry-run

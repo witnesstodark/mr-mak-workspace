@@ -2,7 +2,7 @@ import { open, realpath, stat, lstat, unlink, link, copyFile } from 'node:fs/pro
 import { constants } from 'node:fs';
 import path from 'node:path';
 import { within } from './util.mjs';
-import { invalidFilename, samePath } from './platform.mjs';
+import { invalidFilename, isWindows, samePath } from './platform.mjs';
 
 export const MAX_FILE_BYTES = 1024 * 1024 * 1024;
 const invalid = message => Object.assign(new Error(message), { status: 400 });
@@ -63,8 +63,22 @@ export async function entryPath(value) {
 
 export async function recyclePath(value, repo) {
   const actual = await entryPath(value);
-  if (within(actual, repo)) throw invalid('The MR-MAK repository and its parent folders cannot be deleted here.');
+  if (within(actual, repo) || (!isWindows && await holdsRepo(actual, repo))) throw invalid('The MR-MAK repository and its parent folders cannot be deleted here.');
   return actual;
+}
+
+// entryPath keeps the caller's spelling, and on a Mac neither that nor realpath
+// settles identity: `myrepo` on a case-insensitive volume or a
+// /System/Volumes/Data firmlink path is still the repository. Compare inodes
+// instead; a link is checked (and recycled) as the link itself.
+async function holdsRepo(entry, repo) {
+  const target = await lstat(entry);
+  if (target.isSymbolicLink()) return false;
+  for (let folder = repo; ; folder = path.dirname(folder)) {
+    const info = await stat(folder).catch(() => null);
+    if (info && info.dev === target.dev && info.ino === target.ino) return true;
+    if (path.dirname(folder) === folder) return false;
+  }
 }
 
 export async function moveFile(value, folder) {

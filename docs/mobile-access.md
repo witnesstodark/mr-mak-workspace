@@ -79,12 +79,30 @@ recording device until transcribed or discarded.
 ### Local voice setup on the computer
 
 Install Python 3.10-3.12 (3.12 recommended). From the repository folder on
-Windows, use these commands; on macOS/Linux, replace `python` with `python3`:
+Windows, use these commands:
 
 ```sh
 python scripts/setup-local-voice.py dictation
 python scripts/setup-local-voice.py read-aloud
 ```
+
+On macOS, call Python 3.12 by its versioned name. The system `/usr/bin/python3`
+is 3.9 and Homebrew's default `python3` is usually newer than 3.12. When either
+runs the script, it switches to an installed Python 3.10-3.12 (Homebrew or
+uv-managed) by itself, or stops with the install command. It also handles the
+python.org installer's missing certificates. With [Homebrew](https://brew.sh)
+(or the python.org 3.12 installer instead of the first line):
+
+```sh
+brew install python@3.12
+python3.12 scripts/setup-local-voice.py dictation
+python3.12 scripts/setup-local-voice.py read-aloud
+```
+
+On Linux, use any Python 3.10-3.12, for example `python3` or `python3.12`.
+
+On a Mac with Apple Silicon, local dictation needs macOS 14 or later and Read
+aloud needs macOS 13 or later; the script stops with this message on older versions.
 
 Each command is optional. It creates a separate environment under `.cache`,
 installs pinned Python packages and verifies the model files against SHA-256
@@ -215,8 +233,10 @@ already playing; tap Read aloud again to include them.
 Speech is generated locally on your computer with Kokoro ONNX. Phone settings
 has exactly Michael (US man) and Emma (UK woman); the choice is saved on that
 phone. Browser voice lists and other accents are not used. No API key or paid
-speech provider is required. Run `python scripts/setup-local-voice.py read-aloud` (`python3` on macOS/Linux) once on
-Windows to install an isolated CPU environment and download the official model.
+speech provider is required. Run the read-aloud command from
+[local voice setup](#local-voice-setup-on-the-computer) once on your computer
+(`python3.12 scripts/setup-local-voice.py read-aloud` on macOS) to install an
+isolated CPU environment and download the official model.
 After setup, inference is offline; text/audio are not sent to a cloud provider.
 The phone receives short WAV segments through its paired, authenticated session.
 Audio and text are kept in memory and discarded after playback. Stop cancels

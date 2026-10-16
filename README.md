@@ -54,7 +54,7 @@ the optional Live voice coordinator still uses OpenAI API billing.
 
 - **Your files, close at hand.** Browse a folder tree with Main folders or All
   files, jump to `inbox`, `projects`, `workspace`, `knowledge` and `processes`,
-  and open any folder in Windows Explorer.
+  and open any folder in Windows Explorer, macOS Finder or your file manager.
 - **Readable notes you can edit.** Open Markdown as a formatted document, switch
   to Edit, and save changes in the same window. Preview images, video and audio
   alongside the file tree.
@@ -117,9 +117,10 @@ into a folder you control. Open that folder in your installed Codex CLI,
 Claude Code CLI or OpenCode and paste:
 
 > Set up this Mr. Mak Workspace repository on my computer. Read AGENTS.md and
-> docs/getting-started.md, check the prerequisites, and help me run the Windows
-> desktop app. Use my own CLI accounts. Leave optional voice, paid providers,
-> MCP connections and the Win-key shortcut off until I choose to connect them.
+> docs/getting-started.md, check the prerequisites, and help me run the desktop
+> app for my operating system. Use my own CLI accounts. Leave optional voice,
+> paid providers, MCP connections and the window-recall shortcut (Win key on
+> Windows) off until I choose to connect them.
 > Keep my credentials in the ignored .env file. Show me the four examples and
 > help me replace them with my own project.
 
@@ -132,9 +133,11 @@ On Windows, download the installer from [Releases](https://github.com/witnesstod
 install **Mr. Mak Workspace**, then open **Start Mr. Mak.cmd** in your cloned
 repository. On Linux, build the Tauri desktop target after installing the Node,
 Rust and WebKitGTK prerequisites, then launch the resulting AppImage/deb install
-with `--repo /path/to/your/workspace`. On macOS, run `./setup.sh desktop` to build `Mr. Mak Workspace.app`, then open
-**Start Mr. Mak.command** ([macOS notes](docs/getting-started.md#macos)). On every system, use **+** in Chats to
-open an installed CLI and sign in with your own account.
+with `--repo /path/to/your/workspace`. On macOS (Apple Silicon), download the
+`.dmg` from the same Releases page or run `./setup.sh desktop` to build
+`Mr. Mak Workspace.app`, then open **Start Mr. Mak.command**
+([macOS notes](docs/getting-started.md#macos)). On every system, use **+** in
+Chats to open an installed CLI and sign in with your own account.
 
 The installer includes the local Node service. It does not include Codex,
 Claude Code, Antigravity, OpenCode, Kimi, Blender, Python or provider accounts.
@@ -146,16 +149,23 @@ Follow the
 [update guide](docs/updating.md) to update the app and add skills to your existing
 repository without replacing your projects.
 
-To build from source, install Node.js 22.20+ and the Windows Tauri build
-prerequisites, then run:
+To build from source, install Node.js 22.20+ and the Tauri build prerequisites
+for your operating system, then run on Windows:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\Setup.ps1 -Mode Check
 powershell -ExecutionPolicy Bypass -File .\Setup.ps1 -Mode Desktop
 ```
 
-For a browser preview of the reports, use `-Mode Preview` with Node.js 22.20+
-and npm. Rust and C++ Build Tools are needed only to compile the native desktop
+On macOS or Linux:
+
+```bash
+./setup.sh check
+./setup.sh desktop
+```
+
+For a browser preview of the reports, use `-Mode Preview` (macOS/Linux:
+`./setup.sh preview`) with Node.js 22.20+ and npm. Rust and C++ Build Tools are needed only to compile the native desktop
 app; they are not required for Preview or the downloaded installer. The native
 desktop app adds managed terminals, local file operations and voice.
 See [getting started](docs/getting-started.md) for the complete setup and
@@ -176,7 +186,8 @@ them, or archive all four when you are ready.
 ![Inside My Dream Game: the included Mr. Mak 64 project](docs/assets/workspace.png)
 
 Terminal text settings let you adjust readability. In agent chats, Ctrl+C copies
-selected text; PowerShell keeps normal shell behavior.
+selected text; PowerShell keeps normal shell behavior. On macOS, ⌘C and ⌘V copy
+and paste, and Ctrl+C reaches the CLI as in Terminal.app.
 Click web links in chats or cards to open your default browser. New Codex and
 Claude chats start with `xhigh` effort; saved effort choices are preserved.
 OpenCode keeps its own model and reasoning configuration.
@@ -221,11 +232,11 @@ The research sample is a shortlist, not a claim that those tools are installed.
 
 Edit the placeholder files in `context/`, keep reusable lessons in `knowledge/`,
 and save workflows in `processes/`. English is the default for stored content;
-ask for another language whenever you need it. The app's Win-key shortcut and
-permission bypass both start disabled.
+ask for another language whenever you need it. The app's window-recall shortcut
+(Win key on Windows) and permission bypass both start disabled.
 
 Desktop source builds support **Windows x64, Linux and macOS**. The Mac app is
-unsigned; see the [macOS setup and limitations](docs/macos.md) before installing.
+ad-hoc signed (not notarised) and Apple Silicon only; see the [macOS setup and limitations](docs/macos.md) before installing.
 See [customization](docs/customization.md) and
 [sharing your version](docs/sharing.md).
 

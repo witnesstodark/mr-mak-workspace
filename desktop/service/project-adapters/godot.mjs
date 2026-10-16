@@ -1,7 +1,8 @@
 import { realpath, readFile, readdir, stat } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { projectMatch, projectRef } from './contracts.mjs';
-import { resolveCommand } from '../platform.mjs';
+import { isExecutable, isMacOS, resolveCommand } from '../platform.mjs';
 
 const MAX_ANCESTORS = 12;
 const configValue = (text, section, key) => {
@@ -40,6 +41,13 @@ async function executable() {
   for (const name of ['godot', 'godot4']) {
     const found = resolveCommand(name);
     if (found) return found;
+  }
+  // The official .dmg and Steam install an app bundle without a command on PATH.
+  if (isMacOS) {
+    const home = os.homedir();
+    const bundles = ['/Applications', path.join(home, 'Applications')].flatMap(folder => ['Godot.app', 'Godot_mono.app'].map(app => path.join(folder, app)));
+    bundles.push(path.join(home, 'Library', 'Application Support', 'Steam', 'steamapps', 'common', 'Godot Engine', 'Godot.app'));
+    return bundles.map(bundle => path.join(bundle, 'Contents', 'MacOS', 'Godot')).find(isExecutable) || null;
   }
   return null;
 }

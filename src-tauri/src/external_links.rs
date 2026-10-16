@@ -33,11 +33,29 @@ fn open_browser(url: &tauri::Url) -> Result<(), String> {
     }
 }
 
+// Start a helper without blocking the caller, and reap it once it exits so it
+// never lingers as a zombie.
+#[cfg(not(windows))]
+fn spawn_reaped(command: &mut std::process::Command) -> std::io::Result<()> {
+    let mut child = command.spawn()?;
+    std::thread::spawn(move || { let _ = child.wait(); });
+    Ok(())
+}
+
+// Finder shows a package (an .app, .rtfd, .xcodeproj …) as a single file, and
+// `open` on it would launch it, so it is revealed like a file.
+#[cfg(not(windows))]
+fn is_package(target: &std::path::Path) -> bool {
+    const EXTENSIONS: [&str; 11] = ["xcodeproj", "xcworkspace", "rtfd", "xcassets", "playground", "pages", "numbers", "key", "photoslibrary", "scptd", "lproj"];
+    cfg!(target_os = "macos") && target.is_dir() && (target.join("Contents/Info.plist").is_file()
+        || target.extension().and_then(|extension| extension.to_str()).is_some_and(|extension| EXTENSIONS.contains(&extension.to_ascii_lowercase().as_str())))
+}
+
 #[cfg(not(windows))]
 fn open_browser(url: &tauri::Url) -> Result<(), String> {
     use std::process::Command;
     let program = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
-    Command::new(program).arg(url.as_str()).spawn().map(|_| ()).map_err(|error| format!("Could not start {program}: {error}"))
+    spawn_reaped(Command::new(program).arg(url.as_str())).map_err(|error| format!("Could not start {program}: {error}"))
 }
 
 pub fn reveal_path(path: &str) -> Result<(), String> {
@@ -53,12 +71,12 @@ pub fn reveal_path(path: &str) -> Result<(), String> {
     #[cfg(not(windows))]
     {
         // Finder can select the file itself; xdg-open can only open its folder.
-        if cfg!(target_os = "macos") && !target.is_dir() {
-            return Command::new("open").arg("-R").arg(target).spawn().map(|_| ()).map_err(|error| format!("Could not open Finder: {error}"));
+        if cfg!(target_os = "macos") && (!target.is_dir() || is_package(target)) {
+            return spawn_reaped(Command::new("open").arg("-R").arg(target)).map_err(|error| format!("Could not open Finder: {error}"));
         }
         let folder = if target.is_dir() { target } else { target.parent().unwrap_or(target) };
         let program = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
-        Command::new(program).arg(folder).spawn().map(|_| ()).map_err(|error| format!("Could not start {program}: {error}"))
+        spawn_reaped(Command::new(program).arg(folder)).map_err(|error| format!("Could not start {program}: {error}"))
     }
 }
 
@@ -76,6 +94,19 @@ mod tests {
         for text in ["javascript:alert(1)", "file:///C:/Windows/notepad.exe", "data:text/html,test", "mailto:test@example.com", "ms-settings:defaultapps"] {
             assert!(!is_web_url(&tauri::Url::parse(text).unwrap()));
         }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn packages_are_revealed_like_files() {
+        let root = std::env::temp_dir().join(format!("mrmak-package-test-{}", std::process::id()));
+        for folder in ["Plain", "Tool.app/Contents", "Notes.RTFD"] { std::fs::create_dir_all(root.join(folder)).unwrap(); }
+        std::fs::write(root.join("Tool.app/Contents/Info.plist"), "").unwrap();
+        assert!(!is_package(&root.join("Plain")));
+        assert!(is_package(&root.join("Tool.app")));
+        assert!(is_package(&root.join("Notes.RTFD")));
+        assert!(!is_package(&root.join("missing.rtfd")));
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[cfg(windows)]

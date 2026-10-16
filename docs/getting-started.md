@@ -30,7 +30,8 @@ conversation also relies on that CLI's native session files.
 
 ## Connect one agent
 
-Install at least one required CLI using its current official Windows instructions:
+Install at least one required CLI using its current official instructions for
+your operating system:
 
 - [Codex CLI](https://developers.openai.com/codex/cli)
 - [Claude Code](https://code.claude.com/docs/en/setup)
@@ -109,32 +110,53 @@ terminals is described in [voice dictation](../knowledge/voice-dictation.md).
 
 ## macOS
 
-There is no prebuilt Mac download; build the app once from source (about five
-minutes). Install Node.js 22.20+, [Rust](https://rustup.rs) and the Xcode
-Command Line Tools (`xcode-select --install`), then run:
+On an Apple Silicon Mac, download the macOS `.dmg` from
+[GitHub Releases](https://github.com/witnesstodark/mr-mak-workspace/releases/latest),
+or build the app once from source (about five minutes). To build, install
+Node.js 22.20+, [Rust](https://rustup.rs) and the Xcode Command Line Tools
+(`xcode-select --install`), then run:
 
 ```bash
 ./setup.sh check      # report prerequisites
 ./setup.sh desktop    # build Mr. Mak Workspace.app and a .dmg
+./setup.sh preview    # optional: browser-only report preview (Node and npm only)
 ```
 
-Drag `src-tauri/target/release/bundle/macos/Mr. Mak Workspace.app` to
-Applications and double-click **Start Mr. Mak.command** in the cloned folder.
-The build bundles a self-contained Node runtime, so a Homebrew Node is fine.
-The app is not signed: the first time, right-click it and choose Open.
+Drag `Mr. Mak Workspace.app` to Applications, from the opened `.dmg` or from
+`src-tauri/target/release/bundle/macos/`, then double-click
+**Start Mr. Mak.command** in the cloned folder. The build bundles a
+self-contained Node runtime, so a Homebrew Node is fine.
+
+The app is signed ad hoc but not notarised. A copy you build yourself opens
+without a Gatekeeper prompt. If macOS blocks a downloaded copy, open System Settings >
+Privacy & Security and choose **Open Anyway**. If it reports the app as damaged,
+remove the download quarantine once:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Mr. Mak Workspace.app"
+```
+
+To update a source build, follow the [macOS update steps](updating.md#macos-source-build).
+**Start Mr. Mak.command** warns when the build folder holds a newer app than
+Applications and prints the replace command; after a normal launch its Terminal
+window closes itself.
 
 Differences from Windows:
 
 - Shortcuts use ⌘ instead of Ctrl (⌘⇧T new chat, ⌘⇧P find, ⌘⇧H history,
   ⌘1–9 switch chats, also in the Chats menu; Ctrl+Tab still cycles). In terminals ⌘C/⌘V copy and paste,
   and Ctrl+C reaches the CLI as in Terminal.app.
-- Settings > Shortcut: **⌃⌥Space** brings back the windows from any app (the
+- Settings > Shortcut: **⌃⌥⌘Space** brings back the windows from any app (the
   Win-key equivalent). Clicking the Dock icon also restores closed windows.
 - Both windows share one Dock icon; the menu-bar icon offers Show Workspace,
   Show Chats and Quit.
 - The first voice recording asks for microphone access.
+- In terminals, Option types your keyboard layout's characters (such as @ or
+  #); Settings > Chats > **Use Option as Meta key** turns Option into a Meta key.
+- Optional local dictation and Read aloud need Python 3.12 called as
+  `python3.12`; see [local voice setup](mobile-access.md#local-voice-setup-on-the-computer).
 - `./scripts/check-macos-native.sh` checks the native parts (menus, shortcuts,
-  Dock reopen, ⌃⌥Space) through Accessibility; it needs the screen for ~30 s.
+  Dock reopen, ⌃⌥⌘Space) through Accessibility; it needs the screen for ~30 s.
 
 Details of the port, verification and known limits: [macOS notes](macos.md).
 
@@ -143,7 +165,8 @@ Details of the port, verification and known limits: [macOS notes](macos.md).
 From a fresh clone, `npm ci` installs both the frontend and local desktop
 service dependencies. Then `npm test` runs the service checks; no separate
 service install is needed. If you disable npm lifecycle scripts, run
-`npm --prefix desktop/service ci` explicitly before tests or the service.
+`npm --prefix desktop/service ci` explicitly before tests or the service; on
+macOS, also run `node scripts/fix-pty-permissions.mjs` so terminals can start.
 
 Install [Node.js](https://nodejs.org/en/download), Rust's MSVC toolchain and
 [Tauri's Windows prerequisites](https://v2.tauri.app/start/prerequisites/#windows):
@@ -153,6 +176,9 @@ Microsoft C++ Build Tools and WebView2. Node.js 22.20+ is required by this templ
 powershell -ExecutionPolicy Bypass -File .\Setup.ps1 -Mode Check
 powershell -ExecutionPolicy Bypass -File .\Setup.ps1 -Mode Desktop
 ```
+
+On macOS and Linux, `./setup.sh check` and `./setup.sh desktop` do the same
+(see [macOS](#macos)).
 
 Check only reports prerequisites. Desktop installs project dependencies and
 builds an installer in `src-tauri/target/release/bundle/nsis`. It does not install
@@ -170,6 +196,8 @@ tray, checks that the bundled service has exited, installs the build silently
 and opens the same repository again. Finish active chats before quitting.
 The registered installation folder is reused. Pass `-InstallDirectory 'D:\Apps\Mr. Mak Workspace'`
 if you need to choose it explicitly. The update never terminates your chats itself.
+Update mode is Windows-only; on macOS, follow the
+[macOS update steps](updating.md#macos-source-build).
 
 For a report-only browser preview, only Node.js 22.20+ and npm are needed beyond
 the CLI prerequisite above. **Rust, Cargo and C++ Build Tools are not required
@@ -178,6 +206,12 @@ compile the desktop app from source.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\Setup.ps1 -Mode Preview
+```
+
+On macOS or Linux:
+
+```bash
+./setup.sh preview
 ```
 
 That starts Vite and links `public/workspace` to the real Workspace folder.

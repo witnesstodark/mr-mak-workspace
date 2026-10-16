@@ -2,16 +2,20 @@ import { createReadStream } from 'node:fs';
 import { readdir, readFile, stat, realpath, mkdir, writeFile, rename, unlink } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
-import { realFile, secret, within } from './util.mjs';
+import { expandHome, realFile, secret, within } from './util.mjs';
+import { isMacOS } from './platform.mjs';
 import { serveReport } from './report-chrome.mjs';
 
 const mime = {
   '.html': 'text/html; charset=utf-8', '.htm': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
   '.webp': 'image/webp', '.gif': 'image/gif', '.bmp': 'image/bmp', '.ico': 'image/x-icon', '.pdf': 'application/pdf', '.mp4': 'video/mp4', '.webm': 'video/webm',
-  '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.glb': 'model/gltf-binary', '.gltf': 'model/gltf+json', '.bin': 'application/octet-stream',
+  '.m4v': 'video/mp4', '.mp3': 'audio/mpeg', '.m4a': 'audio/mp4', '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.glb': 'model/gltf-binary', '.gltf': 'model/gltf+json', '.bin': 'application/octet-stream',
   '.woff2': 'font/woff2', '.woff': 'font/woff', '.ttf': 'font/ttf', '.wasm': 'application/wasm', '.txt': 'text/plain; charset=utf-8', '.md': 'text/plain; charset=utf-8',
 };
+// WebKit on macOS plays QuickTime screen recordings and shows iPhone photos.
+// WebView2 and WebKitGTK may not, so they keep the "Open in its application" card.
+if (isMacOS) Object.assign(mime, { '.mov': 'video/quicktime', '.heic': 'image/heic', '.heif': 'image/heif' });
 const textExtensions = new Set(['.txt', '.md', '.json', '.js', '.mjs', '.ts', '.tsx', '.jsx', '.css', '.py', '.rs', '.toml', '.yaml', '.yml', '.csv', '.log', '.xml', '.ini', '.ps1', '.cmd', '.sh', '.gitignore']);
 const secretPart = value => value.startsWith('.') || /^(node_modules|target|oauth_.*\.json|.*_secret.*\.json|tokens?\.json|auth\.json)$/i.test(value);
 
@@ -48,10 +52,10 @@ export class Files {
     return `${this.origin}/view/${this.grant(root)}/${path.relative(root, absolute).split(path.sep).map(encodeURIComponent).join('/')}`;
   }
   async list(folder = this.repo, mode = 'main', query = '') {
-    const actual = await realpath(path.resolve(folder));
+    const actual = await realpath(path.resolve(expandHome(folder)));
     const entries = await readdir(actual, { withFileTypes: true });
     const atRoot = actual.toLowerCase() === this.repo.toLowerCase();
-    const filtered = entries.filter(entry => (!atRoot || mode === 'all' || ['inbox', 'projects', 'workspace', 'knowledge', 'processes', 'context'].includes(entry.name)) && (!query || entry.name.toLowerCase().includes(query.toLowerCase())));
+    const filtered = entries.filter(entry => (!atRoot || mode === 'all' || ['inbox', 'projects', 'workspace', 'knowledge', 'processes', 'context'].includes(entry.name)) && (!query || entry.name.normalize('NFC').toLowerCase().includes(query.normalize('NFC').toLowerCase())));
     const result = await Promise.all(filtered.slice(0, 1500).map(async entry => {
       const full = path.join(actual, entry.name);
       const info = await stat(full).catch(() => null);
@@ -67,7 +71,7 @@ export class Files {
     return { path: actual, parent: path.dirname(actual), entries: result, truncated: filtered.length > 1500, mode };
   }
   async preview(file) {
-    const actual = await realpath(path.resolve(file));
+    const actual = await realpath(path.resolve(expandHome(file)));
     const info = await stat(actual);
     if (!info.isFile()) throw new Error('Choose a file to preview');
     const ext = path.extname(actual).toLowerCase();

@@ -28,12 +28,25 @@ does not require creating an image.
 
 ## Optional Python helper
 
-Use Python 3.10+ and install the small dependency file from this skill directory:
+Use Python 3.10+ and install the small dependency file from this skill directory.
+On Windows:
 
 ```text
 python -m pip install -r scripts/requirements.txt
 python scripts/fal_job.py --help
 ```
+
+On macOS or Linux, `python` may not exist and Homebrew's Python refuses global
+`pip install`; the macOS system `/usr/bin/python3` is 3.9. Use a virtual
+environment created with Python 3.10+ (for example Homebrew's `python3`):
+
+```text
+python3 -m venv .venv
+.venv/bin/python -m pip install -r scripts/requirements.txt
+.venv/bin/python scripts/fal_job.py --help
+```
+
+The commands below write `python`; on macOS or Linux, use `.venv/bin/python`.
 
 Set `FAL_KEY` in the environment or in your project's ignored `.env`. The helper
 also understands legacy `FALAI_KEY` and Mr. Mak's scoped MCP Bearer variable.

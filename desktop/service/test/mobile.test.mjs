@@ -266,6 +266,17 @@ test('Tailscale setup preserves other routes and refuses a public Funnel route',
   await assert.rejects(transport.enable('http://127.0.0.1:12346', saved), /publicly shared/);
 });
 
+test('a Tailscale Serve failure gives advice for this operating system only', async () => {
+  const transport = new TailscaleTransport();
+  transport.probe = async () => ({ ready: true, hostname: 'pc.example.ts.net' });
+  transport.config = async () => ({});
+  transport.command = async () => { throw new Error('serve failed'); };
+  const error = await transport.enable('http://127.0.0.1:12345').catch(value => value);
+  assert.match(error.message, /Enable HTTPS for this device/);
+  assert.equal(/Windows/.test(error.message), process.platform === 'win32');
+  assert.equal(/Tailscale app is running/.test(error.message), process.platform === 'darwin');
+});
+
 
 test('conversation images require pairing and grants belong to the requesting phone and chat', async t => {
   const { gateway, request, pair, repo, id, session } = await fixture(t);

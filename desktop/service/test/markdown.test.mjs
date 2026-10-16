@@ -35,6 +35,23 @@ test('Main folders expose local Claude and Codex skills alongside knowledge and 
   assert.ok(result.entries.every(entry => entry.directory && path.isAbsolute(entry.path)));
 });
 
+test('Files preview Mac media and find decomposed (NFD) names with typed queries', async () => {
+  const repo = await mkdtemp(path.resolve('.cache/files-media-'));
+  // Empty files preview as text, so give the media files binary content.
+  for (const name of ['voice.m4a', 'clip.m4v', 'Screen Recording.mov', 'photo.heic']) await writeFile(path.join(repo, name), Buffer.from([0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70]));
+  const files = new Files(repo);
+  assert.equal((await files.preview(path.join(repo, 'voice.m4a'))).kind, 'audio');
+  assert.equal((await files.preview(path.join(repo, 'clip.m4v'))).kind, 'video');
+  // Only WebKit on macOS reliably plays QuickTime and shows HEIC.
+  const mac = process.platform === 'darwin';
+  assert.equal((await files.preview(path.join(repo, 'Screen Recording.mov'))).kind, mac ? 'video' : 'unsupported');
+  assert.equal((await files.preview(path.join(repo, 'photo.heic'))).kind, mac ? 'image' : 'unsupported');
+  // Finder and other Cocoa apps store names decomposed; keyboards type them composed.
+  await writeFile(path.join(repo, 'Görsel notları.md'.normalize('NFD')), '');
+  const found = await files.list(repo, 'all', 'görsel'.normalize('NFC'));
+  assert.deepEqual(found.entries.map(entry => entry.name.normalize('NFC')), ['Görsel notları.md']);
+});
+
 test('Windows preference is confirmed by native host, synchronizes tray changes and reports failure', async () => {
   let request;
   const bridge = new NativeSettings(value => { request = value; }, () => {});

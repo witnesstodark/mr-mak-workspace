@@ -1,4 +1,5 @@
 import { readFile, writeFile, rename, mkdir, realpath, stat, unlink } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 
@@ -22,6 +23,9 @@ export async function saveJson(file, value) {
     await unlink(temp).catch(() => {});
   }
 }
+// Typed folders such as `~/Projects` mean the home folder, not a `~` folder
+// under the service's working directory. `~user` and inner `~` stay literal.
+export const expandHome = value => typeof value === 'string' && (process.platform === 'win32' ? /^~(?=$|[\\/])/ : /^~(?=$|\/)/).test(value) ? path.join(os.homedir(), value.slice(1)) : value;
 export const within = (root, file) => {
   const rel = path.relative(root, file);
   return rel === '' || (!rel.startsWith('..' + path.sep) && rel !== '..' && !path.isAbsolute(rel));

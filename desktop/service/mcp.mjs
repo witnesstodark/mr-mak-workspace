@@ -9,7 +9,7 @@ import { StdioClientTransport, getDefaultEnvironment } from '@modelcontextprotoc
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { commandPath } from './agents.mjs';
-import { terminateProcessTree } from './platform.mjs';
+import { macLocale, terminateProcessTree } from './platform.mjs';
 
 const key = value => path.resolve(value).replaceAll('\\', '/').toLowerCase();
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -152,7 +152,7 @@ export class McpInventory {
         canCheck: !disabled && !hostManaged && !approvalNeeded && !missing.size && (transport !== 'stdio' || !!executable) && !config.http_headers_helper,
       };
       servers.push(data);
-      const childEnv = { ...getDefaultEnvironment(), ...object(expanded.env) };
+      const childEnv = { ...getDefaultEnvironment(), ...macLocale(), ...object(expanded.env) };
       for (const variable of config.env_vars || []) { const name = typeof variable === 'string' ? variable : variable.name; if (env[name] != null) childEnv[name] = env[name]; }
       raw.set(id, { data, fingerprint, config: expanded, headers, command: executable, cwd, env: childEnv });
     }

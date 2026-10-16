@@ -3,7 +3,7 @@ export function mobileReportStatePrelude(parentOrigin) {
   const origin = JSON.stringify(parentOrigin).replace(/</g, '\\u003c');
   return Buffer.from(`<script data-mrmak-mobile-state>
 (() => {
-  const target = ${origin}, tracked = new Set(); let restoring = true, timer = 0, restoreVersion = 0;
+  const target = ${origin}, tracked = new Set(); let restoring = true, restored = false, timer = 0, restoreVersion = 0;
   const send = (type, state) => parent.postMessage({ type, ...(state ? { state } : {}) }, target);
   const selector = node => {
     const parts = [];
@@ -29,6 +29,8 @@ export function mobileReportStatePrelude(parentOrigin) {
     if (event.data?.type !== 'mrmak:report-restore') return;
     const state = event.data.state;
     if (!state || ![state.top,state.left].every(n => typeof n === 'number' && Number.isFinite(n) && n >= 0 && n <= 1e7)) return;
+    // One restore per document: a late duplicate must not undo a newer position.
+    if (restored) return; restored = true;
     const version = ++restoreVersion; restoring = true;
     let attempts = 0;
     const restore = () => {

@@ -21,6 +21,25 @@ test('generic detection is always available and Godot wins when project.godot is
   assert.ok(details.commands.every(command => command.id.startsWith('godot-')));
 });
 
+test('Godot commands use the app bundle on a Mac without a godot command on PATH', { skip: process.platform !== 'darwin' && 'macOS app bundles only' }, async () => {
+  const home = await mkdtemp(path.join(os.tmpdir(), 'mrmak-godot-home-'));
+  const binary = path.join(home, 'Applications', 'Godot.app', 'Contents', 'MacOS', 'Godot');
+  await mkdir(path.dirname(binary), { recursive: true });
+  await writeFile(binary, '', { mode: 0o755 });
+  const root = await mkdtemp(path.join(os.tmpdir(), 'mrmak-godot-app-'));
+  await writeFile(path.join(root, 'project.godot'), '[application]\nconfig/name="Bundle"\n');
+  const previous = { HOME: process.env.HOME, PATH: process.env.PATH };
+  process.env.HOME = home; process.env.PATH = '';
+  try {
+    const registry = new ProjectAdapterRegistry();
+    const [match] = await registry.detect(root);
+    const { commands } = await registry.capabilities(match);
+    assert.deepEqual(commands.map(command => command.id), ['godot-editor', 'godot-run']);
+    // /Applications/Godot.app wins when it is installed; otherwise ~/Applications.
+    assert.ok([binary, '/Applications/Godot.app/Contents/MacOS/Godot'].includes(commands[0].executable));
+  } finally { for (const [name, value] of Object.entries(previous)) if (value === undefined) delete process.env[name]; else process.env[name] = value; }
+});
+
 test('generic fallback describes an ordinary folder without launching anything', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'mrmak-generic-'));
   const registry = new ProjectAdapterRegistry();
