@@ -24,8 +24,9 @@ await writeFile(path.join(repo, 'shared-picture.png'), png);
 // Use a supplied SVG as a visible report image; the PNG is only an upload fixture.
 await copyFile(path.join(root, 'public/assets/mak-nose.svg'), path.join(repo, 'workspace/report/nose.svg'));
 await writeFile(path.join(repo, 'workspace/report/index.html'), '<!doctype html><html lang="en" data-mak-report="document"><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="../_shared/report.css"><script defer src="../_shared/report.js"></script></head><body><main class="container"><h1>Report ready</h1><p>A readable result on your phone.</p><img src="nose.svg" alt="Report image" width="160"><p><a target="_blank" rel="noreferrer" href="https://example.com/source">Source link</a></p><div id="nested-scroll" style="height:100px;overflow:auto"><div style="height:600px">Nested content</div></div><div id="delayed-content" style="height:0">Long report content</div><script>window.addEventListener("load", () => setTimeout(() => document.getElementById("delayed-content").style.height = "2200px", 300))</script></main></body></html>');
+await writeFile(path.join(repo, 'workspace/report/notes.html'), '<!doctype html><html lang="en" data-mak-report="document"><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="../_shared/report.css"><script defer src="../_shared/report.js"></script></head><body><main class="container"><h1>Mobile notes</h1><div style="height:2400px">A second page of this card.</div></main></body></html>');
 await writeFile(path.join(repo, 'workspace/report/plan.md'), '# Mobile plan\n\n**Keep the useful parts in view.**\n\n- Read results\n- Send a follow-up\n' + Array.from({ length: 60 }, (_, index) => `\nParagraph ${index + 1}: Read and continue reviewing this report.\n`).join(''));
-await writeFile(path.join(repo, 'workspace/workspace.json'), JSON.stringify({ entities: [{ id: 'mobile-report', title: 'A useful report', folder: 'report', category: 'dev', created: '2026-10-06', steps: [{ name: 'Report', path: 'index.html' }, { name: 'Plan', path: 'plan.md' }] }] }));
+await writeFile(path.join(repo, 'workspace/workspace.json'), JSON.stringify({ entities: [{ id: 'mobile-report', title: 'A useful report', folder: 'report', category: 'dev', created: '2026-10-06', steps: [{ name: 'Report', path: 'index.html' }, { name: 'Plan', path: 'plan.md' }, { name: 'Notes', path: 'notes.html' }] }] }));
 const transport = { probe: async () => ({ ready: true, installed: true }), enable: async origin => ({ origin }), disable: async () => {} };
 const voiceCalls = [];
 const dictation = new MobileDictation(repo, { env: { OPENROUTER_API_KEY: 'test-voice-key', MRMAK_TRANSCRIBE_PROVIDER: 'openrouter' }, fetcher: async (url, options) => {
@@ -647,6 +648,23 @@ try {
   assert.equal(contextMetadata(contextPayloads.at(-1).text).workspace.sectionAnchor, undefined, 'Another tab never inherits an old section');
   assert.equal(writes.length - planBefore, 2);
   service.mobile.submit = originalSubmit;
+  // Each tab shows its own page: switching tabs never saves one tab's page under another, and a
+  // page saved for a tab position before its card's tabs moved is not opened there.
+  const notesKey = 'mrmak.mobile.report.mobile-report.2';
+  await phone.getByRole('button', { name: 'Results', exact: true }).click();
+  await phone.getByLabel('Select report page', { exact: true }).click();
+  await phone.getByRole('button', { name: 'Report', exact: true }).click(); await frame.getByRole('heading', { name: 'Report ready' }).waitFor();
+  await phone.getByLabel('Select report page', { exact: true }).click();
+  await phone.getByRole('button', { name: 'Notes', exact: true }).click(); await frame.getByRole('heading', { name: 'Mobile notes' }).waitFor();
+  await frame.locator('body').evaluate(() => window.scrollTo(0, 300));
+  await expect.poll(() => phone.evaluate(key => JSON.parse(localStorage.getItem(key) || '{}').path || '', notesKey)).toBe('workspace/report/notes.html');
+  await phone.evaluate(key => localStorage.setItem(key, JSON.stringify({ path: 'workspace/report/index.html', top: 0, left: 0 })), notesKey);
+  await reloadPhone();
+  await frame.getByRole('heading', { name: 'Mobile notes' }).waitFor();
+  assert.equal(await frame.getByRole('heading', { name: 'Report ready' }).count(), 0, 'A tab never opens a page saved from another tab');
+  await phone.getByLabel('Select report page', { exact: true }).click();
+  await phone.getByRole('button', { name: 'Plan', exact: true }).click(); await phone.getByRole('heading', { name: 'Mobile plan' }).waitFor();
+  await phone.getByRole('button', { name: 'Chats', exact: true }).click();
   const contextReader = service.mobile.transcripts.read;
   service.mobile.transcripts.read = async () => ({ supported: true, messages: [{ id: 'context-user', role: 'user', text: deliveredContext, at: new Date().toISOString() }, { id: 'context-assistant', role: 'assistant', text: 'Ready when you ask.', at: new Date().toISOString() }] });
   await expect(phone.locator('.mobile-message.user .mobile-message-copy')).toHaveCount(1);
@@ -746,7 +764,7 @@ try {
   assert.equal(service.sessions.get(ids[0]).status, 'running'); assert.equal(service.sessions.get(ids[1]).status, 'running');
   if (navigationCancellations.length) console.log(`Expected WebKit read cancellations during reload: ${navigationCancellations.length}`);
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ ok: true, fixture: repo, checks: ['Workspace context follows card/tab/page and section', 'navigation-only references; no report content or grant URLs', 'context frozen across lost reply, page change and reload', 'automatic context excluded from display and read aloud', 'cleared selection, slash commands and pre-update pending drafts', 'QR + desktop approval', 'independent views and PTY sizes', 'microphone permission / record / stop / cancel', 'dictation never auto-sends', 'saved recording recovery after reload and chat switch', 'lost transcription reply reuses provider result', 'lost reply / retry once', 'drafts per chat', 'offline recovery', 'image attachment', 'sandboxed report + image download', 'Markdown preview', 'long-link chat cards at 320/360/393/430/768px', '360/390/768px report layout', 'four terminal arrows and touch targets', 'close confirmation / desktop tab sync / History resume / draft retention', 'device revocation'] }));
+  console.log(JSON.stringify({ ok: true, fixture: repo, checks: ['Workspace context follows card/tab/page and section', 'navigation-only references; no report content or grant URLs', 'context frozen across lost reply, page change and reload', 'automatic context excluded from display and read aloud', 'cleared selection, slash commands and pre-update pending drafts', 'QR + desktop approval', 'independent views and PTY sizes', 'microphone permission / record / stop / cancel', 'dictation never auto-sends', 'saved recording recovery after reload and chat switch', 'lost transcription reply reuses provider result', 'lost reply / retry once', 'drafts per chat', 'offline recovery', 'image attachment', 'sandboxed report + image download', 'Markdown preview', 'each tab shows its own page', 'long-link chat cards at 320/360/393/430/768px', '360/390/768px report layout', 'four terminal arrows and touch targets', 'close confirmation / desktop tab sync / History resume / draft retention', 'device revocation'] }));
 } finally {
   await browser?.close(); for (const session of service.sessions.items.values()) session.process = null;
   if (qrSource) { qrSource.closeAllConnections(); await new Promise(resolve => qrSource.close(resolve)); }

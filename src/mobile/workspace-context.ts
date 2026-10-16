@@ -18,7 +18,7 @@ function workspaceReference() {
   if (opened?.id === id && opened.step === step) {
     const url = new URL(opened.preview.url, location.origin)
     const entry = /^\/mobile\/view\/[^/]+\/(.+)$/.exec(url.pathname)?.[1]
-    const position = opened.preview.statePersistence ? reportPosition(id, step) : null
+    const position = opened.preview.statePersistence ? reportPosition(id, step, entry) : null
     const page = position?.path || entry
     if (page) reference[position?.path ? 'currentViewerPage' : 'reportEntryPage'] = page
     if (position?.hash) reference.sectionAnchor = position.hash

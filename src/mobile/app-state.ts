@@ -26,7 +26,10 @@ export function mobileChatPosition(id: string): ChatPosition {
 export function saveMobileChatPosition(id: string, value: ChatPosition) { save(`mrmak.mobile.position.${id}`, { ...mobileChatPosition(id), ...value }) }
 
 export interface WorkspaceSelection { id: string | null; step: number }
-export interface ReportPosition { path?: string; hash?: string; top: number; left: number; scrollers?: { selector: string; top: number; left: number }[] }
+// `entry` is the page the tab opened with when this was saved: a position only comes back on that
+// tab while it still opens that page, so a tab moved to another place on its card (or a position
+// saved from another tab's page) doesn't open the wrong page.
+export interface ReportPosition { path?: string; entry?: string; hash?: string; top: number; left: number; scrollers?: { selector: string; top: number; left: number }[] }
 const workspaceKey = 'mrmak.mobile.workspace'
 function initialWorkspace(): WorkspaceSelection {
   const value = read(workspaceKey) as Partial<WorkspaceSelection> | null
@@ -37,17 +40,19 @@ const workspaceListeners = new Set<() => void>()
 export function mobileWorkspaceSelection() { return workspaceSelection }
 export function useMobileWorkspace() { return useSyncExternalStore(listener => { workspaceListeners.add(listener); return () => { workspaceListeners.delete(listener) } }, () => workspaceSelection) }
 export function selectMobileWorkspace(id: string | null, step?: number) { const lastStep = id ? read(`mrmak.mobile.report-step.${id}`) : null; step = step ?? (typeof lastStep === 'number' && Number.isInteger(lastStep) && lastStep >= 0 ? lastStep : 0); if (id) save(`mrmak.mobile.report-step.${id}`, step); workspaceSelection = { id, step }; save(workspaceKey, workspaceSelection); workspaceListeners.forEach(listener => listener()) }
-export function reportPosition(id: string, step: number): ReportPosition {
-  const value = read(`mrmak.mobile.report.${id}.${step}`) as Partial<ReportPosition> | null
-  return validReportPosition(value) || { top: 0, left: 0 }
+export function reportPosition(id: string, step: number, entry?: string): ReportPosition {
+  const value = validReportPosition(read(`mrmak.mobile.report.${id}.${step}`))
+  if (!value || (entry !== undefined && value.entry !== entry)) return { top: 0, left: 0 }
+  return value
 }
 export function validReportPosition(value: unknown): ReportPosition | null {
   if (!value || typeof value !== 'object') return null
   const state = value as ReportPosition
   if (![state.top, state.left].every(n => typeof n === 'number' && Number.isFinite(n) && n >= 0 && n <= 1e7)) return null
   if (state.path !== undefined && (typeof state.path !== 'string' || state.path.length > 2000 || (/[?#\\]/.test(state.path) || Array.from(state.path).some(char => char.charCodeAt(0) < 32)) || state.path.startsWith('/') || state.path.split('/').some(part => part === '..' || part === '.'))) return null
+  if (state.entry !== undefined && (typeof state.entry !== 'string' || state.entry.length > 2000 || (/[?#\\]/.test(state.entry) || Array.from(state.entry).some(char => char.charCodeAt(0) < 32)) || state.entry.startsWith('/') || state.entry.split('/').some(part => part === '..' || part === '.'))) return null
   if (state.hash !== undefined && (typeof state.hash !== 'string' || state.hash.length > 1500 || state.hash && !state.hash.startsWith('#'))) return null
   const scrollers = Array.isArray(state.scrollers) ? state.scrollers.slice(0, 12).filter(item => item && typeof item.selector === 'string' && item.selector.length <= 500 && [item.top,item.left].every(n => typeof n === 'number' && Number.isFinite(n) && n >= 0 && n <= 1e7)) : undefined
-  return { path: state.path, hash: state.hash, top: state.top, left: state.left, ...(scrollers ? { scrollers } : {}) }
+  return { path: state.path, entry: state.entry, hash: state.hash, top: state.top, left: state.left, ...(scrollers ? { scrollers } : {}) }
 }
 export function saveReportPosition(id: string, step: number, value: ReportPosition) { const valid = validReportPosition(value); if (valid) save(`mrmak.mobile.report.${id}.${step}`, valid) }

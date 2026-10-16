@@ -24,9 +24,14 @@ test('tracked pages attach the route and anchor; another tab does not inherit th
   rememberMobileReports([{ id: 'card', title: 'Review', steps: [{ index: 0, name: 'Results' }, { index: 1, name: 'Plan' }] }]);
   selectMobileWorkspace('card');
   rememberMobileReport('card', 0, { url: '/mobile/view/private-grant/workspace/review/index.html', statePersistence: true });
-  saveReportPosition('card', 0, { path: 'workspace/review/chapter.html', hash: '#timing', top: 400, left: 0 });
+  saveReportPosition('card', 0, { path: 'workspace/review/chapter.html', entry: 'workspace/review/index.html', hash: '#timing', top: 400, left: 0 });
   const current = metadata(messageWithWorkspaceContext('How does this work?', 'codex')).workspace;
   assert.equal(current.currentViewerPage, 'workspace/review/chapter.html'); assert.equal(current.sectionAnchor, '#timing');
+  // A position saved while the tab opened another page (its card's tabs moved, or it came from
+  // another tab, or it predates the entry field) is not reported for this tab.
+  saveReportPosition('card', 0, { path: 'workspace/review/other.html', entry: 'workspace/review/other.html', hash: '#elsewhere', top: 10, left: 0 });
+  const moved = metadata(messageWithWorkspaceContext('And now?', 'codex')).workspace;
+  assert.equal(moved.currentViewerPage, undefined); assert.equal(moved.reportEntryPage, 'workspace/review/index.html'); assert.equal(moved.sectionAnchor, undefined);
   selectMobileWorkspace('card', 1);
   assert.deepEqual(metadata(messageWithWorkspaceContext('And this tab?', 'codex')).workspace, { id: 'card', tabIndex: 1, title: 'Review', tab: 'Plan' });
   selectMobileWorkspace(null);
