@@ -63,7 +63,7 @@ export function nativeConversationId(value) {
   return value;
 }
 
-export function terminalCommand(agent, { bypass = false, resumeId, nativeId, effort, opencodeMajor = 1, antigravityLog } = {}) {
+export function terminalCommand(agent, { bypass = false, resumeId, nativeId, effort, opencodeMajor = 1, antigravityLog, claudeSettings } = {}) {
   if (!AGENTS.some(item => item.id === agent)) throw new Error('Unknown agent');
   resumeId = nativeConversationId(resumeId); nativeId = nativeConversationId(nativeId);
   const command = agent === 'shell' ? shellCommand() : { file: commandPath(AGENTS.find(item => item.id === agent).command), args: [] };
@@ -81,6 +81,8 @@ export function terminalCommand(agent, { bypass = false, resumeId, nativeId, eff
     else if (nativeId) args.push('--session-id', nativeId);
     if (bypass) args.push('--dangerously-skip-permissions');
     if (effort) args.push('--effort', effort);
+    // Adds the hook that shows Claude's questions on the phone (claude-prompts.mjs).
+    if (claudeSettings) args.push('--settings', claudeSettings);
   } else if (agent === 'antigravity') {
     if (resumeId && !validAntigravityId(resumeId)) throw new Error('Use the Antigravity conversation UUID from its /resume picker.');
     if (resumeId) args.push('--conversation', resumeId);

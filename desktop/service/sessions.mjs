@@ -14,11 +14,12 @@ import { defaultWorkerEffort, workerEfforts } from './effort.mjs';
 import { ptyOptions } from './platform.mjs';
 import { opencodeVersion, opencodeEnvironment, readOpencodeState, watchOpencode } from './opencode.mjs';
 import { prepareAntigravityLog, readAntigravityConversation, validAntigravityId, watchAntigravity } from './antigravity.mjs';
+import { promptHookSettings, promptSummary, readPrompt } from './claude-prompts.mjs';
 
 const { Terminal } = headless;
 const publicSession = session => {
-  const { id, name, agent, cwd, bypass, effort, status, createdAt, lastOutputAt, lastInputAt, exitCode, nativeId, attention, activity, unread, completionVersion, lastCompletedId, cols, rows, open, pinned, tabOrder, tabColor, updatedAt, preview, hasConversation, restoreError } = session;
-  return { id, name, agent, cwd, bypass, effort, status, createdAt, lastOutputAt, lastInputAt, exitCode, nativeId, attention, activity, unread, completionVersion, lastCompletedId, cols, rows, open, pinned, tabOrder, tabColor, updatedAt, preview, hasConversation, restoreError };
+  const { id, name, agent, cwd, bypass, effort, status, createdAt, lastOutputAt, lastInputAt, exitCode, nativeId, attention, activity, asking, unread, completionVersion, lastCompletedId, cols, rows, open, pinned, tabOrder, tabColor, updatedAt, preview, hasConversation, restoreError } = session;
+  return { id, name, agent, cwd, bypass, effort, status, createdAt, lastOutputAt, lastInputAt, exitCode, nativeId, attention, activity, asking: asking || null, unread, completionVersion, lastCompletedId, cols, rows, open, pinned, tabOrder, tabColor, updatedAt, preview, hasConversation, restoreError };
 };
 
 export class Sessions extends EventEmitter {
@@ -34,6 +35,8 @@ export class Sessions extends EventEmitter {
 
   async init() {
     await mkdir(this.stateDir, { recursive: true });
+    // Without the hook, Claude chats still run; only their questions stay in the terminal.
+    this.prompts = await promptHookSettings(this.stateDir).catch(() => null);
     const saved = await readJson(path.join(this.stateDir, 'sessions.json'), []);
     for (const [index, metadata] of saved.entries()) {
       const item = this.make({ ...metadata, name: restoredTitle(metadata.name, index), open: metadata.open ?? metadata.agent !== 'kimi', pinned: !!metadata.pinned, updatedAt: metadata.updatedAt || metadata.lastInputAt || metadata.createdAt, hasConversation: metadata.hasConversation ?? (metadata.agent === 'codex' && !!metadata.nativeId), status: 'stopped', activity: 'idle', attention: !!metadata.unread });
@@ -138,7 +141,7 @@ export class Sessions extends EventEmitter {
     if (this.closed || !session.open) throw new Error('The chat was closed before its terminal started.');
     if (session.agent === 'antigravity' && resumeId && !validAntigravityId(resumeId)) throw new Error('Use the Antigravity conversation UUID from its /resume picker.');
     const antigravityLog = session.agent === 'antigravity' ? await prepareAntigravityLog(this.stateDir, session.id) : undefined;
-    const command = terminalCommand(session.agent, { bypass: session.bypass, resumeId, nativeId: session.nativeId, effort: session.effort, opencodeMajor, antigravityLog });
+    const command = terminalCommand(session.agent, { bypass: session.bypass, resumeId, nativeId: session.nativeId, effort: session.effort, opencodeMajor, antigravityLog, claudeSettings: session.agent === 'claude' ? this.prompts?.file : undefined });
     if (session.agent === 'codex') env.CODEX_INTERNAL_ORIGINATOR_OVERRIDE = `mrmak_chat_${session.id}`;
     const proc = pty.spawn(command.file, command.args, ptyOptions({ cwd: session.cwd, env, cols: session.cols, rows: session.rows }));
     session.process = proc;
@@ -148,6 +151,7 @@ export class Sessions extends EventEmitter {
     session.deviceReplies = session.terminal.onData(data => { if (session.process) session.process.write(data); });
     session.status = 'running';
     session.activity = 'idle';
+    session.asking = null;
     session.restoreError = null;
     session.exitCode = null;
     session.startedAt = Date.now();
@@ -173,8 +177,11 @@ export class Sessions extends EventEmitter {
       }
       session.stopNativeWatch?.();
       session.stopNativeWatch = null;
+      session.stopPromptWatch?.();
+      session.stopPromptWatch = null;
       session.status = 'exited';
       session.activity = 'idle';
+      session.asking = null;
       session.exitCode = exitCode;
       this.changed(session);
       this.emit('notice', { id: randomUUID(), sessionId: session.id, name: session.name, kind: 'exit', text: `${session.name} exited (${exitCode}).`, at: new Date().toISOString() });
@@ -204,6 +211,7 @@ export class Sessions extends EventEmitter {
       else if (state.activity === 'waiting') this.nativeEvent(session, { kind: 'attention' });
       else if (state.activity === 'idle' && session.activity !== 'idle') this.nativeEvent(session, { kind: 'turn-interrupted' });
     });
+    if (session.agent === 'claude') this.watchPrompt(session, proc);
     if (nativeWatch) this.watchNative(session, nativeWatch.file, nativeWatch.offset);
     else if (session.agent === 'claude' && session.nativeId) claudeTranscript(session.cwd, session.nativeId).then(file => {
       if (session.process === proc) this.watchNative(session, file);
@@ -222,16 +230,44 @@ export class Sessions extends EventEmitter {
     session.stopNativeWatch = tailNativeFile(file, session.agent, event => this.nativeEvent(session, event), offset);
   }
 
+  // A question saved by the chat's hook (claude-prompts.mjs). Only prompts saved
+  // after this launch count: an old one has no picker on screen any more.
+  watchPrompt(session, proc) {
+    session.stopPromptWatch?.();
+    const since = Date.now() - 2000;
+    let mtime = 0, reading = false;
+    const tick = async () => {
+      if (reading || session.process !== proc || !this.prompts) return;
+      reading = true;
+      try {
+        const prompt = await readPrompt(this.prompts.dir, session.nativeId, since);
+        if (!prompt?.kind || prompt.mtime === mtime || session.process !== proc) return;
+        mtime = prompt.mtime;
+        this.nativeEvent(session, { kind: 'asking', asking: { kind: prompt.kind, id: prompt.id, at: prompt.at }, preview: promptSummary(prompt), text: prompt.kind === 'plan' ? 'A plan is waiting for your approval.' : 'Claude is asking you a question.' });
+      } finally { reading = false; }
+    };
+    const timer = setInterval(() => { tick().catch(() => {}); }, 400); timer.unref();
+    session.stopPromptWatch = () => clearInterval(timer);
+  }
+
   nativeEvent(session, event) {
     if (event.kind === 'turn-started') {
-      if (session.activity === 'working') return;
-      session.activity = 'working'; session.attention = false;
+      // While a question waits, only its answer (the tool's result) or a later
+      // prompt ends the wait. Claude writes other records around it, some late:
+      // a plan's own call, or the answer to the question before.
+      if (session.asking && !event.results?.includes(session.asking.id) && !(event.prompt && Date.parse(event.at) > Date.parse(session.asking.at))) return;
+      if (session.activity === 'working' && !session.asking) return;
+      session.activity = 'working'; session.attention = false; session.asking = null;
+    } else if (event.kind === 'asking') {
+      if (session.asking?.id === event.asking.id) return;
+      session.activity = 'waiting'; session.attention = true; session.asking = event.asking;
+      if (event.preview) session.preview = event.preview;
     } else if (event.kind === 'turn-interrupted') {
-      session.activity = 'idle';
+      session.activity = 'idle'; session.asking = null;
     } else if (event.kind === 'turn-completed') {
       if (event.id && session.lastCompletedId === event.id) return;
       session.lastCompletedId = event.id;
-      session.activity = 'idle'; session.unread = true; session.attention = true;
+      session.activity = 'idle'; session.unread = true; session.attention = true; session.asking = null;
       session.completionVersion++;
       if (event.preview) session.preview = event.preview;
     } else if (event.kind === 'attention') {
@@ -304,6 +340,16 @@ export class Sessions extends EventEmitter {
     await new Promise(resolve => session.terminal.write('', resolve));
     this.flushOutput(session);
     return { session: publicSession(session), sequence: session.sequence, data: session.serializer.serialize({ scrollback: 1500 }) };
+  }
+
+  // The visible screen, as plain text lines.
+  async screen(id) {
+    const session = this.get(id);
+    await this.hydrate(session);
+    await new Promise(resolve => session.terminal.write('', resolve));
+    const buffer = session.terminal.buffer.active, lines = [];
+    for (let index = buffer.baseY; index < buffer.baseY + session.terminal.rows; index++) lines.push(buffer.getLine(index)?.translateToString(true) || '');
+    return lines.join('\n');
   }
 
   async read(id, lines = 70) {
@@ -488,7 +534,7 @@ export class Sessions extends EventEmitter {
       const subscription = proc.onExit(() => { clearTimeout(timer); subscription.dispose(); resolve(); });
       try { this.requestStop(session); } catch { clearTimeout(timer); subscription.dispose(); resolve(); }
     })));
-    for (const session of this.items.values()) { session.stopNativeWatch?.(); session.process?.kill(); this.flushOutput(session); }
+    for (const session of this.items.values()) { session.stopNativeWatch?.(); session.stopPromptWatch?.(); session.process?.kill(); this.flushOutput(session); }
     await this.persist();
     for (const session of this.items.values()) session.terminal?.dispose();
   }

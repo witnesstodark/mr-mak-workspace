@@ -2,6 +2,7 @@ import type { ChatSession } from './types'
 
 export function chatActivityLabel(session: ChatSession) {
   const working = session.status === 'running' && session.activity === 'working'
+  if (session.status === 'running' && session.asking) return session.asking.kind === 'plan' ? 'Plan waits for your approval' : 'Asking you a question'
   if (session.unread) return working ? 'Working · unread result' : 'Finished · unread result'
   if (working) return 'Working'
   if (session.status !== 'running') return session.status === 'starting' ? 'Starting' : 'Stopped'

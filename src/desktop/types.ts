@@ -7,6 +7,8 @@ export interface ChatSession {
   lastOutputAt: string | null; lastInputAt: string | null; nativeId: string | null
   attention: boolean; cols: number; rows: number; exitCode?: number | null
   activity: 'idle' | 'working' | 'waiting'; unread: boolean; completionVersion: number
+  // A question or plan approval Claude shows only in its terminal (claude-prompts.mjs).
+  asking?: { kind: 'question' | 'plan'; id: string; at: string } | null
   tabOrder: number; tabColor: string | null
   open: boolean; pinned: boolean; updatedAt: string; preview?: string; hasConversation?: boolean; restoreError?: string | null
 }

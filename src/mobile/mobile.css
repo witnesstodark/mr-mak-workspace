@@ -144,3 +144,26 @@
 .mobile-view-host { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .mobile-persistent-view { position: absolute; inset: 0; min-height: 0; display: flex; flex-direction: column; }
 .mobile-persistent-view[aria-hidden="true"] { visibility: hidden; pointer-events: none; }
+.mobile-prompt { margin: 16px 0 22px; padding: 14px; border: 1px solid #6b4a5c; border-radius: 14px; background: #1b1620; display: grid; gap: 12px; }
+.mobile-prompt > header { display: flex; align-items: center; gap: 7px; color: #ebc9da; font-size: 12px; font-weight: 600; }
+.mobile-prompt.sent { border-color: var(--m-line); background: transparent; }.mobile-prompt.sent p { margin: 0; color: var(--m-muted); font-size: 12px; }
+.mobile-prompt form { display: grid; gap: 14px; }.mobile-prompt > button, .mobile-prompt-feedback button { display: flex; align-items: center; gap: 8px; justify-self: start; font-size: 12px; }
+.mobile-prompt-note { margin: 0; color: var(--m-muted); font-size: 12px; }
+.mobile-prompt-question { border: 0; margin: 0; padding: 0; min-width: 0; display: grid; gap: 7px; }
+.mobile-prompt-question legend { padding: 0; margin-bottom: 9px; font-size: 15px; line-height: 1.35; color: var(--m-text); }
+.mobile-prompt-question > small { color: var(--m-muted); font-size: 11px; margin-top: -4px; }
+.mobile-prompt-chip { display: inline-block; margin-right: 8px; padding: 2px 7px; border-radius: 6px; background: #e4b6cd1c; color: #e4b6cd; font-size: 10px; letter-spacing: .04em; vertical-align: 2px; }
+.mobile-app .mobile-prompt-option { display: flex; align-items: flex-start; gap: 11px; width: 100%; text-align: left; padding: 11px 12px; border-radius: 10px; background: #15141b; border-color: #322f3a; }
+.mobile-prompt-option > i { flex-shrink: 0; width: 17px; height: 17px; margin-top: 1px; border: 2px solid #6c6577; border-radius: 50%; }
+.mobile-prompt-option.multi > i { border-radius: 5px; }
+.mobile-app .mobile-prompt-option[aria-pressed="true"] { border-color: #b98aa2; background: #e4b6cd14; }
+.mobile-prompt-option[aria-pressed="true"] > i { border-color: #e4b6cd; background: radial-gradient(circle, #e4b6cd 0 40%, transparent 45%); }
+.mobile-prompt-option.multi[aria-pressed="true"] > i { background: #e4b6cd; box-shadow: inset 0 0 0 2px #1b1620; }
+.mobile-prompt-option > span { display: grid; gap: 3px; min-width: 0; }.mobile-prompt-option strong { font-size: 14px; font-weight: 600; }.mobile-prompt-option small { color: var(--m-muted); font-size: 12px; line-height: 1.35; }
+.mobile-prompt-plan { position: relative; max-height: 300px; overflow: hidden; padding: 2px 12px; border: 1px solid var(--m-line); border-radius: 10px; background: #121117; font-size: 13px; line-height: 1.45; }
+.mobile-prompt-plan:not(.whole)::after { content: ''; position: absolute; inset: auto 0 0; height: 60px; background: linear-gradient(transparent, #121117); }
+.mobile-prompt-plan.whole { max-height: none; }.mobile-prompt-plan h1 { font-size: 17px; }.mobile-prompt-plan h2 { font-size: 15px; }.mobile-prompt-plan h3 { font-size: 14px; }
+.mobile-prompt-plan h1, .mobile-prompt-plan h2, .mobile-prompt-plan h3 { margin: 12px 0 6px; }.mobile-prompt-plan ul, .mobile-prompt-plan ol { padding-left: 20px; }
+.mobile-app .mobile-prompt-more { justify-self: start; margin-top: -4px; padding: 4px 0; border: 0; background: none; color: var(--m-accent); font-size: 12px; }
+.mobile-prompt-choices { display: grid; gap: 8px; }.mobile-prompt-choices button { text-align: left; font-size: 13px; padding: 12px 14px; }
+.mobile-prompt-feedback textarea { width: 100%; resize: vertical; }

@@ -14,6 +14,7 @@ import { LocalReadAloud } from './local-read-aloud.mjs';
 import { MobileTranscripts } from './mobile-transcript.mjs';
 import { MobileReports } from './mobile-reports.mjs';
 import { MobileDictation } from './mobile-dictation.mjs';
+import { PromptDriver, planChoices, questionMenu, readPrompt, reviewMenu } from './claude-prompts.mjs';
 
 const digest = value => createHash('sha256').update(value).digest('hex');
 const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status }); };
@@ -27,7 +28,7 @@ export class MobileGateway {
   constructor({ repo, uiDir, stateDir, sessions, attachments, settings, changed, closeChat, transport = new TailscaleTransport(), dictation = new MobileDictation(repo), chooseDictation, readAloud = new LocalReadAloud(repo) }) {
     Object.assign(this, { repo, uiDir, sessions, attachments, settings, changed, closeChat, transport });
     this.file = path.join(stateDir, 'mobile-access.json');
-    this.saves = Promise.resolve(); this.pending = new Map(); this.clients = new Set(); this.inflight = new Map(); this.uploads = new Map(); this.queues = new Map();
+    this.saves = Promise.resolve(); this.pending = new Map(); this.clients = new Set(); this.inflight = new Map(); this.uploads = new Map(); this.queues = new Map(); this.answering = new Set();
     this.transcripts = new MobileTranscripts(); this.conversationMedia = new ConversationMedia(); this.active = false; this.error = ''; this.origin = ''; this.rate = { at: Date.now(), count: 0 };
     this.reports = new MobileReports(this);
     this.readAloud = readAloud; this.dictation = dictation; this.chooseDictation = chooseDictation;
@@ -237,6 +238,27 @@ export class MobileGateway {
     this.inflight.set(key, operation);
     try { return await operation; } finally { this.inflight.delete(key); }
   }
+  // The question or plan a Claude chat is waiting on, with whether its terminal
+  // shows it (an answer is only given there). Plans take their choices from the screen.
+  async prompt(session) {
+    if (session.agent !== 'claude' || !session.asking || !session.process) return null;
+    const saved = await readPrompt(this.sessions.prompts?.dir, session.nativeId);
+    if (!saved?.kind || saved.id !== session.asking.id) return null;
+    const { mtime: _mtime, ...prompt } = saved, screen = await this.sessions.screen(session.id);
+    if (prompt.kind === 'plan') { const choices = planChoices(screen); return { ...prompt, choices, onScreen: choices.length > 0 }; }
+    return { ...prompt, onScreen: prompt.questions.some(question => questionMenu(screen, question)) || !!reviewMenu(screen) };
+  }
+  async answer(session, data) {
+    if (!session.process) fail('Resume this chat first.');
+    if (this.answering.has(session.id)) fail('An answer is already on its way.', 409);
+    this.answering.add(session.id);
+    try {
+      const prompt = await this.prompt(session);
+      if (!prompt || prompt.id !== data.id) fail('This question was already answered or closed.', 409);
+      const driver = new PromptDriver({ screen: () => this.sessions.screen(session.id), press: value => this.sessions.input(session.id, value) });
+      return prompt.kind === 'plan' ? await driver.answerPlan(data.choice) : await driver.answerQuestions(prompt, data.answers);
+    } finally { this.answering.delete(session.id); }
+  }
   async request(request, response) {
     response.setHeader('Cache-Control', 'no-store'); response.setHeader('X-Content-Type-Options', 'nosniff'); response.setHeader('Referrer-Policy', 'no-referrer');
     try {
@@ -280,10 +302,11 @@ export class MobileGateway {
           if (!inventory().some(item => item.id !== 'shell' && item.id === data.agent && item.available)) fail('Choose an installed agent.');
           return json(response, 201, await this.sessions.create({ agent: data.agent, name: data.name, cwd: this.repo, bypass: this.settings().defaultBypass === true }));
         }
-        const match = /^\/mobile\/api\/sessions\/([a-f0-9-]{36})\/(messages|send|resume|close|key|read-aloud)$/.exec(route);
+        const match = /^\/mobile\/api\/sessions\/([a-f0-9-]{36})\/(messages|send|resume|close|key|read-aloud|answer)$/.exec(route);
         if (match) {
           const session = this.session(match[1]);
-          if (method === 'GET' && match[2] === 'messages') return json(response, 200, await this.conversationMedia.present(await this.transcripts.read(session), session, device.id));
+          if (method === 'GET' && match[2] === 'messages') return json(response, 200, { ...await this.conversationMedia.present(await this.transcripts.read(session), session, device.id), prompt: await this.prompt(session).catch(() => null) });
+          if (method === 'POST' && match[2] === 'answer') return json(response, 200, await this.answer(session, data));
           if (method === 'POST' && match[2] === 'read-aloud') {
             const controller = new AbortController(); let complete = false;
             const abort = () => { if (!complete) controller.abort(); };

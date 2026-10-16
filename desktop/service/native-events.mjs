@@ -12,6 +12,9 @@ export function completedTurn(record, agent) {
   return null;
 }
 
+// The tool results in a Claude record, so a waiting question knows its answer.
+const results = content => Array.isArray(content) ? content.flatMap(item => item?.type === 'tool_result' ? [item.tool_use_id] : []) : [];
+
 export function nativeActivity(record, agent) {
   const completed = completedTurn(record, agent);
   if (completed) return completed;
@@ -25,7 +28,7 @@ export function nativeActivity(record, agent) {
       const interrupted = value => typeof value === 'string' && value.startsWith('[Request interrupted by user');
       if (interrupted(content) || Array.isArray(content) && content.some(item => item.type === 'text' && interrupted(item.text))) return { kind: 'turn-interrupted' };
       // Tool results also confirm ongoing work; file snapshots and metadata do not.
-      if (content) return { kind: 'turn-started' };
+      if (content) { const answered = results(content); return { kind: 'turn-started', results: answered, prompt: !answered.length, at: record.timestamp }; }
     }
     if (record.type === 'assistant' && record.message?.stop_reason !== 'end_turn') return { kind: 'turn-started' };
   }
