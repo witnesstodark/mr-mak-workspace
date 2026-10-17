@@ -124,6 +124,19 @@ export class Sessions extends EventEmitter {
     return publicSession(session);
   }
 
+  // A CLI that is killed cannot restore the terminal it drew on. The session's
+  // terminal is reused across restarts, so a fullscreen CLI's alternate screen
+  // and mouse capture would otherwise outlive it and strand the next process,
+  // or a renderer that changed between runs, on a screen with no scrollback
+  // where wheel events arrive as mouse reports. Clear those modes before each
+  // launch, in the service's terminal and in every attached renderer.
+  resetTerminal(session) {
+    const reset = '\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?1015l\x1b[?1016l\x1b[?2004l\x1b[?1004l\x1b[?1049l\x1b[?47l\x1b[?25h\x1b[0m';
+    session.terminal.write(reset);
+    session.pendingOutput = (session.pendingOutput || '') + reset;
+    if (!session.outputTimer) session.outputTimer = setTimeout(() => this.flushOutput(session), 16);
+  }
+
   async launch(session, resumeId, nativeWatch) {
     let env = childEnvironment(this.repo);
     let opencodeMajor;
@@ -140,6 +153,7 @@ export class Sessions extends EventEmitter {
     const antigravityLog = session.agent === 'antigravity' ? await prepareAntigravityLog(this.stateDir, session.id) : undefined;
     const command = terminalCommand(session.agent, { bypass: session.bypass, resumeId, nativeId: session.nativeId, effort: session.effort, opencodeMajor, antigravityLog });
     if (session.agent === 'codex') env.CODEX_INTERNAL_ORIGINATOR_OVERRIDE = `mrmak_chat_${session.id}`;
+    if (session.terminal) this.resetTerminal(session);
     const proc = pty.spawn(command.file, command.args, ptyOptions({ cwd: session.cwd, env, cols: session.cols, rows: session.rows }));
     session.process = proc;
     session.deviceReplies?.dispose();
@@ -411,8 +425,11 @@ export class Sessions extends EventEmitter {
   requestStop(session) {
     const proc = session.process;
     if (!proc) return;
-    if (!['opencode', 'antigravity'].includes(session.agent)) { proc.kill(); return; }
-    // Let OpenCode flush and close its SQLite store before ConPTY is destroyed.
+    if (!['opencode', 'antigravity', 'claude'].includes(session.agent)) { proc.kill(); return; }
+    // Let OpenCode flush and close its SQLite store before ConPTY is destroyed,
+    // and let Claude leave its fullscreen renderer the way it expects: a killed
+    // fullscreen session counts as a failed start on its side, and two of those
+    // switch later sessions to the classic renderer.
     // Ctrl+C cancels work; a second press exits the native TUI. Custom keymaps
     // or an unresponsive CLI still have a bounded hard-stop fallback.
     proc.write('\x03');
@@ -482,7 +499,7 @@ export class Sessions extends EventEmitter {
     this.closed = true; clearInterval(this.timer);
     // Preserve the open-tab flags on app quit while giving OpenCode time to
     // close the database used by the next launch.
-    await Promise.all([...this.items.values()].filter(s => ['opencode', 'antigravity'].includes(s.agent) && s.process).map(session => new Promise(resolve => {
+    await Promise.all([...this.items.values()].filter(s => ['opencode', 'antigravity', 'claude'].includes(s.agent) && s.process).map(session => new Promise(resolve => {
       const proc = session.process;
       const timer = setTimeout(() => { subscription.dispose(); resolve(); }, 5000);
       const subscription = proc.onExit(() => { clearTimeout(timer); subscription.dispose(); resolve(); });

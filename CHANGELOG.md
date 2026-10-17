@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- Start a restarted chat on a clean terminal. A chat keeps its terminal when
+  its CLI restarts, so a fullscreen CLI that was stopped without restoring the
+  screen left its alternate screen and mouse capture behind for the next
+  process: no scrollback, and the wheel arrived as mouse reports. The service
+  now clears those modes before every launch, in its own terminal and in every
+  attached renderer, and asks Claude to exit with Ctrl+C before the hard stop,
+  as it already did for OpenCode, so Claude's fullscreen renderer no longer
+  counts a closed tab as a failed start.
+
 ## 0.5.1 - 2026-10-14
 
 - Add Antigravity CLI chats with Google sign-in, reasoning effort, per-chat native history recovery and MCP inventory. Install `agy` separately, then choose it in New chat. Model access remains controlled by Google.
