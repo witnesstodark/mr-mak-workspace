@@ -9,7 +9,7 @@ import { terminalCommand, childEnvironment, nativeConversationId } from './agent
 import { readJson, saveJson } from './util.mjs';
 import { claudeTranscript, codexTranscript, tailNativeFile } from './native-events.mjs';
 import { findCodexChat } from './codex-history.mjs';
-import { englishTitle, restoredTitle } from './titles.mjs';
+import { englishTitle, groupLabel, restoredTitle } from './titles.mjs';
 import { defaultWorkerEffort, workerEfforts } from './effort.mjs';
 import { ptyOptions } from './platform.mjs';
 import { opencodeVersion, opencodeEnvironment, readOpencodeState, watchOpencode } from './opencode.mjs';
@@ -17,8 +17,20 @@ import { prepareAntigravityLog, readAntigravityConversation, validAntigravityId,
 
 const { Terminal } = headless;
 const publicSession = session => {
-  const { id, name, agent, cwd, bypass, effort, status, createdAt, lastOutputAt, lastInputAt, exitCode, nativeId, attention, activity, unread, completionVersion, lastCompletedId, cols, rows, open, pinned, tabOrder, tabColor, updatedAt, preview, hasConversation, restoreError } = session;
-  return { id, name, agent, cwd, bypass, effort, status, createdAt, lastOutputAt, lastInputAt, exitCode, nativeId, attention, activity, unread, completionVersion, lastCompletedId, cols, rows, open, pinned, tabOrder, tabColor, updatedAt, preview, hasConversation, restoreError };
+  const { id, name, agent, cwd, bypass, effort, status, createdAt, lastOutputAt, lastInputAt, exitCode, nativeId, attention, activity, unread, completionVersion, lastCompletedId, cols, rows, open, pinned, tabOrder, tabColor, group, updatedAt, preview, hasConversation, restoreError } = session;
+  return { id, name, agent, cwd, bypass, effort, status, createdAt, lastOutputAt, lastInputAt, exitCode, nativeId, attention, activity, unread, completionVersion, lastCompletedId, cols, rows, open, pinned, tabOrder, tabColor, group, updatedAt, preview, hasConversation, restoreError };
+};
+
+// Grouped tabs sit together at the position of their earliest open member; a tab
+// without a group keeps its own position. The frontend (chatOrder.ts) mirrors this.
+export const groupRanks = items => {
+  const ranks = new Map();
+  for (const item of items) {
+    if (!item.open || !item.group) continue;
+    const key = `${item.pinned}:${item.group}`;
+    ranks.set(key, Math.min(ranks.get(key) ?? Infinity, item.tabOrder));
+  }
+  return item => (item.group ? ranks.get(`${item.pinned}:${item.group}`) : undefined) ?? item.tabOrder;
 };
 
 export class Sessions extends EventEmitter {
@@ -46,7 +58,7 @@ export class Sessions extends EventEmitter {
   }
 
   make(metadata) {
-    return { activity: 'idle', unread: false, completionVersion: 0, tabOrder: this.items.size, tabColor: null, ...metadata, effort: ['codex', 'claude', 'antigravity'].includes(metadata.agent) ? metadata.effort || defaultWorkerEffort : undefined, terminal: null, serializer: null, process: null, sequence: 0, pendingOutput: '', outputTimer: null };
+    return { activity: 'idle', unread: false, completionVersion: 0, tabOrder: this.items.size, tabColor: null, group: null, ...metadata, effort: ['codex', 'claude', 'antigravity'].includes(metadata.agent) ? metadata.effort || defaultWorkerEffort : undefined, terminal: null, serializer: null, process: null, sequence: 0, pendingOutput: '', outputTimer: null };
   }
 
   async hydrate(session) {
@@ -63,7 +75,11 @@ export class Sessions extends EventEmitter {
     try { await session.hydrating; } finally { session.hydrating = null; }
   }
 
-  list() { return [...this.items.values()].map(publicSession).sort((a, b) => Number(b.pinned) - Number(a.pinned) || a.tabOrder - b.tabOrder); }
+  list() {
+    const items = [...this.items.values()].map(publicSession);
+    const rank = groupRanks(items);
+    return items.sort((a, b) => Number(b.pinned) - Number(a.pinned) || rank(a) - rank(b) || a.tabOrder - b.tabOrder);
+  }
   active() { return this.list().filter(item => item.open); }
   async restore() {
     // Open windows immediately; restore their terminals in the background.
@@ -97,7 +113,7 @@ export class Sessions extends EventEmitter {
       id: randomUUID(), agent, name: englishTitle(options.name, `Conversation ${this.items.size + 1}`),
       tabOrder: Math.max(-1, ...this.list().map(item => item.tabOrder)) + 1,
       cwd, bypass: options.bypass === true, createdAt: now, lastInputAt: null, lastOutputAt: null,
-      effort: options.effort,
+      effort: options.effort, group: groupLabel(options.group),
       status: 'starting', nativeId: options.resumeId || (agent === 'claude' ? randomUUID() : null),
       open: true, pinned: false, updatedAt: now, preview: '', hasConversation: !!options.resumeId, restoreError: null,
       attention: false, cols: Math.min(500, Math.max(20, options.cols || 90)), rows: Math.min(200, Math.max(5, options.rows || 32)),
@@ -110,7 +126,7 @@ export class Sessions extends EventEmitter {
     return publicSession(session);
   }
 
-  async importConversation({ agent, nativeId, name, cwd, pinned = false, bypass = false }) {
+  async importConversation({ agent, nativeId, name, cwd, pinned = false, bypass = false, group = null }) {
     if (!['codex', 'claude', 'antigravity', 'opencode', 'kimi'].includes(agent) || typeof nativeId !== 'string' || !nativeId.trim()) throw new Error('Choose an agent and its native conversation ID.');
     nativeId = nativeConversationId(nativeId.trim());
     if (agent === 'antigravity' && !validAntigravityId(nativeId)) throw new Error('Use the Antigravity conversation UUID from its /resume picker.');
@@ -119,7 +135,7 @@ export class Sessions extends EventEmitter {
     const existing = [...this.items.values()].find(item => item.agent === agent && item.nativeId === nativeId);
     if (existing) { existing.name = englishTitle(name, existing.name); existing.pinned = pinned; this.changed(existing); await this.persist(); return publicSession(existing); }
     const now = new Date().toISOString();
-    const session = this.make({ id: randomUUID(), agent, nativeId, name: englishTitle(name), cwd: path.resolve(cwd || this.repo), bypass, pinned, open: false, status: 'stopped', createdAt: now, updatedAt: now, hasConversation: true, lastInputAt: null, lastOutputAt: null, preview: '', cols: 90, rows: 32, attention: false });
+    const session = this.make({ id: randomUUID(), agent, nativeId, name: englishTitle(name), cwd: path.resolve(cwd || this.repo), bypass, pinned, group: groupLabel(group), open: false, status: 'stopped', createdAt: now, updatedAt: now, hasConversation: true, lastInputAt: null, lastOutputAt: null, preview: '', cols: 90, rows: 32, attention: false });
     this.items.set(session.id, session); this.changed(session); await this.persist();
     return publicSession(session);
   }
@@ -370,19 +386,77 @@ export class Sessions extends EventEmitter {
     const session = this.get(id); session.tabColor = value?.toLowerCase() || null; this.changed(session);
     return publicSession(session);
   }
+  async assign(id, value) {
+    const session = this.get(id);
+    const group = groupLabel(value);
+    if (session.group === group) return publicSession(session);
+    session.group = group;
+    this.changed(session);
+    // Joining a group places the tab after that group's last open member, as a
+    // drag there would. Leaving a group keeps the tab where it is.
+    const last = group && session.open ? this.active().filter(item => item.id !== id && item.pinned === session.pinned && item.group === group).at(-1) : null;
+    if (last) await this.reorder(id, last.id, 'after');
+    else await this.persist();
+    return publicSession(session);
+  }
   async reorder(id, targetId, position) {
     const session = this.get(id), target = this.get(targetId);
     if (!['before', 'after'].includes(position)) throw new Error('Choose a valid tab position.');
     if (!session.open || !target.open) throw new Error('Only open tabs can be reordered.');
-    if (session.pinned !== target.pinned) throw new Error('Pinned tabs stay together. Reorder within the same group.');
+    if (session.pinned !== target.pinned) throw new Error('Pinned tabs stay together. Move a tab within the pinned or the unpinned tabs.');
     if (id === targetId) return this.active();
+    // Dropping beside a tab of another group joins that group; dropping beside an
+    // ungrouped tab leaves the current group.
+    if (session.group !== target.group) { session.group = target.group; this.changed(session); }
     // Retain closed chats between their neighbours so reopening History keeps
-    // their place. Reordering one group cannot affect the other group.
-    const group = this.list().filter(item => item.pinned === session.pinned && item.id !== id);
-    group.splice(group.findIndex(item => item.id === targetId) + Number(position === 'after'), 0, publicSession(session));
-    group.forEach((item, index) => { const changed = this.get(item.id); if (changed.tabOrder !== index) { changed.tabOrder = index; this.changed(changed); } });
+    // their place. Reordering pinned tabs cannot affect unpinned tabs.
+    const siblings = this.list().filter(item => item.pinned === session.pinned && item.id !== id);
+    siblings.splice(siblings.findIndex(item => item.id === targetId) + Number(position === 'after'), 0, publicSession(session));
+    siblings.forEach((item, index) => { const changed = this.get(item.id); if (changed.tabOrder !== index) { changed.tabOrder = index; this.changed(changed); } });
     await this.persist();
     return this.active();
+  }
+  // A group moves as one block, closed members included, beside an ungrouped
+  // tab or beside the whole of another group, never into the middle of one.
+  async moveGroup(name, pinned, targetId, position) {
+    const group = groupLabel(name), target = this.get(targetId);
+    if (!['before', 'after'].includes(position)) throw new Error('Choose a valid tab position.');
+    if (!target.open) throw new Error('Only open tabs can be reordered.');
+    if (target.pinned !== !!pinned) throw new Error('Pinned tabs stay together. Move a group within the pinned or the unpinned tabs.');
+    const siblings = this.list().filter(item => item.pinned === target.pinned);
+    const block = siblings.filter(item => item.group === group);
+    if (!group || !block.some(item => item.open)) throw Object.assign(new Error('That group has no open tabs.'), { status: 404 });
+    if (target.group === group) return this.active();
+    const rest = siblings.filter(item => item.group !== group);
+    const anchor = rest.map((item, index) => (target.group ? item.group === target.group : item.id === targetId) ? index : -1).filter(index => index >= 0);
+    rest.splice(position === 'after' ? anchor.at(-1) + 1 : anchor[0], 0, ...block);
+    rest.forEach((item, index) => { const changed = this.get(item.id); if (changed.tabOrder !== index) { changed.tabOrder = index; this.changed(changed); } });
+    await this.persist();
+    return this.active();
+  }
+  // Renaming relabels every chat in the group, History included. A name another
+  // group already uses merges the two.
+  async renameGroup(from, to) {
+    const source = groupLabel(from), name = groupLabel(to);
+    if (!name) throw new Error('Name the group.');
+    const members = [...this.items.values()].filter(item => source && item.group === source);
+    if (!members.length) throw Object.assign(new Error('That group no longer exists.'), { status: 404 });
+    if (name !== source) {
+      for (const session of members) { session.group = name; this.changed(session); }
+      await this.persist();
+    }
+    return this.active();
+  }
+  // Deleting a group ungroups every chat that carries it, History included;
+  // the chats themselves stay. Unlike ungrouping from a chip, this also
+  // reaches a group that no open tab shows any more.
+  async deleteGroup(name) {
+    const label = groupLabel(name);
+    if (!label) throw new Error('Name the group.');
+    const members = [...this.items.values()].filter(item => item.group === label);
+    for (const session of members) { session.group = null; this.changed(session); }
+    if (members.length) await this.persist();
+    return { removed: members.length, history: members.filter(item => !item.open).length };
   }
   async clearScreen(id) {
     const session = this.get(id); await this.hydrate(session);

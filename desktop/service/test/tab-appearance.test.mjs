@@ -30,8 +30,8 @@ test('tab reordering respects pin boundaries, closed history positions and front
     await sessions.reorder('pin-b', 'pin-a', 'before');
     assert.deepEqual(sessions.active().map(x => x.id), ['pin-b', 'pin-a', 'last', 'first']);
     const before = sessions.list();
-    await assert.rejects(sessions.reorder('first', 'pin-a', 'before'), /same group/);
-    await assert.rejects(sessions.reorder('pin-a', 'first', 'after'), /same group/);
+    await assert.rejects(sessions.reorder('first', 'pin-a', 'before'), /Pinned tabs stay together/);
+    await assert.rejects(sessions.reorder('pin-a', 'first', 'after'), /Pinned tabs stay together/);
     await assert.rejects(sessions.reorder('first', 'saved', 'after'), /open tabs/);
     await assert.rejects(sessions.reorder('first', 'last', 'invalid'), /position/);
     assert.deepEqual(sessions.list(), before);

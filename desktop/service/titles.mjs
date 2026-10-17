@@ -6,6 +6,14 @@ export function englishTitle(value, fallback = 'New conversation') {
   return title;
 }
 
+export function groupLabel(value) {
+  const label = String(value ?? '').trim().replace(/\s+/g, ' ');
+  if (!label) return null;
+  if (label.length > 60) throw new Error('Keep the group name under 60 characters.');
+  try { englishTitle(label); } catch { throw new Error('Use an English group name. Messages can be in any language.'); }
+  return label;
+}
+
 export function restoredTitle(value, index) {
   if (/^(codex|claude|antigravity|agy|opencode|kimi)$/i.test(value || '')) return `Conversation ${index + 1}`;
   try { return englishTitle(value, `Conversation ${index + 1}`); }

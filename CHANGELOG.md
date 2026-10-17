@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- Group chat tabs. Choose a group when opening a chat, or right-click a tab to
+  add it to an existing group or start a new one. Grouped tabs sit together
+  behind a header chip that collapses, shows the tab count and marks unread
+  results; dropping a tab onto a chip moves it into that group. Drag a chip to
+  move the whole group. Right-click a chip to rename the group, which merges it
+  into another group of that name, to pick its color, or to delete the group;
+  History's group filters find a group that only closed chats still carry and
+  delete it from there. Deleting ungroups the chats and keeps them. Groups are
+  kept with History and survive restarts.
+- Right-click any chat tab for its settings: rename, pin, tab color, group,
+  working folder, scrollback and close. Right-click elsewhere is unchanged.
+
 ## 0.5.1 - 2026-10-14
 
 - Add Antigravity CLI chats with Google sign-in, reasoning effort, per-chat native history recovery and MCP inventory. Install `agy` separately, then choose it in New chat. Model access remains controlled by Google.

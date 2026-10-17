@@ -11,7 +11,7 @@ import { importFile, dragFiles, moveFile, recyclePath, MAX_FILE_BYTES } from './
 import { inventory } from './agents.mjs';
 import { Attachments, attachmentText, MAX_IMAGE_BYTES } from './attachments.mjs';
 import { ContextLibrary } from './context.mjs';
-import { taskTitle } from './titles.mjs';
+import { groupLabel, taskTitle } from './titles.mjs';
 import { taskEffort } from './effort.mjs';
 import { Workspace, localDay, metadataPatch } from './workspace.mjs';
 import { QuickActions } from './quick-actions.mjs';
@@ -265,9 +265,37 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
           if (['dark', 'light', 'system'].includes(data.workspaceTheme)) settings.workspaceTheme = data.workspaceTheme;
           if (['medium', 'high'].includes(data.coordinatorEffort)) settings.coordinatorEffort = data.coordinatorEffort;
           if (['cedar', 'marin'].includes(data.voiceName)) settings.voiceName = data.voiceName;
+          if (data.groupColors && typeof data.groupColors === 'object' && !Array.isArray(data.groupColors)) settings.groupColors = Object.fromEntries(Object.entries(data.groupColors).filter(([name, value]) => name.length <= 60 && typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)).slice(0, 200).map(([name, value]) => [name, value.toLowerCase()]));
+          if (Array.isArray(data.collapsedGroups)) settings.collapsedGroups = [...new Set(data.collapsedGroups.filter(item => typeof item === 'string' && item.length <= 60))].slice(0, 200);
           await saveSettings(); broadcast('settings', { settings }); return json(response, 200, settings);
         }
         if (method === 'POST' && url.pathname === '/api/sessions') { const session = await sessions.create({ ...data, bypass: data.bypass ?? settings.defaultBypass }); await integrations.publish('session', { event: 'started', session }); focus(session.id); return json(response, 201, session); }
+        if (method === 'POST' && url.pathname === '/api/groups/move') return json(response, 200, await sessions.moveGroup(data.group, data.pinned, data.targetId, data.position));
+        if (method === 'POST' && url.pathname === '/api/groups/rename') {
+          // A renamed group keeps its color and collapsed state; merging into an
+          // existing group keeps that group's.
+          const from = groupLabel(data.from), to = groupLabel(data.to);
+          const merging = sessions.list().some(item => item.group === to);
+          const result = await sessions.renameGroup(from, to);
+          if (from !== to) {
+            const { [from]: color, ...colors } = settings.groupColors || {};
+            settings.groupColors = color && !merging ? { ...colors, [to]: color } : colors;
+            const collapsed = settings.collapsedGroups || [];
+            settings.collapsedGroups = [...new Set(collapsed.filter(item => item !== from).concat(collapsed.includes(from) && !merging ? [to] : []))];
+            await saveSettings(); broadcast('settings', { settings });
+          }
+          return json(response, 200, result);
+        }
+        if (method === 'POST' && url.pathname === '/api/groups/delete') {
+          // The group's color and collapsed state go with it; the chats stay.
+          const name = groupLabel(data.name);
+          const result = await sessions.deleteGroup(name);
+          const colors = { ...(settings.groupColors || {}) }; delete colors[name];
+          settings.groupColors = colors;
+          settings.collapsedGroups = (settings.collapsedGroups || []).filter(item => item !== name);
+          await saveSettings(); broadcast('settings', { settings });
+          return json(response, 200, result);
+        }
         const sessionRoute = /^\/api\/sessions\/([\w-]+)(?:\/(\w+))?$/.exec(url.pathname);
         if (sessionRoute) {
           const [, id, action] = sessionRoute;
@@ -279,7 +307,7 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
           if (method === 'POST' && action === 'clear') return json(response, 200, await sessions.clearScreen(id));
           if (method === 'POST' && action === 'reorder') return json(response, 200, await sessions.reorder(id, data.targetId, data.position));
           if (method === 'POST' && action === 'input') return json(response, 200, sessions.input(id, data.text, { coordinator: data.paste !== false, submit: data.submit !== false }));
-          if (method === 'PATCH' && !action) return json(response, 200, typeof data.pinned === 'boolean' ? sessions.pin(id, data.pinned) : 'tabColor' in data ? sessions.color(id, data.tabColor) : sessions.rename(id, data.name));
+          if (method === 'PATCH' && !action) return json(response, 200, typeof data.pinned === 'boolean' ? sessions.pin(id, data.pinned) : 'tabColor' in data ? sessions.color(id, data.tabColor) : 'group' in data ? await sessions.assign(id, data.group) : sessions.rename(id, data.name));
           if (method === 'DELETE' && !action) return json(response, 200, await closeChat(id));
         }
         if (method === 'POST' && url.pathname === '/api/window') {
