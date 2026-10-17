@@ -106,27 +106,9 @@
 .mobile-tool-activity > div { display: flex; align-items: center; gap: 6px; padding: 4px 0; }
 .mobile-tool-activity > div > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .mobile-tool-activity small { font-size: 10px; }
-
-.mobile-conversation-images { margin-top: 12px; display: grid; gap: 12px; }
-.mobile-conversation-image { margin: 0; min-width: 0; }
-.mobile-conversation-image > button { display: block; width: 100%; padding: 0; overflow: hidden; background: #17171d; border: 1px solid var(--m-line); border-radius: 10px; }
-.mobile-conversation-image img { display: block; width: 100%; max-height: 340px; object-fit: contain; }
-.mobile-conversation-image figcaption { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; margin-top: 5px; font-size: 11px; color: var(--m-muted); overflow-wrap: anywhere; }
-.mobile-image-unavailable { color: var(--m-muted); font-size: 12px; }
-
-.mobile-image-viewer { position: fixed; inset: 0; width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; border-radius: 0; background: #121212; color: #f1f1f1; overflow: hidden; overscroll-behavior: none; touch-action: none; }
-.mobile-image-viewer[open] { display: flex; flex-direction: column; }
-.mobile-image-viewer::backdrop { background: #121212; }
-.mobile-image-viewer > header { display: flex; align-items: center; gap: 12px; flex-shrink: 0; padding: max(12px, env(safe-area-inset-top)) 12px 12px; }
-.mobile-image-viewer > header > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: #aaa; }
-.mobile-image-viewer > header > button,.mobile-image-viewer > header > a { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; color: #fff; background: transparent; border: none; text-decoration: none; }
-.mobile-image-stage { position: relative; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; touch-action: none; user-select: none; }
-.mobile-image-stage > img { width: 100%; height: 100%; max-width: none; max-height: none; object-fit: contain; transform-origin: center; pointer-events: none; }
-.mobile-image-stage > p { padding: 24px; }
-.mobile-image-viewer > footer { display: flex; justify-content: center; align-items: center; gap: 16px; flex-shrink: 0; padding: 12px 12px max(12px, env(safe-area-inset-bottom)); }
-.mobile-image-viewer > footer > button { min-width: 44px; min-height: 44px; border: 1px solid #3b3b3b; border-radius: 24px; padding: 6px 14px; background: #1d1d1d; color: #ddd; font-size: 16px; }
 .mobile-read-aloud { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
 .mobile-read-aloud > button { display: grid; place-items: center; width: 44px; min-height: 44px; padding: 8px; font-size: 11px; border: 1px solid var(--m-line); border-radius: 8px; background: transparent; color: var(--m-muted); }
+.mobile-read-aloud > [role=status] { font-size: 12px; color: var(--m-muted); }
 .mobile-read-aloud > label { display: flex; align-items: center; gap: 8px; width: 100%; font-size: 11px; color: var(--m-muted); }
 .mobile-read-aloud select { flex: 1; max-width: 100%; padding: 6px; }
 
@@ -135,12 +117,20 @@
 .mobile-reading-settings label { display: grid; gap: 6px; font-size: 12px; }
 .mobile-reading-settings select { width: 100%; }
 
-.mobile-video-stage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; background: #000; }
-.mobile-video-stage video { display: block; width: 100%; max-height: 100%; object-fit: contain; }
-.mobile-video-stage p { padding: 24px; }
-
-.mobile-conversation-video > button { min-height: 64px; padding: 14px; display: flex; align-items: center; gap: 12px; text-align: left; color: var(--m-text); overflow-wrap: anywhere; }
-
 .mobile-view-host { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .mobile-persistent-view { position: absolute; inset: 0; min-height: 0; display: flex; flex-direction: column; }
 .mobile-persistent-view[aria-hidden="true"] { visibility: hidden; pointer-events: none; }
+
+.mobile-terminal-views { display: flex; gap: 2px; padding: 2px; border: 1px solid #292730; border-radius: 8px; background: #17171e; }
+.mobile-app .mobile-terminal-views button { min-height: 32px; padding: 4px 10px; border: 0; border-radius: 6px; background: transparent; color: #8b8297; font-size: 11px; }
+.mobile-app .mobile-terminal-views button[aria-pressed="true"] { background: #e4b6cd1c; color: #eccbda; }
+.mobile-terminal-reader { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; padding: 6px 12px 12px; }
+.mobile-terminal-reader pre { margin: 0; font: 13px/1.5 ui-monospace, monospace; color: #dedbe3; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
+/* The terminal still parses output while the reader is shown; hidden, not removed, so it keeps its measurements. */
+.mobile-terminal-viewport.reading { position: absolute; width: 1px; height: 1px; overflow: hidden; visibility: hidden; pointer-events: none; }
+/* Workspace pull to refresh. The browser's own pull would reload the whole app, so the scrollers contain it. */
+.mobile-results { position: relative; overflow: hidden; }.mobile-results-list, .mobile-report-markdown { overscroll-behavior-y: contain; }
+.mobile-pull-refresh { position: absolute; top: 0; left: 50%; z-index: 2; width: 36px; height: 36px; margin-left: -18px; display: grid; place-items: center; border-radius: 50%; background: #241d29; border: 1px solid #4a3a4f; color: #a898b1; box-shadow: 0 3px 12px #0008; transform: translateY(calc(var(--pull) - 40px)) rotate(var(--turn)); pointer-events: none; }
+.mobile-pull-refresh.ready, .mobile-pull-refresh.refreshing { color: var(--m-accent); border-color: #896076; }
+.mobile-pull-refresh.refreshing svg { animation: mobile-pull-spin .8s linear infinite; }
+@keyframes mobile-pull-spin { to { transform: rotate(360deg); } }

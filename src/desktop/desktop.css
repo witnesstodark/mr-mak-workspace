@@ -117,6 +117,7 @@
 .chat-tab-close{border:0;background:none;display:flex;align-items:center;justify-content:center;width:21px;height:23px;border-radius:4px;color:#9c91a3!important;flex-shrink:0;opacity:1}
 .chat-tab-close:hover{background:#f0a0b017;color:#edb5c0!important}
 .chat-tab-select{touch-action:none;user-select:none;cursor:grab}.chat-tab-select:active{cursor:grabbing}
+.chat-tab-editing,.chat-tab-editing:active{cursor:text}.chat-tab-editing input{width:150px;min-width:0;padding:3px 6px;border:1px solid #dfa3b866;border-radius:4px;background:#ffffff08;color:#e2dce7;font-size:11px;user-select:text}
 .chat-tab.has-color{background:color-mix(in srgb,var(--tab-accent) 9%,transparent);box-shadow:inset 0 2px 0 color-mix(in srgb,var(--tab-accent) 40%,transparent);border-radius:5px 5px 0 0}
 .chat-tab.has-color .chat-tab-name{color:color-mix(in srgb,var(--tab-accent) 80%,#eee)}
 .chat-tab.has-color.selected{background:color-mix(in srgb,var(--tab-accent) 16%,transparent)}.chat-tab.selected:after{background:var(--tab-accent,#dfa3b8)}
@@ -159,3 +160,24 @@
 .terminal-dictation .mobile-voice-panel small{display:block;margin-top:8px;color:#b6aabe}
 .terminal-dictation .mobile-voice-panel button{margin:8px 5px 0 0;padding:6px;border:1px solid #503648;background:#302332;color:#eee;border-radius:4px}
 .terminal-dictation .saved .mobile-voice-error{top:155px}
+
+/* New chat project list: recent folders from Claude Code and Mr. Mak chats. */
+.project-field-heading>small{font-size:9px;color:#797381;margin-left:5px}
+.project-search{display:flex;align-items:center;gap:6px;padding-left:10px;border:1px solid #ffffff10;border-radius:7px;background:#ffffff04;color:#737581}.project-search input{flex:1;border:0!important;background:transparent!important;padding:7px 8px!important;font-size:11px!important}
+.project-list{display:flex;flex-direction:column;gap:3px;max-height:188px;overflow-y:auto;padding:3px;border:1px solid #ffffff0b;border-radius:9px;background:#ffffff02}.project-list>.desk-muted{padding:8px;margin:0}
+.project-choice{display:flex;align-items:center;gap:9px;width:100%;min-width:0;padding:7px 9px;border:1px solid transparent;border-radius:7px;background:transparent;text-align:left;color:#8f8a9b}.project-choice:hover{background:#ffffff06}
+.project-choice>span{display:flex;flex-direction:column;flex:1;min-width:0}.project-choice strong{font-size:12px;font-weight:550;color:#dedee7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.project-choice small{font-size:9.5px;color:#737581;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.project-choice em{flex-shrink:0;font-style:normal;font-size:9px;color:#8a7d93;border:1px solid #ffffff10;border-radius:9px;padding:1px 6px}
+
+.project-row{display:flex;align-items:center;gap:2px;border:1px solid transparent;border-radius:7px}.project-row:hover{background:#ffffff06}.project-row .project-choice{flex:1;border:0}.project-row .project-choice:hover{background:transparent}
+.project-row.selected{border-color:#e8a4b54a;background:#e8a4b50d}.project-row.selected strong{color:#f3d3e1}
+.project-pin{width:26px!important;height:26px!important;opacity:0;transition:opacity .15s}.project-row:hover .project-pin,.project-pin:focus-visible,.project-pin.active{opacity:1}.project-pin.active{color:#e8a4b5!important}
+.history-project{max-width:180px;border:1px solid #ffffff0c;background:#15161c;color:#8e869a;padding:4px 8px;border-radius:14px;font:inherit;font-size:10px}.history-project.selected{border-color:#dc9ebb45;color:#e7bfd1}
+.chat-tab-group{display:inline-flex;align-items:center;gap:5px;flex-shrink:0;height:36px;margin-left:8px;padding:0 6px 0 9px;border-left:1px solid #ffffff12;font-size:9.5px;font-weight:600;letter-spacing:.2px;color:#8d8798;text-transform:uppercase;white-space:nowrap}.chat-tab-lead{display:flex;flex:0 1 auto;min-width:0;max-width:100%}.chat-tab-lead .chat-tab{flex-shrink:1}.chat-tab-lead:first-child .chat-tab-group{margin-left:0;border-left:0;padding-left:3px}.chat-tab-group small{font-size:9px;font-weight:400;color:#6e6878}
+button.chat-tab-group{border-top:0;border-right:0;border-bottom:0;background:none;font-size:9.5px;cursor:pointer}button.chat-tab-group:hover{color:#d9d5df}button.chat-tab-group:focus-visible{outline:1px solid #dfa3b8;outline-offset:-3px}
+.chat-tab-group.collapsed{color:#b9b2c4}.chat-tab-group.collapsed small{color:#dfa3b8;font-weight:600}
+.handoff-offer{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;flex-shrink:0;padding:8px 14px;border-bottom:1px solid #ffffff09;background:#17151c;font-size:11px;color:#bdb3c6}.handoff-offer>span{flex:1 1 300px;min-width:0;line-height:1.5}.handoff-offer strong{color:#ecd6e2;font-weight:600}
+.handoff-offer button{padding:5px 10px;border:1px solid #ffffff14;border-radius:7px;background:transparent;color:#cdbfd2;font-size:10.5px}.handoff-offer button.primary{border-color:#e8a4b555;background:#e8a4b51a;color:#f3d3e1}
+.handoff-offer.working>i{width:7px;height:7px;border-radius:50%;background:#e8a4b5;animation:conversation-pulse 1.2s ease-in-out infinite}.handoff-offer.failed{background:#221c16;color:#e3c99c}
+.chat-status-model{color:#b9a3c0}
+.option-select-setting{display:flex;flex-direction:column;gap:6px;padding:8px 9px;border-top:1px solid #ffffff08;font-size:11px;color:#a7a1b0}.option-select-setting small{color:#6e6878;font-size:9.5px;margin-left:4px}.option-select-setting select{padding:5px 7px;border:1px solid #ffffff12;border-radius:6px;background:#121318;color:#d8d0dc;font:inherit;font-size:11px}

@@ -5,10 +5,10 @@ import path from 'node:path';
 import pty from 'node-pty';
 import headless from '@xterm/headless';
 import { TerminalSnapshotAddon } from './terminal-snapshot.mjs';
-import { terminalCommand, childEnvironment, nativeConversationId } from './agents.mjs';
+import { terminalCommand, childEnvironment, nativeConversationId, codexSupportsNoDaemon } from './agents.mjs';
 import { readJson, saveJson } from './util.mjs';
 import { claudeTranscript, codexTranscript, tailNativeFile } from './native-events.mjs';
-import { findCodexChat } from './codex-history.mjs';
+import { findCodexChat, newerCodexRollout } from './codex-history.mjs';
 import { englishTitle, restoredTitle } from './titles.mjs';
 import { defaultWorkerEffort, workerEfforts } from './effort.mjs';
 import { ptyOptions } from './platform.mjs';
@@ -99,12 +99,14 @@ export class Sessions extends EventEmitter {
       cwd, bypass: options.bypass === true, createdAt: now, lastInputAt: null, lastOutputAt: null,
       effort: options.effort,
       status: 'starting', nativeId: options.resumeId || (agent === 'claude' ? randomUUID() : null),
-      open: true, pinned: false, updatedAt: now, preview: '', hasConversation: !!options.resumeId, restoreError: null,
+      open: true, pinned: false, updatedAt: now, preview: '', hasConversation: !!options.resumeId || !!options.initialPrompt, restoreError: null,
       attention: false, cols: Math.min(500, Math.max(20, options.cols || 90)), rows: Math.min(200, Math.max(5, options.rows || 32)),
     });
     this.items.set(session.id, session);
     await this.hydrate(session);
-    try { await this.launch(session, options.resumeId, await this.nativeBoundary(session, options.resumeId)); }
+    // A first message and its readable folder apply to this launch only, never to a resume.
+    const first = { initialPrompt: options.initialPrompt, readDir: options.readDir };
+    try { await this.launch(session, options.resumeId, await this.nativeBoundary(session, options.resumeId), first); }
     catch (error) { this.items.delete(session.id); session.terminal.dispose(); throw error; }
     await this.persist();
     return publicSession(session);
@@ -124,7 +126,7 @@ export class Sessions extends EventEmitter {
     return publicSession(session);
   }
 
-  async launch(session, resumeId, nativeWatch) {
+  async launch(session, resumeId, nativeWatch, first = {}) {
     let env = childEnvironment(this.repo);
     let opencodeMajor;
     if (session.agent === 'opencode') {
@@ -138,7 +140,9 @@ export class Sessions extends EventEmitter {
     if (this.closed || !session.open) throw new Error('The chat was closed before its terminal started.');
     if (session.agent === 'antigravity' && resumeId && !validAntigravityId(resumeId)) throw new Error('Use the Antigravity conversation UUID from its /resume picker.');
     const antigravityLog = session.agent === 'antigravity' ? await prepareAntigravityLog(this.stateDir, session.id) : undefined;
-    const command = terminalCommand(session.agent, { bypass: session.bypass, resumeId, nativeId: session.nativeId, effort: session.effort, opencodeMajor, antigravityLog });
+    const noDaemon = session.agent === 'codex' && await codexSupportsNoDaemon(env);
+    if (this.closed || !session.open) throw new Error('The chat was closed before its terminal started.');
+    const command = terminalCommand(session.agent, { bypass: session.bypass, resumeId, nativeId: session.nativeId, effort: session.effort, opencodeMajor, antigravityLog, noDaemon, ...first });
     if (session.agent === 'codex') env.CODEX_INTERNAL_ORIGINATOR_OVERRIDE = `mrmak_chat_${session.id}`;
     const proc = pty.spawn(command.file, command.args, ptyOptions({ cwd: session.cwd, env, cols: session.cols, rows: session.rows }));
     session.process = proc;
@@ -219,7 +223,26 @@ export class Sessions extends EventEmitter {
   watchNative(session, file, offset = 0) {
     if (!session.process) return;
     session.stopNativeWatch?.();
-    session.stopNativeWatch = tailNativeFile(file, session.agent, event => this.nativeEvent(session, event), offset);
+    const stopTail = tailNativeFile(file, session.agent, event => this.nativeEvent(session, event), offset);
+    if (session.agent !== 'codex') { session.stopNativeWatch = stopTail; return; }
+    // A Codex rewind continues the thread in a new rollout, and /new starts another
+    // thread in the same terminal: follow the newest one this terminal owns.
+    let checking = false;
+    const timer = setInterval(async () => {
+      if (checking) return;
+      checking = true;
+      try {
+        const next = await newerCodexRollout(session, file);
+        if (!next || session.stopNativeWatch !== stop || [...this.items.values()].some(item => item !== session && item.nativeId === next.id)) return;
+        session.nativeId = next.id; session.hasConversation = true;
+        this.changed(session);
+        this.watchNative(session, next.file);
+      } catch { /* The next check retries. */ }
+      finally { checking = false; }
+    }, 2000);
+    timer.unref();
+    const stop = () => { clearInterval(timer); stopTail(); };
+    session.stopNativeWatch = stop;
   }
 
   nativeEvent(session, event) {
@@ -343,6 +366,16 @@ export class Sessions extends EventEmitter {
     }
     this.changed(session);
     return { delivered: true, sessionId: id, name: session.name, note: 'Text delivered to the terminal. Check the screen for CLI readiness or permission prompts; delivery does not confirm the agent accepted the task.' };
+  }
+
+  // Keys Mr. Mak presses on the user's behalf, such as menu navigation. They are
+  // not manual typing, so a message sent right after them is not held back.
+  keys(id, data) {
+    const session = this.get(id);
+    if (!session.process) throw new Error('This terminal is stopped. Resume it before sending a message.');
+    session.process.write(data);
+    session.attention = false;
+    this.changed(session);
   }
 
   resize(id, cols, rows) {

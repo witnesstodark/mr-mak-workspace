@@ -11,7 +11,8 @@ import { inventory } from './agents.mjs';
 import { TailscaleTransport } from './mobile-tailscale.mjs';
 import { ConversationMedia } from './conversation-media.mjs';
 import { LocalReadAloud } from './local-read-aloud.mjs';
-import { MobileTranscripts } from './mobile-transcript.mjs';
+import { ConversationTranscripts } from './mobile-transcript.mjs';
+import { projectKey, recentProjects } from './recent-projects.mjs';
 import { MobileReports } from './mobile-reports.mjs';
 import { MobileDictation } from './mobile-dictation.mjs';
 
@@ -24,11 +25,11 @@ const DEVICE_TTL = 180 * 24 * 60 * 60 * 1000;
 const send = (ws, value) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(value)); };
 
 export class MobileGateway {
-  constructor({ repo, uiDir, stateDir, sessions, attachments, settings, changed, closeChat, transport = new TailscaleTransport(), dictation = new MobileDictation(repo), chooseDictation, readAloud = new LocalReadAloud(repo) }) {
+  constructor({ repo, uiDir, stateDir, sessions, attachments, settings, changed, closeChat, transport = new TailscaleTransport(), dictation = new MobileDictation(repo), chooseDictation, readAloud = new LocalReadAloud(repo), transcripts = new ConversationTranscripts() }) {
     Object.assign(this, { repo, uiDir, sessions, attachments, settings, changed, closeChat, transport });
     this.file = path.join(stateDir, 'mobile-access.json');
     this.saves = Promise.resolve(); this.pending = new Map(); this.clients = new Set(); this.inflight = new Map(); this.uploads = new Map(); this.queues = new Map();
-    this.transcripts = new MobileTranscripts(); this.conversationMedia = new ConversationMedia(); this.active = false; this.error = ''; this.origin = ''; this.rate = { at: Date.now(), count: 0 };
+    this.transcripts = transcripts; this.conversationMedia = new ConversationMedia(); this.active = false; this.error = ''; this.origin = ''; this.rate = { at: Date.now(), count: 0 };
     this.reports = new MobileReports(this);
     this.readAloud = readAloud; this.dictation = dictation; this.chooseDictation = chooseDictation;
   }
@@ -167,6 +168,7 @@ export class MobileGateway {
     return session;
   }
   list() { return this.sessions.list().filter(item => item.agent !== 'shell'); }
+  projects() { return recentProjects({ repo: this.repo, sessions: this.sessions.list(), pinned: this.settings().pinnedProjects || [] }); }
   broadcast(event) { for (const ws of this.clients) send(ws, event); }
   connect(ws, device) {
     ws.deviceId = device.id; ws.alive = true; ws.sessionId = null; this.clients.add(ws);
@@ -276,9 +278,13 @@ export class MobileGateway {
           const id = randomUUID(); this.uploads.set(id, { ...image, deviceId: device.id, expires: Date.now() + 24 * 60 * 60 * 1000 });
           return json(response, 201, { id, name: image.name });
         }
+        if (method === 'GET' && route === '/mobile/api/projects') return json(response, 200, await this.projects());
         if (method === 'POST' && route === '/mobile/api/sessions') {
           if (!inventory().some(item => item.id !== 'shell' && item.id === data.agent && item.available)) fail('Choose an installed agent.');
-          return json(response, 201, await this.sessions.create({ agent: data.agent, name: data.name, cwd: this.repo, bypass: this.settings().defaultBypass === true }));
+          // A phone can only choose a folder already used on this computer, never type a path.
+          const project = data.cwd === undefined ? null : (await this.projects()).find(item => typeof data.cwd === 'string' && projectKey(item.path) === projectKey(data.cwd));
+          if (data.cwd !== undefined && !project) fail('Choose a project from the list.');
+          return json(response, 201, await this.sessions.create({ agent: data.agent, name: data.name, cwd: project?.path || this.repo, bypass: this.settings().defaultBypass === true }));
         }
         const match = /^\/mobile\/api\/sessions\/([a-f0-9-]{36})\/(messages|send|resume|close|key|read-aloud)$/.exec(route);
         if (match) {

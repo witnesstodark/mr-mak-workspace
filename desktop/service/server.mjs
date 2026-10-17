@@ -24,6 +24,14 @@ import { KnowledgeManager, MarkdownKnowledgeProvider } from './knowledge/provide
 import { IntegrationManager } from './integrations/manager.mjs';
 import { MobileDictation } from './mobile-dictation.mjs';
 import { MobileGateway } from './mobile.mjs';
+import { ConversationTranscripts } from './mobile-transcript.mjs';
+import { ConversationMedia } from './conversation-media.mjs';
+import { projectKey, recentProjects } from './recent-projects.mjs';
+import { answerPrompt, terminalPrompt } from './terminal-prompt.mjs';
+import { rewindToMessage } from './message-edit.mjs';
+import { LocalReadAloud } from './local-read-aloud.mjs';
+import { Handoffs } from './handoff.mjs';
+import { chatCommands } from './chat-commands.mjs';
 
 const listen = server => new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', () => resolve(`http://127.0.0.1:${server.address().port}`)); });
 
@@ -41,10 +49,13 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
   const integrations = await new IntegrationManager(stateDir).init();
   const mcp = new McpInventory(repo, mcpOptions);
   const sessions = await new Sessions(repo, stateDir).init();
+  const transcripts = new ConversationTranscripts();
+  const conversationMedia = new ConversationMedia();
+  const readAloud = mobileOptions?.readAloud || new LocalReadAloud(repo);
   const environment = parseEnv(await readFile(path.join(repo, '.env'), 'utf8').catch(() => ''));
   const settingsPath = path.join(stateDir, 'settings.json');
   const savedSettings = await readJson(settingsPath, null);
-  let settings = { defaultAgent: 'codex', defaultBypass: false, coordinatorModel: environment.MRMAK_COORDINATOR_MODEL?.trim() || null, terminalFontSize: 13, terminalAppearance: 'original', workspaceTheme: 'dark', coordinatorEffort: 'medium', voiceName: 'cedar', voiceStyle: defaultVoiceStyle, ...savedSettings };
+  let settings = { defaultAgent: 'codex', defaultBypass: false, coordinatorModel: environment.MRMAK_COORDINATOR_MODEL?.trim() || null, terminalFontSize: 13, terminalAppearance: 'original', workspaceTheme: 'dark', coordinatorEffort: 'medium', voiceName: 'cedar', voiceStyle: defaultVoiceStyle, handoffAfter: 40, groupTabsByProject: false, systemEvents: 'compact', ...savedSettings };
   if (await dictation.initializeProvider?.(settings, savedSettings !== null)) await saveJson(settingsPath, settings);
   dictation.providerChoice = () => settings.transcribeProvider || null;
   const chooseDictation = async provider => {
@@ -55,6 +66,7 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
     mobile?.broadcast({ type: 'dictation', dictation: info });
     return info;
   };
+  const projectList = () => recentProjects({ repo, sessions: sessions.list(), pinned: settings.pinnedProjects || [] });
   let selectedId = sessions.active().some(item => item.id === settings.selectedId) ? settings.selectedId : sessions.active()[0]?.id || null;
   let workspaceRoute = settings.workspaceRoute || null;
   let settingsTimer;
@@ -82,6 +94,7 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
     if (selectedId === id) { selectedId = sessions.active()[0]?.id || null; settings.selectedId = selectedId; scheduleSettings(); broadcast('selection', { selectedId }); }
     return { closed: true, savedInHistory: true };
   };
+  const handoffs = new Handoffs({ repo, sessions, transcripts, opened: id => focus(id), changed: (id, handoff) => broadcast('handoff', { id, handoff }) });
   const attach = async (id, paths, coordinator = false) => {
     const session = sessions.get(id);
     const verified = await attachments.paths(paths);
@@ -96,6 +109,7 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
       switch (name) {
         case 'list_chats': return sessions.active();
         case 'search_history': return history(args.query || '').slice(0, 70);
+        case 'list_projects': { const query = String(args.query || '').toLowerCase(); return (await projectList()).filter(item => `${item.name} ${item.path}`.toLowerCase().includes(query)).slice(0, 40); }
         case 'reopen_chat': { const session = await sessions.resume(args.id); focus(session.id); return session; }
         case 'close_chat': return closeChat(args.id);
         case 'pin_chat': return sessions.pin(args.id, args.pinned);
@@ -178,6 +192,10 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
       const url = new URL(request.url, origin);
       if (request.headers.host !== new URL(origin).host) throw Object.assign(new Error('Unexpected host'), { status: 403 });
       if (url.pathname === '/health') return json(response, 200, { service: 'mrmak', version: '0.5.1' });
+      // An <img> cannot send the bearer token. Its unguessable, short-lived grant
+      // is issued only through an authorized messages request for this chat.
+      const media = /^\/media\/([a-f0-9-]{36})\/([a-zA-Z0-9_-]{43})$/.exec(url.pathname);
+      if (media && ['GET', 'HEAD'].includes(request.method)) return await conversationMedia.serve(request, response, media[1], media[2], 'desktop', url.searchParams.get('download') === '1');
       if (url.pathname.startsWith('/api/')) {
         authorize(request);
         const method = request.method;
@@ -229,6 +247,25 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
         if (method === 'GET' && url.pathname === '/api/mcp') return json(response, 200, await mcp.list());
         if (method === 'POST' && url.pathname === '/api/mcp/check') return json(response, 200, await mcp.check(data.id));
         if (method === 'POST' && url.pathname === '/api/native/settings') return json(response, 200, await nativeSettings.set(data.winKey));
+        if (method === 'GET' && url.pathname === '/api/recent-projects') return json(response, 200, await projectList());
+        if (method === 'POST' && url.pathname === '/api/recent-projects/pin') {
+          const project = (await projectList()).find(item => typeof data.path === 'string' && projectKey(item.path) === projectKey(data.path));
+          if (!project || typeof data.pinned !== 'boolean') throw new Error('Choose a project from the list.');
+          const others = (settings.pinnedProjects || []).filter(item => projectKey(item) !== projectKey(project.path));
+          settings.pinnedProjects = data.pinned ? [...others, project.path].slice(-30) : others;
+          await saveSettings(); broadcast('settings', { settings });
+          return json(response, 200, await projectList());
+        }
+        if (method === 'GET' && url.pathname === '/api/read-aloud') return json(response, 200, await readAloud.status());
+        if (method === 'POST' && url.pathname === '/api/preview/show') {
+          // A link in a chat may be relative to that chat's working folder.
+          const base = typeof data.sessionId === 'string' ? sessions.get(data.sessionId).cwd : repo;
+          if (typeof data.path !== 'string' || !data.path.trim() || /[\x00-\x1f]/.test(data.path)) throw new Error('Choose a local file or folder.');
+          const target = await realpath(path.resolve(base, data.path));
+          if ((await stat(target)).isDirectory()) { native({ type: 'reveal', path: target }); return json(response, 200, { shown: 'folder', path: target }); }
+          const preview = await files.preview(target); show('workspace', { preview });
+          return json(response, 200, { shown: 'preview', path: preview.path });
+        }
         if (method === 'GET' && url.pathname === '/api/history') return json(response, 200, history(url.searchParams.get('q') || ''));
         if (method === 'POST' && url.pathname === '/api/history/import') return json(response, 201, await sessions.importConversation(data));
         if (method === 'GET' && url.pathname === '/api/files') return json(response, 200, await files.list(url.searchParams.get('path') || repo, url.searchParams.get('mode') || 'main', url.searchParams.get('q') || ''));
@@ -262,6 +299,9 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
           if (typeof data.defaultBypass === 'boolean') settings.defaultBypass = data.defaultBypass;
           if (Number.isInteger(data.terminalFontSize) && data.terminalFontSize >= 10 && data.terminalFontSize <= 24) settings.terminalFontSize = data.terminalFontSize;
           if (['focus', 'original'].includes(data.terminalAppearance)) settings.terminalAppearance = data.terminalAppearance;
+          if (Number.isInteger(data.handoffAfter) && (data.handoffAfter === 0 || (data.handoffAfter >= 10 && data.handoffAfter <= 500))) settings.handoffAfter = data.handoffAfter;
+          if (typeof data.groupTabsByProject === 'boolean') settings.groupTabsByProject = data.groupTabsByProject;
+          if (['full', 'compact', 'hidden'].includes(data.systemEvents)) settings.systemEvents = data.systemEvents;
           if (['dark', 'light', 'system'].includes(data.workspaceTheme)) settings.workspaceTheme = data.workspaceTheme;
           if (['medium', 'high'].includes(data.coordinatorEffort)) settings.coordinatorEffort = data.coordinatorEffort;
           if (['cedar', 'marin'].includes(data.voiceName)) settings.voiceName = data.voiceName;
@@ -272,6 +312,34 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
         if (sessionRoute) {
           const [, id, action] = sessionRoute;
           if (method === 'GET' && action === 'screen') return json(response, 200, await sessions.read(id));
+          if (method === 'GET' && action === 'messages') {
+            const session = sessions.get(id);
+            const value = await conversationMedia.present(await transcripts.read(session), session, 'desktop', grant => `/media/${session.id}/${grant}`);
+            return json(response, 200, { ...value, prompt: session.process ? terminalPrompt((await sessions.read(id, 60)).screen) : null });
+          }
+          if (method === 'GET' && action === 'commands') { const session = sessions.get(id); return json(response, 200, await chatCommands(session.agent, session.cwd, mcpOptions)); }
+          if (method === 'GET' && action === 'stats') {
+            const { supported, userMessages = 0, truncated = false, model = null } = await transcripts.read(sessions.get(id));
+            return json(response, 200, { supported, userMessages, truncated, model, handoff: handoffs.state(id) });
+          }
+          if (method === 'POST' && action === 'handoff') return json(response, 200, handoffs.start(id));
+          if (method === 'POST' && action === 'prompt') return json(response, 200, await answerPrompt(sessions, id, data.id, data.choice));
+          if (method === 'POST' && action === 'rewind') return json(response, 200, await rewindToMessage(sessions, transcripts, id, String(data.messageId || '')));
+          if (method === 'POST' && action === 'speak') {
+            const controller = new AbortController(), abort = () => controller.abort();
+            sessions.get(id); response.once('close', abort);
+            try {
+              const audio = await readAloud.synthesize('desktop', data, controller.signal);
+              response.writeHead(200, { 'Content-Type': 'audio/wav', 'Content-Length': audio.length, 'Cache-Control': 'no-store' }); response.end(audio); return;
+            } finally { response.off('close', abort); }
+          }
+          if (method === 'POST' && action === 'send') {
+            // One prompt: the text and any attached paths are pasted together, then submitted.
+            const session = sessions.get(id), text = typeof data.text === 'string' ? data.text : '';
+            const paths = Array.isArray(data.paths) && data.paths.length ? await attachments.paths(data.paths) : [];
+            if (!text.trim() && !paths.length) throw new Error('Write a message or attach a file.');
+            return json(response, 200, sessions.input(id, `${text}${paths.length ? `${text ? '\n' : ''}${attachmentText(paths, session.agent)}` : ''}`, { coordinator: true, submit: true }));
+          }
           if (method === 'POST' && action === 'focus') return json(response, 200, focus(id));
           if (method === 'POST' && action === 'stop') return json(response, 200, sessions.stop(id));
           if (method === 'POST' && action === 'resume') { const session = await sessions.resume(id, data.nativeId); focus(id); return json(response, 200, session); }
@@ -337,7 +405,7 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
   });
   const origin = await listen(server);
   files.uiOrigin = origin;
-  mobile = await new MobileGateway({ ...mobileOptions, dictation, chooseDictation, repo, uiDir, stateDir, sessions, attachments, closeChat, settings: () => settings, changed: state => broadcast('mobile-state', { mobile: state }) }).init();
+  mobile = await new MobileGateway({ ...mobileOptions, transcripts, readAloud, dictation, chooseDictation, repo, uiDir, stateDir, sessions, attachments, closeChat, settings: () => settings, changed: state => broadcast('mobile-state', { mobile: state }) }).init();
   const wss = new WebSocketServer({ noServer: true, maxPayload: 128 * 1024 });
   server.on('upgrade', (request, socket, head) => {
     const url = new URL(request.url, origin);

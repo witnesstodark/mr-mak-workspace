@@ -21,6 +21,74 @@ send ideas and dictate messages while the agents keep working on your computer.
 *Chats on the left, Workspace on the right. App views arranged side by side
 with sample conversations and the included My Dream Game project.*
 
+## Read and answer a chat as a conversation
+
+Claude Code and Codex chats have a **Conversation | Terminal** switch. The
+Conversation view reads the CLI's own transcript and shows it as messages, with
+Markdown, images and recent tool activity. Its composer sends text, attachments
+and dictation to the same terminal, and **Stop** (Esc) interrupts the agent.
+
+![A Claude Code chat in the Conversation view: messages with Markdown, the Conversation and Terminal switch, and Read aloud under the last reply](docs/assets/conversation-view.png)
+
+A new chat opens in Terminal until it has a conversation, so folder-trust and
+sign-in questions are never hidden. Links to local files in a reply open a
+Workspace preview, resolved against the chat's folder.
+
+- **Answer permission menus with a click.** When the CLI asks for permission,
+  the numbered menu at the bottom of the terminal appears as buttons. Before
+  sending any key, Mr. Mak reads the screen again and checks that it is still the
+  same prompt, so a late click cannot answer a newer question.
+- **Autocomplete commands.** Type `/` at the start of a message, or `$` before a
+  word in a Codex chat, to list that CLI's built-in commands plus project, user
+  and plugin commands and skills. A command that opens a picker, such as
+  `/model`, switches the chat to Terminal after it is sent.
+- **Edit a sent message.** In a Claude Code chat, the pencil on your message
+  opens an editor, as with Esc Esc in Claude Code. Sending rewinds the
+  conversation to before that message (files are not changed) and sends the
+  edited text. After a rewind, including one made in the terminal, the view shows
+  only the current branch.
+- **CLI events stay compact.** Background agent results, slash commands and their
+  output appear as short events instead of raw tags; a review's findings become a
+  list with file links. Choose Compact, Expanded or Hidden in chat options.
+- **See what is still running.** For Claude Code chats, a line above the composer
+  counts the subagents and background terminal commands that are still working.
+  Expand it to see each agent's task and current step, each command and who
+  started it, and how long each has been running.
+- **Know the model.** The status bar shows the model the chat last used, next to
+  reasoning effort and permissions.
+- **Read aloud on the desktop** with the same local voices as the phone.
+  *Preparing audio…* shows while your computer generates each part.
+
+![Claude Code asking to edit combat.ts, shown in the Conversation view with the diff and three answer buttons](docs/assets/conversation-permission.png)
+
+Codex 0.163 chats are supported: Mr. Mak starts Codex with `--no-daemon` when
+the installed version offers it, so every chat stays linked to its conversation,
+and a chat follows a rewind or a `/new` made in its terminal.
+
+## Projects and long chats
+
+**New chat** lists the folders you have worked in: the Workspace, projects
+opened in Claude Code, folders where Codex ran and folders of earlier Mr. Mak
+chats. Pin favorites to keep them at the top. History can filter by project, and
+the voice coordinator can open a chat in a project you name. A paired phone may
+only start a chat in a listed folder, never in an arbitrary path.
+
+<img src="docs/assets/new-chat-projects.png" alt="The New chat dialog with Claude Code selected and a project list: the Workspace, a pinned arachne-lab, the selected dream-game and other recent folders" width="420">
+
+After a set number of your messages (40 by default; chat options **⋯**), a chat
+offers **Summarize and continue**. Mr. Mak asks the agent for a handoff, saves it
+in `inbox/handoffs`, and opens "*name* · continued" in the same folder with the
+same agent and settings. The new chat starts by reading that handoff. Choose
+**Later** or **Not for this chat** to dismiss it.
+
+![The fresh-chat offer in a long conversation, with Summarize and continue, Later and Not for this chat](docs/assets/handoff-offer.png)
+
+The folder button next to **+** groups open chat tabs by project, and tab
+shortcuts follow the grouped order. Click a project label to collapse its tabs;
+the open chat stays visible. Double-click a tab, or press F2, to rename its chat.
+
+![Chat tabs grouped under three projects: dream-game, arachne-lab and mr-mak](docs/assets/tabs-by-project.png)
+
 ## On your phone
 
 Read replies, send follow-ups or images, and open Workspace reports from a mobile
@@ -41,6 +109,14 @@ to see it at full size. Sample conversations shown.*
   transcribe it. Review the text before pressing Send.
 - **Review the result.** Enlarge shared images, play videos, or reopen a report
   at its saved position. Optional local voices can read a reply aloud.
+- **Move around like an app.** Pull down from the top of the Workspace to
+  refresh it; an open report reloads at the same page and section. The back
+  gesture returns to the previous screen instead of leaving the app (Chrome and
+  Edge on Android).
+- **Read the terminal.** The Terminal view opens in Wrap mode, so the live text
+  wraps to the screen and can be selected. Fit and Actual remain available.
+
+<img src="docs/assets/mobile-terminal-wrap.png" alt="The phone Terminal view in Wrap mode, with CLI output wrapped to the screen width" width="320">
 
 Keep the computer awake with Mr. Mak running, and Tailscale connected on both
 devices. Dictation can run locally with Whisper after the optional Python setup,
@@ -139,7 +215,8 @@ open an installed CLI and sign in with your own account.
 The installer includes the local Node service. It does not include Codex,
 Claude Code, Antigravity, OpenCode, Kimi, Blender, Python or provider accounts.
 
-**Already using Mr. Mak?** Read the [0.5.1 update notes](CHANGELOG.md) for
+**Already using Mr. Mak?** Read the [update notes](CHANGELOG.md) for the
+Conversation view, recent projects and fresh-chat handoff, and for 0.5.1's
 Antigravity, macOS improvements, mobile navigation, local voice options and
 release security changes.
 Follow the

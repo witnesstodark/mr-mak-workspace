@@ -79,6 +79,12 @@ export default function TerminalPane({ id, agent, fontSize, appearance, onAttach
         if (url.protocol === 'https:' || url.protocol === 'http:') window.open(url.href, '_blank', 'noopener,noreferrer')
       } catch { /* Invalid terminal text is not a web link. */ }
     }
+    // Automatic focus leaves a text field the person is typing in elsewhere, such as a tab rename.
+    const focusIdle = () => {
+      const active = document.activeElement as HTMLElement | null
+      if (active && !host.current?.contains(active) && (active.matches('input, textarea, select') || active.isContentEditable)) return
+      terminal.focus()
+    }
     const terminal = new Terminal({
       fontFamily: '"Cascadia Code", "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace', fontSize: 13, lineHeight: 1.18,
       cursorBlink: true, cursorStyle: 'bar', scrollback: 3000, allowTransparency: false, allowProposedApi: true,
@@ -131,7 +137,7 @@ export default function TerminalPane({ id, agent, fontSize, appearance, onAttach
         terminal.write(event.data || '', () => {
           ready = true
           for (const chunk of queued) if (chunk.sequence > sequence) { terminal.write(chunk.data); sequence = chunk.sequence }
-          queued = []; resize(); terminal.focus()
+          queued = []; resize(); focusIdle()
         })
       }
       if (event.type === 'output' && event.id === id) {
@@ -185,7 +191,7 @@ export default function TerminalPane({ id, agent, fontSize, appearance, onAttach
     element.addEventListener('paste', paste, true)
     const observer = new ResizeObserver(resize); observer.observe(host.current)
     subscribe()
-    const focus = () => terminal.focus()
+    const focus = () => focusIdle()
     window.addEventListener('focus', focus)
     return () => {
       off(); input.dispose(); clipboard.dispose(); observer.disconnect()

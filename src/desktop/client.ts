@@ -143,3 +143,8 @@ export async function transcribeDesktopAudio(recording: import('../mobile/voice-
   if (!response.ok) throw new Error(result.error || 'Could not transcribe this recording.')
   return result
 }
+export async function speakDesktopText(sessionId: string, voice: string, text: string, signal: AbortSignal): Promise<ArrayBuffer> {
+  const response = await fetch(`/api/sessions/${sessionId}/speak`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ voice, text }), signal })
+  if (!response.ok) { const result = await response.json().catch(() => ({})); throw new Error(result.error || 'Speech generation failed.') }
+  return response.arrayBuffer()
+}

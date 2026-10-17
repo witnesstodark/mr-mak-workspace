@@ -13,4 +13,4 @@ audio = decode_audio(args.audio, sampling_rate=16000)
 if len(audio) > 125 * 16000:
     raise ValueError('Recording exceeds two minutes')
 segments, info = model.transcribe(audio, task='transcribe', vad_filter=True, beam_size=5, condition_on_previous_text=False)
-print(json.dumps({'text': ' '.join(segment.text.strip() for segment in segments).strip()}, ensure_ascii=False))
+print(json.dumps({'text': ' '.join(segment.text.strip() for segment in segments).strip()}))

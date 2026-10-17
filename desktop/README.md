@@ -39,6 +39,46 @@ preserved. Terminal URLs and OSC 8 links use xterm link handlers. New-window
 requests from both app windows open HTTP(S) links through the Windows default
 browser association, while the current app view stays open.
 
+## Projects and the Conversation view
+
+New chat lists recent projects from `recent-projects.mjs`: the Workspace, pinned
+favorites, folders recorded in Claude Code's `.claude.json` (`CLAUDE_CONFIG_DIR`
+is respected), Codex session metadata from the latest 60 day folders (`CODEX_HOME`
+is respected) and the folders of earlier Mr. Mak chats. Only folder names are read
+from those files. Worktrees, scratch folders, the Codex app's dated folders and
+missing folders are skipped. Pins are saved in `settings.pinnedProjects`. A phone
+may start a chat only in a listed folder. The voice coordinator uses the same list
+through `list_projects`.
+
+Claude and Codex chats can switch between Terminal and Conversation. Conversation
+reads the same native transcript as the phone, sends a prompt through the PTY with
+bracketed paste and Enter, and serves media through short-lived `/media/` grants
+bound to one chat. A new chat opens in Terminal until it has a conversation, since
+the CLI may first ask about folder trust or sign-in. The last chosen view becomes
+the default for other chats.
+
+`terminal-prompt.mjs` recognizes a numbered CLI menu with one selected option at
+the bottom of the terminal screen. Conversation shows it as buttons. An answer
+names the menu it saw; the service re-reads the screen, rejects a changed menu,
+then sends arrow keys and Enter one key at a time. Local links in messages open a
+Workspace preview, resolved against the chat folder. Desktop Read aloud uses the
+same local voices as the phone.
+
+## Fresh-chat handoff and project tabs
+
+`settings.handoffAfter` (default 40, 0 turns it off) is the number of the user's
+own messages after which a Claude or Codex chat offers a fresh chat. The count
+comes from the native transcript. "Later" and "Not for this chat" are stored per
+chat in the window's local storage. Accepting runs `handoff.mjs`: it sends a fixed
+handoff request through the PTY, waits for the native turn completion, takes the
+reply from its `# Handoff` heading and saves it in `inbox/handoffs/` (ignored by
+Git). The new chat uses the same agent, folder, permission and effort settings and
+receives one first-message argument naming that file. Claude also receives
+`--add-dir` for the handoff folder. Nothing changes in the original chat.
+
+`settings.groupTabsByProject` groups open tabs by working folder. A group keeps
+the position of its first tab; tabs reorder only within their project.
+
 Fullscreen Claude scrolls its own conversation. Terminal snapshots preserve
 both mouse tracking and the requested SGR encoding, including saved screens,
 so switching tabs or reconnecting does not disable its mouse wheel. Classic

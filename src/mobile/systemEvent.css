@@ -1,0 +1,17 @@
+.system-event{margin:10px auto;max-width:min(720px,100%);border:1px solid #ffffff10;border-radius:10px;background:#ffffff04;font-size:12px;color:#9c97a8}
+.system-event-head{display:flex;align-items:center;gap:8px;width:100%;min-width:0;padding:7px 11px;border:0;background:none;color:inherit;font:inherit;text-align:left}
+button.system-event-head{cursor:pointer}button.system-event-head:hover{color:#d6d1dc}
+.system-event-head>svg:first-child{flex-shrink:0;color:#c9a0b2}
+.system-event-head b{flex-shrink:0;font-weight:600;font-size:10px;letter-spacing:.3px;text-transform:uppercase;color:#8d8798}
+.system-event-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#c5bfcd}
+.system-event-head small{flex-shrink:0;font-size:10px;color:#8d8798}
+.system-event-status{padding:1px 7px;border-radius:9px;background:#ffffff0a}
+.system-event-status.completed{color:#8fd1a4;background:#8fd1a414}.system-event-status.failed{color:#ee9a9a;background:#ee9a9a14}.system-event-status.killed{color:#a4a0ad}
+.system-event-head time{flex-shrink:0;font-size:10px;color:#6f6b7a}
+.system-event-head>svg:last-child{flex-shrink:0;transition:transform .15s}.system-event.open .system-event-head>svg:last-child{transform:rotate(180deg)}
+.system-event-body{max-height:480px;overflow:auto;padding:4px 14px 12px;border-top:1px solid #ffffff0b;font-size:12.5px;line-height:1.55;color:#c9c3d0;overflow-wrap:anywhere}
+.system-event-body pre{margin:8px 0 0;white-space:pre-wrap;font:11.5px/1.5 "Cascadia Code",Consolas,"SF Mono",monospace;color:#bdb7c5}
+.system-event-findings{margin:8px 0 0;padding-left:20px}.system-event-findings li{margin:0 0 12px}.system-event-findings p{margin:3px 0}
+.system-event-file{font:11.5px "Cascadia Code",Consolas,"SF Mono",monospace;color:#dfa3b8}.system-event-file a{color:inherit}
+.system-event-findings details{margin-top:4px;color:#a49eac}.system-event-findings summary{cursor:pointer;font-size:11px;color:#8d8798}
+.system-event.command,.system-event.output:not(.open){border-style:dashed}

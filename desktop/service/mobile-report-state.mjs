@@ -46,6 +46,24 @@ export function mobileReportStatePrelude(parentOrigin) {
   });
   const userMoved = () => { if (restoring) { restoreVersion++; restoring = false; capture(); } };
   for (const type of ['pointerdown','wheel','keydown']) document.addEventListener(type, userMoved, { passive: true, capture: true });
+  // Pull to refresh: a single touch dragged down while the page and every scroller under it are at the top.
+  // The phone app refreshes the report; the browser's own pull would reload the whole app.
+  document.documentElement.style.overscrollBehaviorY = 'contain';
+  let pull = null;
+  const atTop = node => { for (; node instanceof Element; node = node.parentElement) if (node.scrollTop > 0) return false; return window.scrollY <= 0; };
+  const pulled = (distance, done) => { if (pull && (pull.distance || done)) send('mrmak:report-pull', { distance, done }); };
+  document.addEventListener('touchstart', event => { const touch = event.touches[0]; pull = event.touches.length === 1 && atTop(event.target) ? { x: touch.clientX, y: touch.clientY, distance: 0 } : null; }, { passive: true, capture: true });
+  document.addEventListener('touchmove', event => {
+    if (!pull) return;
+    const touch = event.touches[0], dx = touch.clientX - pull.x, dy = touch.clientY - pull.y;
+    if (event.touches.length > 1 || dy < 0 || (!pull.distance && Math.abs(dx) > dy)) { pulled(0, true); pull = null; return; }
+    pull.distance = Math.min(dy, 1000); pulled(pull.distance, false);
+  }, { passive: true, capture: true });
+  const released = () => { if (pull) pulled(pull.distance, true); pull = null; };
+  document.addEventListener('touchend', released, { passive: true, capture: true }); document.addEventListener('touchcancel', () => { pulled(0, true); pull = null; }, { passive: true, capture: true });
+  // A back request (the phone's back gesture, Esc) can reach this frame when it has focus: the app steps back.
+  const watchBack = () => { if (!window.CloseWatcher) return; const watcher = new CloseWatcher(); watcher.onclose = () => { send('mrmak:report-back'); watchBack(); }; };
+  watchBack();
   window.addEventListener('load', () => send('mrmak:report-ready'));
 })();
 </script>`);

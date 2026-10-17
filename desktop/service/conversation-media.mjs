@@ -72,7 +72,7 @@ export class ConversationMedia {
       return { file: actual, type, name: path.basename(actual) };
     } finally { await handle.close(); }
   }
-  async present(value, session, deviceId) {
+  async present(value, session, deviceId, mediaUrl = token => `/mobile/api/sessions/${session.id}/media/${token}`) {
     this.prune();
     const messages = [];
     for (const message of value.messages) {
@@ -88,8 +88,7 @@ export class ConversationMedia {
             existing = [token, this.grants.get(token)];
           }
           const [token, grant] = existing; grant.expires = Date.now() + 10 * 60 * 1000;
-          const url = `/mobile/api/sessions/${session.id}/media/${token}`;
-          images.push({ url, name: grant.name, kind: grant.type.startsWith('video/') ? 'video' : 'image', type: grant.type });
+          images.push({ url: mediaUrl(token), name: grant.name, kind: grant.type.startsWith('video/') ? 'video' : 'image', type: grant.type });
         } catch { images.push({ unavailable: true, name: 'Media unavailable', kind: /\.(mp4|webm|mov|m4v)$/i.test(reference) ? 'video' : 'image' }); }
       }
       messages.push({ ...clean, ...(images.length ? { images } : {}) });

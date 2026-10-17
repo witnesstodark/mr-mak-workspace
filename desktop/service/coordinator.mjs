@@ -10,6 +10,7 @@ const str = description => ({ type: 'string', description });
 export const coordinatorTools = [
   tool('list_chats', 'List open terminal chats with stable IDs, English task names, folders and observed process state.'),
   tool('search_history', 'Search all managed conversations, including closed and pinned chats. History does not delete native CLI conversations.', { query: str('Optional title, agent or working folder filter') }),
+  tool('list_projects', 'List the user\'s recent project folders: the Workspace, folders opened in Claude Code or Codex, earlier chat folders, with pinned favorites first. Use an exact path as open_chat cwd when the user names a project.', { query: str('Optional project name or path filter') }),
   tool('reopen_chat', 'Reopen and resume a conversation from History, retaining its original native context.', { id: str('Exact chat ID') }, ['id']),
   tool('close_chat', 'Close the requested tab and stop its managed process. Keep its conversation in History. Only do this when the user asks to close it.', { id: str('Exact chat ID') }, ['id']),
   tool('pin_chat', 'Pin or unpin a conversation in History.', { id: str('Exact chat ID'), pinned: { type: 'boolean' } }, ['id', 'pinned']),

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import ImageViewer, { type ConversationImage } from './ImageViewer'
 import { Icon } from '../desktop/Icons'
+import './conversation-images.css'
 
 function SharedImage({ image, onOpen }: { image: ConversationImage; onOpen: () => void }) {
   const [failed, setFailed] = useState(false)
