@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- A chat opened in the Conversation view now clears its unread mark. Only the Terminal view told the service that the chat was being watched, so the red dot stayed until you switched to Terminal.
+
 ## 0.5.2 - 2026-10-18
 
 - Group chat tabs with named, coloured headers. Drag or collapse a group, manage it from a tab's right-click menu, and find groups in History. Deleting a group keeps its chats. Pinned tabs retain their separate order.

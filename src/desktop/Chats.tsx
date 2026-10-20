@@ -127,6 +127,12 @@ export default function Chats() {
   const collapseOthers = (name: string) => setCollapsed(groupNames(active).filter(item => item !== name))
   const groupColors = state.settings.groupColors || {}
   const setGroupColor = (name: string, value: string | null) => { const next = { ...groupColors }; if (value) next[name] = value; else delete next[name]; api('/settings', { groupColors: next }).catch(reportError) }
+  // The service accepts `seen` only for the chat this window subscribed to. TerminalPane subscribes
+  // itself, so the Conversation view does it here.
+  const shownId = session?.id
+  useEffect(() => {
+    if (state.connected && shownId && view === 'conversation') sendEvent({ type: 'subscribe', id: shownId })
+  }, [state.connected, shownId, view])
   useEffect(() => {
     if (!state.connected || !session?.unread || history || switcher || newChat) return
     let timer = 0
