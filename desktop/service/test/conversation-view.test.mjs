@@ -125,12 +125,26 @@ test('terminal permission menus are read from the bottom of the screen only', ()
   assert.deepEqual(prompt.options, ['Yes', "Yes, and don't ask again for npm test", 'No, and tell Claude what to do']);
   assert.equal(prompt.selected, 0);
   assert.deepEqual(prompt.detail, ['Bash command', 'npm test', 'Run the service tests']);
+  assert.deepEqual(prompt.notes, ['', 'commands in this folder', 'differently (esc)']);
   const codex = terminalPrompt(['▌ Allow command?', '▌ $ cargo build', '', '  › 1. Yes, proceed (y)', "    2. Yes, and don't ask again for this command (a)", '    3. No, and tell Codex what to do differently (esc)', '', '  Press enter to confirm or esc to cancel'].join('\n'));
   assert.equal(codex.question, 'Allow command?'); assert.equal(codex.options.length, 3); assert.equal(codex.selected, 0);
   // An ordinary numbered answer has no selected marker; an old menu is no longer at the bottom.
   assert.equal(terminalPrompt('Steps:\n1. Build\n2. Test\n3. Ship\n'), null);
   assert.equal(terminalPrompt(claudeScreen + Array.from({ length: 12 }, (_, i) => `Output line ${i}`).join('\n')), null);
   assert.equal(terminalPrompt(''), null);
+});
+
+test('an AskUserQuestion menu is read when its option descriptions wrap over several lines', () => {
+  const description = ['     The infantry crosses on top and can also step down into the trench or climb out of it', '     by the walkway. Inside, the line still runs underneath. It is simple and it works, but', '     the walkway becomes an entrance too, cheaper than the opening (15 against 20 wood).', '     Live tuning can correct it by raising the cost.'];
+  const prompt = terminalPrompt(['─'.repeat(60), ' ☐ Walkway', '', '│ Step 2B is ready and tested. The path grid has a single layer.', '│ How does the infantry use the walkway?', '',
+    '❯ 1. Cross and step down (Recommended)', ...description, '  2. Cross, but split the line', ...description.slice(0, 2), '  3. Only for units that stay out', ...description.slice(0, 3),
+    '  4. Type something.', '─'.repeat(60), '  5. Chat about this', '', 'Enter to select · ↑/↓ to navigate · Esc to cancel', ''].join('\n'));
+  assert.equal(prompt.question, 'Step 2B is ready and tested. The path grid has a single layer. How does the infantry use the walkway?');
+  assert.deepEqual(prompt.detail, ['☐ Walkway']);
+  assert.deepEqual(prompt.options, ['Cross and step down (Recommended)', 'Cross, but split the line', 'Only for units that stay out', 'Type something.', 'Chat about this']);
+  assert.deepEqual(prompt.notes.map(note => note.split(' ').length > 1), [true, true, true, false, false]);
+  assert.ok(prompt.notes[0].endsWith('Live tuning can correct it by raising the cost.'));
+  assert.equal(prompt.selected, 0);
 });
 
 test('answering a prompt re-checks it and moves the selection one key at a time', async () => {

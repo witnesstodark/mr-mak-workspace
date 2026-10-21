@@ -18,7 +18,7 @@ import './conversation.css'
 
 interface ToolActivity { id: string; name: string; status: 'running' | 'completed' | 'failed'; at: string }
 interface Message { id: string; role: 'user' | 'assistant' | 'system'; text: string; at: string; images?: ConversationImage[]; event?: SystemEventData }
-interface TerminalPrompt { id: string; question: string; detail: string[]; options: string[]; selected: number }
+interface TerminalPrompt { id: string; question: string; detail: string[]; options: string[]; notes?: string[]; selected: number }
 interface Transcript { supported: boolean; messages: Message[]; activity?: ToolActivity[]; agents?: WorkingAgent[]; commands?: BackgroundCommand[]; truncated?: boolean; prompt?: TerminalPrompt | null }
 interface Draft { text: string; paths: string[] }
 
@@ -256,7 +256,7 @@ export default function Conversation({ session, connected, agentLabel, openTermi
         {transcript?.prompt && <section className="conversation-prompt" aria-label="The agent is asking for a choice">
           <header><Icon name="bell" size={14} /><strong>{transcript.prompt.question}</strong></header>
           {!!transcript.prompt.detail.length && <pre>{transcript.prompt.detail.join('\n')}</pre>}
-          <div className="conversation-prompt-options">{transcript.prompt.options.map((option, index) => <button type="button" key={index} disabled={answering} className={index === transcript.prompt!.selected ? 'selected' : ''} onClick={() => void answer(transcript.prompt!, index)}><span>{index + 1}</span>{option}</button>)}</div>
+          <div className="conversation-prompt-options">{transcript.prompt.options.map((option, index) => <button type="button" key={index} disabled={answering} className={index === transcript.prompt!.selected ? 'selected' : ''} onClick={() => void answer(transcript.prompt!, index)}><span>{index + 1}</span><div>{option}{transcript.prompt!.notes?.[index] && <small>{transcript.prompt!.notes[index]}</small>}</div></button>)}</div>
           <footer><button type="button" disabled={answering} onClick={() => void answer(transcript.prompt!, 'cancel')}>Esc · cancel</button><button type="button" onClick={openTerminal}><Icon name="terminal" size={13} />Open terminal</button></footer>
         </section>}
         {working && <p className="conversation-working"><i />{agentLabel} is working…</p>}

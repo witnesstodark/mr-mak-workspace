@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Questions asked with Claude Code's AskUserQuestion now appear in the Conversation view when their options carry long descriptions. Each option shows its description, and a question that wraps over several lines is shown in full.
+
 ## 0.5.2 - 2026-10-18
 
 - Group chat tabs with named, coloured headers. Drag or collapse a group, manage it from a tab's right-click menu, and find groups in History. Deleting a group keeps its chats. Pinned tabs retain their separate order.
