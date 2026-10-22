@@ -189,10 +189,21 @@ try {
   assert.equal(await page.locator('.history-filters button.selected').textContent(), 'All');
   await page.locator('.history-button').click();
 
+  // The folder button groups the open tabs by project folder, then ungroups them.
+  const byProject = page.getByRole('button', { name: 'Group tabs by project', exact: true });
+  await expect(byProject).toHaveAttribute('aria-pressed', 'false');
+  await byProject.click();
+  await expect(byProject).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.chat-group-chip')).toHaveCount(1);
+  assert.ok(service.sessions.active().every(item => item.group));
+  await byProject.click();
+  await expect(byProject).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('.chat-group-chip')).toHaveCount(0);
+
   assert.equal(await page.locator('.desktop-error').count(), 0);
   assert.deepEqual(errors, []);
   await page.screenshot({ path: path.join(repo, 'groups.png') });
-  console.log(`Groups UI passed: chips, collapse across reload, tab menu with rename, pin, tab color and groups, group color from the chip menu, new group, ungroup, drop on chip, New chat picker, options picker, group rename, group drag, delete from the chip and from History. Screenshot: ${path.join(repo, 'groups.png')}`);
+  console.log(`Groups UI passed: chips, collapse across reload, tab menu with rename, pin, tab color and groups, group color from the chip menu, new group, ungroup, drop on chip, New chat picker, options picker, group rename, group drag, group by project toggle, delete from the chip and from History. Screenshot: ${path.join(repo, 'groups.png')}`);
 } finally {
   await browser?.close(); await service?.close();
 }

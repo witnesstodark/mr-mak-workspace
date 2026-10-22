@@ -318,6 +318,7 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
           await saveSettings(); broadcast('settings', { settings }); return json(response, 200, settings);
         }
         if (method === 'POST' && url.pathname === '/api/sessions') { const session = await sessions.create({ ...data, bypass: data.bypass ?? settings.defaultBypass }); await integrations.publish('session', { event: 'started', session }); focus(session.id); return json(response, 201, session); }
+        if (method === 'POST' && url.pathname === '/api/groups/by-project') return json(response, 200, await sessions.toggleProjectGroups());
         if (method === 'POST' && url.pathname === '/api/groups/move') return json(response, 200, await sessions.moveGroup(data.group, data.pinned, data.targetId, data.position));
         if (method === 'POST' && url.pathname === '/api/groups/rename') {
           // A renamed group keeps its color and collapsed state; merging into an

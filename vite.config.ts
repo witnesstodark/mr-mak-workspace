@@ -10,6 +10,10 @@ export default defineConfig({
     fs: {
       allow: ['.'],
     },
+    // UI test fixtures and build caches in .cache hold thousands of folders the app never imports.
+    watch: {
+      ignored: ['**/.cache/**'],
+    },
   },
   publicDir: 'public',
   build: {

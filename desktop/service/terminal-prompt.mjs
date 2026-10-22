@@ -5,6 +5,12 @@ import { createHash, randomUUID } from 'node:crypto';
 // are drawing characters, not text.
 const OPTION = /^(?:([❯›>▸▶➤])\s*)?(\d{1,2})[.)]\s+(\S.*)$/;
 const BORDER = /^[─━═╭╮╰╯┌┐└┘\s-]*$/;
+// Claude Code's multiple-choice questions: boxed options, then an unnumbered button.
+const CHECKBOX = /^\[([ ✔✓√×xX])\]\s+(\S.*)$/;
+const SUBMIT = /^(?:([❯›>▸▶➤])\s*)?(Next|Submit|Review)$/;
+// The CLI hides its composer while a menu is open. A numbered message the person
+// sent echoes with the same marker, but above a visible composer.
+const COMPOSER = /^[❯›](?:\s|$)/;
 const clean = line => line.replace(/^[\s│┃║▌▐|]+/, '').replace(/[\s│┃║▐|]+$/, '');
 
 export function terminalPrompt(screen) {
@@ -17,15 +23,21 @@ export function terminalPrompt(screen) {
     const match = OPTION.exec(lines[index]);
     if (match && Number(match[2]) === 1) { block = { start: index, last: index, options: [] }; gap = 0; }
     else if (!match || !block || Number(match[2]) !== block.options.length + 1) {
+      const submit = block && !block.submit && SUBMIT.exec(lines[index]);
+      if (submit) block.submit = { label: submit[2], selected: !!submit[1], after: block.options.length };
       // Long options wrap onto a few continuation lines.
       if (block && ++gap > 3) block = null;
       continue;
     }
     gap = 0; block.last = index;
     block.options.push({ label: match[3].trim(), selected: !!match[1] });
-    if (block.options.length >= 2) best = { ...block, options: [...block.options] };
+    if (block.options.length >= 2) best = block;
   }
-  if (!best || end - best.last > 8 || best.options.filter(item => item.selected).length !== 1) return null;
+  if (!best || end - best.last > 8) return null;
+  if (lines.slice(best.last + 1, end + 1).some(line => COMPOSER.test(line) && !OPTION.test(line) && !SUBMIT.test(line))) return null;
+  const boxes = best.options.slice(0, best.submit?.after).map(item => CHECKBOX.exec(item.label));
+  const multiple = !!best.submit && boxes.length >= 2 && boxes.every(Boolean);
+  if (best.options.filter(item => item.selected).length + (multiple && best.submit.selected ? 1 : 0) !== 1) return null;
   let question = -1;
   for (let index = best.start - 1; index >= Math.max(0, best.start - 15); index--) if (lines[index].endsWith('?')) { question = index; break; }
   // What is being approved: the lines above the question, up to the box's top edge.
@@ -36,9 +48,20 @@ export function terminalPrompt(screen) {
   }
   // Codex shows the command between its question and the options.
   if (question >= 0) detail.push(...lines.slice(question + 1, best.start).filter(line => line && !BORDER.test(line)));
-  const prompt = { question: question < 0 ? 'The agent is asking you to choose.' : lines[question], detail, options: best.options.map(item => item.label), selected: best.options.findIndex(item => item.selected) };
-  // Bind every visible detail and wrapped option, allowing only selection changes.
-  const proof = lines.slice(0, end + 1).map(line => { const option = OPTION.exec(line); return option ? `${option[2]}. ${option[3]}` : line; });
+  const base = { question: question < 0 ? 'The agent is asking you to choose.' : lines[question], detail };
+  const focus = best.options.findIndex(item => item.selected);
+  // A multiple choice keeps one focus order for the arrow keys: the boxes, the
+  // button, then any numbered option drawn below it.
+  const prompt = multiple
+    ? { ...base, kind: 'multiple', options: boxes.map(box => box[2]), checked: boxes.map(box => box[1] !== ' '), input: boxes.findIndex(box => /^Type something\.?$/.test(box[2])), submit: best.submit.label, selected: best.submit.selected ? boxes.length : focus < boxes.length ? focus : focus + 1 }
+    : { ...base, kind: 'single', options: best.options.map(item => item.label), selected: focus };
+  // Bind every visible detail and wrapped option, allowing only selection and
+  // checkbox changes, including the answered marks of a question's tabs.
+  const proof = lines.slice(0, end + 1).map(line => {
+    const option = OPTION.exec(line), submit = SUBMIT.exec(line);
+    if (option) return `${option[2]}. ${option[3].replace(CHECKBOX, '[ ] $2')}`;
+    return submit ? submit[2] : line.replace(/[☐☑☒]/g, '☐');
+  });
   return { id: createHash('sha256').update(JSON.stringify(proof)).digest('hex'), ...prompt };
 }
 
@@ -82,21 +105,38 @@ export async function answerPrompt(sessions, id, promptId, choice) {
       state.prompts.get(id).used = true; sessions.keys(id, '\x1b');
       return { delivered: true, choice };
     }
-    if (!Number.isInteger(choice) || choice < 0 || choice >= prompt.options.length) throw new Error('Choose one of the listed options.');
-    for (let moves = 0; prompt.selected !== choice; moves++) {
-      if (moves >= prompt.options.length) throw conflict();
-      const previous = prompt.selected;
-      sessions.keys(id, choice > previous ? '\x1b[B' : '\x1b[A');
+    // Send one key, then wait for the redrawn menu to show its effect.
+    const press = async (key, changed) => {
+      const previous = prompt;
+      sessions.keys(id, key);
       const deadline = Date.now() + 1000;
-      do { await keyDelay(60); prompt = await current(); } while (prompt.selected === previous && Date.now() < deadline);
-      if (prompt.selected === previous) throw conflict();
+      do { await keyDelay(60); prompt = await current(); } while (!changed(previous, prompt) && Date.now() < deadline);
+      if (!changed(previous, prompt)) throw conflict();
+    };
+    const move = async target => {
+      for (let moves = 0; prompt.selected !== target; moves++) {
+        if (moves > prompt.options.length + 1) throw conflict();
+        await press(target > prompt.selected ? '\x1b[B' : '\x1b[A', (before, after) => after.selected !== before.selected);
+      }
+    };
+    const multiple = prompt.kind === 'multiple';
+    const wanted = multiple && Array.isArray(choice?.checked) ? choice.checked : null;
+    const target = multiple ? prompt.options.length : choice;
+    if (multiple ? !wanted || new Set(wanted).size !== wanted.length || wanted.some(index => !Number.isInteger(index) || index < 0 || index >= prompt.options.length || index === prompt.input)
+      : !Number.isInteger(choice) || choice < 0 || choice >= prompt.options.length) throw new Error('Choose one of the listed options.');
+    // Space toggles a box without ever submitting; the button submits with Enter.
+    if (multiple) for (let index = 0; index < prompt.options.length; index++) {
+      if (prompt.checked[index] === wanted.includes(index)) continue;
+      await move(index);
+      await press(' ', (before, after) => after.checked[index] !== before.checked[index]);
     }
+    await move(target);
     // Recheck after the menu redraws, immediately before Enter.
     await keyDelay(60); prompt = await current();
-    if (prompt.selected !== choice) throw conflict();
+    if (prompt.selected !== target || (multiple && prompt.checked.some((on, index) => on !== wanted.includes(index)))) throw conflict();
     state.prompts.get(id).used = true;
     sessions.keys(id, '\r');
-    return { delivered: true, choice, option: prompt.options[choice] };
+    return multiple ? { delivered: true, choice: wanted, submit: prompt.submit } : { delivered: true, choice, option: prompt.options[choice] };
   } finally { state.answering.delete(id); }
 }
 

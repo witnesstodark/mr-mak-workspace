@@ -488,6 +488,42 @@ try {
   service.mobile.transcripts.read = readerBeforeScroll;
   await phone.waitForFunction(() => document.querySelectorAll('.mobile-message').length === 5);
 
+  // Terminal menus answered from the phone: an approval, then Claude Code's
+  // multiple choice, whose boxes change in the page until Submit sends them.
+  const readScreen = service.sessions.read.bind(service.sessions);
+  let menu = { focus: 0 };
+  const menuScreen = () => menu.checked
+    ? ['│ Which checks should run?', '', ...['Unit', 'Browser', 'Type something'].map((label, i) => `${menu.focus === i ? '❯' : ' '} ${i + 1}. [${menu.checked[i] ? '✔' : ' '}] ${label}`), `${menu.focus === 3 ? '❯' : ' '}    Submit`, '', 'Enter to select · Tab/Arrow keys to navigate · Esc to cancel'].join('\n')
+    : ['Allow command?', '$ npm test', '', ...['Yes, proceed', 'No'].map((label, i) => `${menu.focus === i ? '❯' : ' '} ${i + 1}. ${label}`), 'Press enter to confirm'].join('\n');
+  service.sessions.read = async (id, lines) => menu ? { screen: menuScreen() } : readScreen(id, lines);
+  const menuWrites = [], writers = ids.map(id => {
+    const process = service.sessions.get(id).process, write = process.write;
+    process.write = data => {
+      if (!menu) return write(data);
+      menuWrites.push(data);
+      if (data === '\x1b[B') menu.focus++;
+      if (data === '\x1b[A') menu.focus--;
+      if (data === ' ' && menu.checked) menu.checked[menu.focus] = !menu.checked[menu.focus];
+      if (data === '\r') menu = menu.checked ? null : { focus: 0, checked: [false, false, false] };
+    };
+    return () => { process.write = write; };
+  });
+  await phone.locator('.conversation-prompt pre').getByText('$ npm test').waitFor();
+  await phone.getByRole('button', { name: '2 No', exact: true }).click();
+  await phone.getByRole('checkbox', { name: /Browser/ }).waitFor();
+  assert.deepEqual(menuWrites, ['\x1b[B', '\r']);
+  await expect(phone.getByRole('button', { name: /Type something/ })).toBeDisabled();
+  await phone.getByRole('checkbox', { name: /Browser/ }).click();
+  await expect(phone.getByRole('checkbox', { name: /Browser/ })).toHaveAttribute('aria-checked', 'true');
+  assert.equal(menuWrites.length, 2, 'Checking a box on the phone sends no keys');
+  const option = await phone.getByRole('checkbox', { name: /Unit/ }).boundingBox();
+  assert.ok(option.height >= 44 && option.x >= 0 && option.x + option.width <= phone.viewportSize().width, 'Menu options are thumb-sized and on screen');
+  await phone.locator('.conversation-prompt').screenshot({ path: path.join(repo, 'phone-multiple-choice.png') });
+  await phone.getByRole('button', { name: 'Submit · 1', exact: true }).click();
+  await phone.locator('.conversation-prompt').waitFor({ state: 'detached' });
+  assert.deepEqual(menuWrites.slice(2), ['\x1b[B', ' ', '\x1b[B', '\x1b[B', '\r']);
+  service.sessions.read = readScreen; for (const restore of writers) restore();
+
   assert.deepEqual(ids.map(id => ({ cols: service.sessions.get(id).cols, rows: service.sessions.get(id).rows })), dimensions);
   assert.equal((await (await fetch(`${service.origin}/api/bootstrap`, { headers: { Authorization: `Bearer ${service.token}` } })).json()).selectedId, desktopSelected);
   const input = phone.getByRole('textbox', { name: 'Message this chat' });

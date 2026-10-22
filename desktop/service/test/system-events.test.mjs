@@ -47,6 +47,20 @@ test('transcripts keep system events out of the user count and report the model'
   assert.equal(transcriptModel(codex, 'codex'), 'gpt-6.1-sol');
 });
 
+test('a compacted Claude chat shows its summary as a collapsed event, not as your message', () => {
+  const summary = 'This session is being continued from a previous conversation that ran out of context.\n\n<tools-used-before-summary>Bash, Edit</tools-used-before-summary>\nSummary:\n1. Primary Request: fix the biplanes.';
+  const records = [
+    { type: 'user', uuid: 'u1', timestamp: 't1', origin: { kind: 'human' }, message: { content: 'Fix the biplanes' } },
+    { type: 'system', subtype: 'compact_boundary', uuid: 'b1', parentUuid: null, timestamp: 't2', content: 'Conversation compacted' },
+    { type: 'user', uuid: 'u2', parentUuid: 'b1', timestamp: 't3', isCompactSummary: true, isVisibleInTranscriptOnly: true, message: { content: summary } },
+    { type: 'user', uuid: 'u3', parentUuid: 'u2', timestamp: 't4', origin: { kind: 'human' }, message: { content: 'Go on' } },
+  ];
+  const messages = transcriptMessages(records, 'claude');
+  assert.deepEqual(messages.map(item => [item.role, item.text]), [['user', 'Fix the biplanes'], ['system', 'Conversation compacted · summary of earlier messages'], ['user', 'Go on']]);
+  assert.equal(messages[1].event.kind, 'notice');
+  assert.equal(messages[1].event.detail, 'This session is being continued from a previous conversation that ran out of context.\n\nSummary:\n1. Primary Request: fix the biplanes.');
+});
+
 test('Codex 0.163 transcripts read completed message items and hide injected instructions', () => {
   const item = (type, content, extra = {}) => ({ type: 'event_msg', timestamp: 't', payload: { type: 'item_completed', item: { type, id: `${type}-${content[0].text}`, content, ...extra } } });
   const records = [

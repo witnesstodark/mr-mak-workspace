@@ -15,6 +15,7 @@ import { ConversationTranscripts } from './mobile-transcript.mjs';
 import { projectKey, recentProjects } from './recent-projects.mjs';
 import { MobileReports } from './mobile-reports.mjs';
 import { MobileDictation } from './mobile-dictation.mjs';
+import { answerPrompt, readPrompt } from './terminal-prompt.mjs';
 
 const digest = value => createHash('sha256').update(value).digest('hex');
 const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status }); };
@@ -286,10 +287,12 @@ export class MobileGateway {
           if (data.cwd !== undefined && !project) fail('Choose a project from the list.');
           return json(response, 201, await this.sessions.create({ agent: data.agent, name: data.name, cwd: project?.path || this.repo, bypass: this.settings().defaultBypass === true }));
         }
-        const match = /^\/mobile\/api\/sessions\/([a-f0-9-]{36})\/(messages|send|resume|close|key|read-aloud)$/.exec(route);
+        const match = /^\/mobile\/api\/sessions\/([a-f0-9-]{36})\/(messages|send|resume|close|key|prompt|read-aloud)$/.exec(route);
         if (match) {
           const session = this.session(match[1]);
-          if (method === 'GET' && match[2] === 'messages') return json(response, 200, await this.conversationMedia.present(await this.transcripts.read(session), session, device.id));
+          // The same terminal menu and one-use answer the desktop Conversation offers.
+          if (method === 'GET' && match[2] === 'messages') return json(response, 200, { ...(await this.conversationMedia.present(await this.transcripts.read(session), session, device.id)), prompt: session.process ? await readPrompt(this.sessions, session.id) : null });
+          if (method === 'POST' && match[2] === 'prompt') return json(response, 200, await answerPrompt(this.sessions, session.id, data.id, data.choice));
           if (method === 'POST' && match[2] === 'read-aloud') {
             const controller = new AbortController(); let complete = false;
             const abort = () => { if (!complete) controller.abort(); };

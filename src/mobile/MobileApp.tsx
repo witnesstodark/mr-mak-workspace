@@ -18,6 +18,7 @@ import ActivityStatus from './ActivityStatus'
 import BackgroundWork, { type BackgroundCommand, type WorkingAgent } from './BackgroundWork'
 import { useInstall } from './useInstall'
 import { visibleUserMessage } from './workspace-context'
+import TerminalPrompt, { type PromptChoice, type TerminalPromptData } from '../components/TerminalPrompt'
 import './mobile.css'
 
 interface Pending { id: string; claim: string; code: string }
@@ -78,6 +79,7 @@ function Conversation({ session, active }: { session: ChatSession; active: boole
   const scroller = useRef<HTMLDivElement>(null), restored = useRef(false), follow = useRef(initialPosition.follow !== false), state = useMobile()
   const [activity, setActivity] = useState<ToolActivity[]>([]), [background, setBackground] = useState<{ agents?: WorkingAgent[]; commands?: BackgroundCommand[] }>({})
   const reloadConversation = useRef<(() => Promise<void>) | null>(null)
+  const [prompt, setPrompt] = useState<TerminalPromptData | null>(null), [answering, setAnswering] = useState(false)
   const [showJump, setShowJump] = useState(false)
   function jumpToLatest() { follow.current = true; setShowJump(false); const box = scroller.current; if (box) box.scrollTop = box.scrollHeight }
   function showConversation() { if (mode !== 'messages') restored.current = false; setMode('messages'); void reloadConversation.current?.() }
@@ -91,11 +93,11 @@ function Conversation({ session, active }: { session: ChatSession; active: boole
       if (working || document.visibilityState === 'hidden') return
       working = true
       try {
-        const result = await mobileApi<{ messages: Message[]; supported: boolean; activity?: ToolActivity[]; agents?: WorkingAgent[]; commands?: BackgroundCommand[] }>(`/sessions/${session.id}/messages`)
+        const result = await mobileApi<{ messages: Message[]; supported: boolean; activity?: ToolActivity[]; agents?: WorkingAgent[]; commands?: BackgroundCommand[]; prompt?: TerminalPromptData | null }>(`/sessions/${session.id}/messages`)
         if (!stopped) {
           const at = Date.now(), fingerprint = JSON.stringify(result.messages)
           if (fingerprint !== transcriptFingerprint.current) { transcriptFingerprint.current = fingerprint; setChangedAt(at) }
-          setMessages(result.messages); setActivity(result.activity || []); setBackground({ agents: result.agents, commands: result.commands }); setSupported(result.supported); setCheckedAt(at); setNow(at); setReadError('')
+          setMessages(result.messages); setPrompt(result.prompt || null); setActivity(result.activity || []); setBackground({ agents: result.agents, commands: result.commands }); setSupported(result.supported); setCheckedAt(at); setNow(at); setReadError('')
         }
       } catch { if (!stopped) { setReadError('Conversation could not refresh. Your previous messages are still shown.'); setNow(Date.now()) } }
       finally { working = false }
@@ -117,8 +119,15 @@ function Conversation({ session, active }: { session: ChatSession; active: boole
       requestAnimationFrame(() => { if (scroller.current === box) { const nearEnd = box.scrollHeight - box.scrollTop - box.clientHeight < 100; follow.current = nearEnd; setShowJump(!nearEnd) } })
     }
     else if (follow.current) box.scrollTop = box.scrollHeight
-  }, [messages, mode, active, session.id])
+  }, [messages, prompt?.id, mode, active, session.id])
   const running = session.status === 'running'
+  async function answer(choice: PromptChoice) {
+    if (!prompt || answering) return
+    setAnswering(true)
+    try { await mobileApi(`/sessions/${session.id}/prompt`, { id: prompt.id, choice }); follow.current = true; setError('') }
+    catch (err) { setError(err instanceof Error ? err.message : String(err)) }
+    finally { setAnswering(false); void reloadConversation.current?.() }
+  }
   return <>
     <div className="mobile-chat-tools"><div className="mobile-segment" role="group" aria-label="Conversation view"
       onPointerDown={event => { suppressModeClick.current = false; modeGesture.current = event.isPrimary ? { x: event.clientX, y: event.clientY, id: event.pointerId } : null }}
@@ -139,6 +148,7 @@ function Conversation({ session, active }: { session: ChatSession; active: boole
       {messages.map((message, index) => message.role === 'system' ? message.event && <SystemEvent key={message.id} event={message.event} time={message.at ? new Date(message.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : undefined} /> : <article className={`mobile-message ${message.role}`} key={message.id}><header>{message.role === 'user' ? 'You' : <><AgentLogo agent={session.agent} size={15} />{session.agent === 'claude' ? 'Claude' : 'Codex'}</>}{message.at && <time>{new Date(message.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time>}</header><div className="mobile-message-copy"><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ img: () => null, a: ({ href, children }) => <a href={href} target="_blank" rel="noreferrer">{children}</a> }}>{message.role === 'user' ? visibleUserMessage(message.text) : message.text}</ReactMarkdown></div><ConversationImages images={message.images} />{index === readEnd && message.role === 'assistant' && messages.slice(readStart).some(item => item.text.trim()) && <div className="mobile-read-aloud"><button type="button" disabled={!speech.supported} aria-label={speech.activeId ? speech.paused ? 'Resume reading' : 'Pause reading' : 'Read aloud'} title={!speech.supported ? 'Read aloud is unavailable in this browser' : speech.activeId ? speech.paused ? 'Resume reading' : 'Pause reading' : 'Read from your last message to this reply'} onClick={() => { if (speech.activeId) speech.togglePause(); else speech.read(message.id, Array.from(scroller.current?.querySelectorAll<HTMLElement>('.mobile-message-copy') || []).slice(readStart, readEnd + 1).map(spokenText).filter(Boolean).join('\n\n')) }}><Icon name={speech.activeId ? speech.paused ? 'play' : 'pause' : 'speaker'} size={19} /></button>{speech.activeId && <button type="button" aria-label="Stop reading" title="Stop reading" onClick={speech.stop}><Icon name="stop" size={17} /></button>}{speech.loading && <span role="status">Preparing audio…</span>}</div>}</article>)}
       {!messages.length && <div className="mobile-chat-empty"><Icon name="chats" size={30} /><h2>{supported ? 'Ready for your next thought' : 'This chat is in the terminal'}</h2><p>{supported ? 'Messages will appear here as your agent writes its conversation history.' : 'Open the live terminal to read the conversation or respond to a CLI prompt.'}</p><button onClick={() => { speech.stop(); setMode('terminal') }}>Open terminal<Icon name="arrow" size={15} /></button></div>}
       {!!activity.length && <details className="mobile-tool-activity" aria-label="Recent tool activity"><summary>Recent activity</summary>{activity.map(item => <div key={item.id}><Icon name={item.status === 'running' ? 'terminal' : item.status === 'failed' ? 'bell' : 'history'} size={14} /><span>{item.name}</span><small>{item.status === 'running' && !running ? 'Interrupted' : item.status}{item.at && ` · ${new Date(item.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}</small></div>)}</details>}
+      {prompt && <TerminalPrompt prompt={prompt} answering={answering} onAnswer={choice => void answer(choice)} onOpenTerminal={() => { speech.stop(); setMode('terminal') }} />}
       {session.activity === 'working' && <p className="mobile-agent-working"><i />Agent is working on your computer…</p>}
     </div>{showJump && <button className="mobile-jump-latest" onClick={jumpToLatest}><Icon name="down" size={16} />Jump to latest</button>}</div>}
     {mode === 'messages' && <BackgroundWork agents={background.agents} commands={background.commands} now={now} />}

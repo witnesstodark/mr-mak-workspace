@@ -1,0 +1,16 @@
+/* A terminal menu answered from a conversation, on the desktop and the phone.
+   Button rules start at the card so a surface's own button styles cannot win by load order. */
+.conversation-prompt{margin:0 0 18px;padding:12px 14px;border:1px solid #6a5236;border-radius:11px;background:#1f1a15}
+.conversation-prompt>header{display:flex;align-items:center;gap:8px;color:#f0d7a9;font-size:12.5px}
+.conversation-prompt pre{margin:9px 0 0;padding:8px 10px;border-radius:7px;background:#0f1014;color:#c9c1d0;font-family:var(--font-mono);font-size:11px;white-space:pre-wrap;overflow-wrap:anywhere}
+.conversation-prompt-options{display:grid;gap:5px;margin-top:10px}
+.conversation-prompt .conversation-prompt-options button{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border:1px solid #ffffff14;border-radius:8px;background:#ffffff05;color:#e8e1ea;font-size:12px;text-align:left}
+.conversation-prompt .conversation-prompt-options button:hover{border-color:#e8a4b54a;background:#e8a4b50d}
+.conversation-prompt .conversation-prompt-options button.selected{border-color:#e8a4b538}
+.conversation-prompt .conversation-prompt-options button.checked{border-color:#e8a4b573;background:#e8a4b51a}
+.conversation-prompt .conversation-prompt-options button:disabled{cursor:default;opacity:.6}
+.conversation-prompt-options button>span{display:grid;place-items:center;flex-shrink:0;width:20px;height:20px;border-radius:6px;background:#ffffff0d;font-size:10px;color:#d7b3c9}
+.conversation-prompt-options button.checked>span{background:#e8a4b5;color:#1a1218}
+.conversation-prompt>footer{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+.conversation-prompt>footer button{display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border:1px solid #ffffff12;border-radius:7px;background:transparent;color:#a99fb2;font-size:10px}
+.conversation-prompt>footer .conversation-prompt-submit{border-color:#e8a4b573;background:#e8a4b51a;color:#ecc9da;font-weight:600}
