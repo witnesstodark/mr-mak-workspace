@@ -78,7 +78,7 @@ opens with **Preview** and **Edit** modes. Save only when you want to change the
 | `workspace/` | Cards, reports, previews and task deliverables |
 | `knowledge/` | Lessons that should guide future work |
 | `processes/` | Repeatable workflows and checklists |
-| `.claude/skills/`, `.agents/skills/` | Project-local skills for the agents |
+| `.claude/skills/`, `.agents/skills/` | Project-local skills. Cursor Agent reads both folders. |
 
 Dropping files or folders into Chats inserts their paths. Pasting a clipboard
 image saves it in `inbox/` and inserts that path. This gives the agent an input;

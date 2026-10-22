@@ -11,7 +11,8 @@ working. Ask for missing personal preferences; do not invent a biography.
   the default language of stored work.
 - Check `processes/` for an existing workflow and `knowledge/` for prior decisions.
 - Use the project skills in `.agents/skills/`. Claude entries in
-  `.claude/skills/` are complete distribution copies. After editing a shared skill,
+  `.claude/skills/` are complete distribution copies. Cursor Agent reads both
+  folders and does not need `.cursor/skills`. After editing a shared skill,
   run `npm run skills:sync`; template checks detect differences between copies.
 - Put project knowledge in this repository, not in global agent memory.
 - Use `.agents/skills/workspace-authoring/SKILL.md` for cards and reports. Keep

@@ -7,12 +7,12 @@ cd "$(dirname "$0")"
 has() { command -v "$1" >/dev/null 2>&1 && echo true || echo false; }
 echo "Mr. Mak Workspace setup"
 echo "Node: $(has node) | npm: $(has npm) | Rust (desktop source build only): $(has cargo)"
-echo "Codex CLI: $(has codex) | Claude Code CLI: $(has claude) | OpenCode: $(has opencode)"
+echo "Codex CLI: $(has codex) | Claude Code CLI: $(has claude) | OpenCode: $(has opencode) | Cursor Agent: $(has agent)"
 # xcrun fails both without the Command Line Tools and with a stale developer path after a macOS upgrade.
 has_clt() { xcrun --sdk macosx --show-sdk-path >/dev/null 2>&1 && echo true || echo false; }
 [ "$(uname)" = Darwin ] && echo "Xcode Command Line Tools (desktop source build only): $(has_clt)"
-if ! command -v codex >/dev/null && ! command -v claude >/dev/null && ! command -v opencode >/dev/null; then
-  echo "Install and configure Codex CLI, Claude Code CLI or OpenCode first. See docs/getting-started.md." >&2; exit 1
+if ! command -v codex >/dev/null && ! command -v claude >/dev/null && ! command -v opencode >/dev/null && ! command -v agent >/dev/null; then
+  echo "Install and configure Codex CLI, Claude Code CLI, OpenCode or Cursor Agent first. See docs/getting-started.md." >&2; exit 1
 fi
 case "$mode" in
   check)

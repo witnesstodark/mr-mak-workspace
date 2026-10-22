@@ -57,7 +57,7 @@ export default function McpPanel({ onClose }: { onClose: () => void }) {
       {error && <p className="desk-error-inline" role="alert">{error}</p>}
       {inventory?.problems.map(problem => <p key={problem.path} className="mcp-problem">{problem.message}<small>{problem.path}</small></p>)}
       {visible.map(server => <article className="mcp-server" key={server.id} data-mcp-id={server.id}>
-        <div className="mcp-server-title"><span className="mcp-provider">{server.client === 'cursor' ? <Icon name="terminal" size={16} /> : <AgentLogo agent={server.client as AgentId} size={16} />}</span><h3>{server.name}</h3><span className={`mcp-state ${server.readiness}`}>{stateLabel[server.readiness] || server.readiness}</span></div>
+        <div className="mcp-server-title"><span className="mcp-provider"><AgentLogo agent={server.client as AgentId} size={16} /></span><h3>{server.name}</h3><span className={`mcp-state ${server.readiness}`}>{stateLabel[server.readiness] || server.readiness}</span></div>
         <p className="mcp-subtitle">{clients[server.client]}<span>·</span>{scopes[server.scope] || server.scope}<span>·</span>{server.transport === 'stdio' ? 'Local process' : server.transport.toUpperCase()}</p>
         <p className="mcp-endpoint" title={server.endpoint || server.executable || ''}>{server.endpoint || server.executable}</p>
         {server.missingEnv.length > 0 && <p className="mcp-note">Add to .env: {server.missingEnv.join(', ')}</p>}

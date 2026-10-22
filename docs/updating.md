@@ -116,9 +116,10 @@ keys, CLI logins or MCP definitions are included. The pack does not replace your
 `AGENTS.md` or `CLAUDE.md`.
 
 The maintained skills live in `.agents/skills`; complete Claude copies live in
-`.claude/skills`. Keep both in sync if you use both agents. Dependencies are
+`.claude/skills`. Cursor Agent reads both folders and does not need
+`.cursor/skills`. Keep the two copies in sync when you use Claude. Dependencies are
 listed in [the skill index](skills.md) and in each skill. A configured Codex CLI, Claude
-Code CLI or OpenCode remains required; optional providers use your own credentials.
+Code CLI, OpenCode, or Cursor Agent remains required; optional providers use your own credentials.
 
 If building the desktop from source, rebuild after merging application changes.
 Use the [setup guide](getting-started.md) for the prerequisites.

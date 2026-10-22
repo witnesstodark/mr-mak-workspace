@@ -13,6 +13,7 @@ import { englishTitle, groupLabel, restoredTitle } from './titles.mjs';
 import { defaultWorkerEffort, workerEfforts } from './effort.mjs';
 import { ptyOptions } from './platform.mjs';
 import { opencodeVersion, opencodeEnvironment, readOpencodeState, watchOpencode } from './opencode.mjs';
+import { createCursorChat, cursorResumeId } from './cursor.mjs';
 import { prepareAntigravityLog, readAntigravityConversation, validAntigravityId, watchAntigravity } from './antigravity.mjs';
 
 const { Terminal } = headless;
@@ -137,7 +138,7 @@ export class Sessions extends EventEmitter {
   }
 
   async importConversation({ agent, nativeId, name, cwd, pinned = false, bypass = false, group = null }) {
-    if (!['codex', 'claude', 'antigravity', 'opencode', 'kimi'].includes(agent) || typeof nativeId !== 'string' || !nativeId.trim()) throw new Error('Choose an agent and its native conversation ID.');
+    if (!['codex', 'claude', 'antigravity', 'opencode', 'kimi', 'cursor'].includes(agent) || typeof nativeId !== 'string' || !nativeId.trim()) throw new Error('Choose an agent and its native conversation ID.');
     nativeId = nativeConversationId(nativeId.trim());
     if (agent === 'antigravity' && !validAntigravityId(nativeId)) throw new Error('Use the Antigravity conversation UUID from its /resume picker.');
     cwd = await workingFolder(cwd || this.repo);
@@ -179,6 +180,19 @@ export class Sessions extends EventEmitter {
     const antigravityLog = session.agent === 'antigravity' ? await prepareAntigravityLog(this.stateDir, session.id) : undefined;
     const noDaemon = session.agent === 'codex' && await codexSupportsNoDaemon(env);
     if (this.closed || !session.open) throw new Error('The chat was closed before its terminal started.');
+    if (session.agent === 'cursor' && !resumeId && !session.nativeId) {
+      try {
+        const id = await createCursorChat(session.cwd, env);
+        if (this.closed || !session.open) throw new Error('The chat was closed before its terminal started.');
+        if (![...this.items.values()].some(item => item !== session && item.nativeId === id)) {
+          session.nativeId = id;
+          session.hasConversation = true;
+          resumeId = id;
+        }
+      } catch (error) {
+        if (this.closed || !session.open) throw error;
+      }
+    }
     const command = terminalCommand(session.agent, { bypass: session.bypass, resumeId, nativeId: session.nativeId, effort: session.effort, opencodeMajor, antigravityLog, noDaemon, ...first });
     if (session.agent === 'codex') env.CODEX_INTERNAL_ORIGINATOR_OVERRIDE = `mrmak_chat_${session.id}`;
     if (session.terminal) this.resetTerminal(session);
@@ -224,6 +238,10 @@ export class Sessions extends EventEmitter {
       if (session.agent === 'codex' && !session.nativeId) this.read(session.id).then(({ screen }) => {
         const match = /codex resume ([a-f0-9-]{36})/i.exec(screen);
         if (match) { session.nativeId = match[1]; this.changed(session); }
+      }).catch(() => {});
+      if (session.agent === 'cursor' && !session.nativeId) this.read(session.id).then(({ screen }) => {
+        const id = cursorResumeId(screen);
+        if (id) { session.nativeId = id; this.changed(session); }
       }).catch(() => {});
       if (session.agent === 'opencode') readOpencodeState(this.stateDir, session.id).then(state => {
         if (state?.launchId === env.MRMAK_OPENCODE_LAUNCH_ID) {
@@ -355,6 +373,10 @@ export class Sessions extends EventEmitter {
     if (session.agent === 'kimi' && !session.nativeId && data.includes('Session:')) this.read(session.id).then(({ screen }) => {
       const match = /Session:\s+(session_[a-f0-9-]{36})/i.exec(screen);
       if (match) { session.nativeId = match[1]; this.changed(session); }
+    }).catch(() => {});
+    if (session.agent === 'cursor' && !session.nativeId && data.includes('--resume')) this.read(session.id).then(({ screen }) => {
+      const id = cursorResumeId(screen);
+      if (id && !session.nativeId) { session.nativeId = id; this.changed(session); }
     }).catch(() => {});
   }
 
@@ -540,8 +562,8 @@ export class Sessions extends EventEmitter {
   requestStop(session) {
     const proc = session.process;
     if (!proc) return;
-    if (!['opencode', 'antigravity', 'claude'].includes(session.agent)) { proc.kill(); return; }
-    // Let OpenCode flush and close its SQLite store before ConPTY is destroyed,
+    if (!['opencode', 'antigravity', 'claude', 'cursor'].includes(session.agent)) { proc.kill(); return; }
+    // Let OpenCode and Cursor flush their SQLite stores before ConPTY is destroyed,
     // and let Claude leave its fullscreen renderer the way it expects: a killed
     // fullscreen session counts as a failed start on its side, and two of those
     // switch later sessions to the classic renderer.
@@ -626,7 +648,7 @@ export class Sessions extends EventEmitter {
     this.closed = true; clearInterval(this.timer);
     // Preserve the open-tab flags on app quit while giving OpenCode time to
     // close the database used by the next launch.
-    await Promise.all([...this.items.values()].filter(s => ['opencode', 'antigravity', 'claude'].includes(s.agent) && s.process).map(session => new Promise(resolve => {
+    await Promise.all([...this.items.values()].filter(s => ['opencode', 'antigravity', 'claude', 'cursor'].includes(s.agent) && s.process).map(session => new Promise(resolve => {
       const proc = session.process;
       const timer = setTimeout(() => { subscription.dispose(); resolve(); }, 5000);
       const subscription = proc.onExit(() => { clearTimeout(timer); subscription.dispose(); resolve(); });
