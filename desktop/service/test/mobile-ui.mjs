@@ -669,6 +669,18 @@ try {
   assert.equal(await frame.locator('body').evaluate(() => location.hash), '#chapter-two');
   assert.equal(await frame.locator('#nested-scroll').evaluate(node => node.scrollTop), 180);
 
+  // The open menu owns pointer input above a restored, scrolled report. A tap
+  // outside dismisses it without activating report links or changing its page.
+  await frame.locator('body').evaluate(() => { window.testReportPointerDowns = 0; document.addEventListener('pointerdown', () => window.testReportPointerDowns++); });
+  await phone.getByLabel('Select report page', { exact: true }).click();
+  await expect(phone.locator('iframe')).toHaveCSS('pointer-events', 'none');
+  await phone.mouse.click(20, 300);
+  await expect(phone.locator('.mobile-page-picker')).not.toHaveAttribute('open');
+  assert.equal(await frame.locator('body').evaluate(() => window.testReportPointerDowns), 0, 'Outside dismissal does not click through into the report');
+  await expect(phone.locator('iframe')).toHaveCSS('pointer-events', 'auto');
+  await frame.locator('body').click({ position: { x: 20, y: 20 } });
+  assert.equal(await frame.locator('body').evaluate(() => window.testReportPointerDowns), 1, 'Report input resumes after closing the menu');
+
   // Attach navigation only, freeze it for retries, and keep the transcript readable.
   // Capture this transition's event order on slower CI browsers without adding
   // waits or changing the interaction under test. Only synthetic fixture data.
