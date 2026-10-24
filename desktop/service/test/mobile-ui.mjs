@@ -679,7 +679,7 @@ try {
     Storage.prototype.setItem = function (key, value) { if (key === 'mrmak.mobile.workspace') record({ type: 'selection', value }); return original.call(this, key, value); };
     for (const type of ['pointerdown', 'pointerup', 'click', 'toggle']) document.addEventListener(type, event => {
       const target = event.target, menu = document.querySelector('.mobile-page-picker');
-      record({ type, target: target.tagName, label: target.closest('button,summary')?.getAttribute('aria-label') || target.textContent?.slice(0, 40), menuContains: menu?.contains(target), menuOpen: menu?.open });
+      record({ type, pointer: event.pointerType, target: target.tagName, label: target.closest('button,summary')?.getAttribute('aria-label') || target.textContent?.slice(0, 40), menuContains: menu?.contains(target), menuOpen: menu?.open });
     }, true);
   });
   const contextRoute = `/mobile/api/sessions/${ids[1]}/send`, contextPayloads = [];
@@ -771,7 +771,7 @@ try {
     assert.equal(await phone.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, `No page overflow at ${width}px`);
   }
   await phone.getByLabel('Select report page', { exact: true }).tap();
-  await phone.getByRole('button', { name: 'Close report', exact: true }).click();
+  await phone.getByRole('button', { name: 'Close report', exact: true }).tap();
   await phone.getByRole('button', { name: /A useful report/ }).click();
   await phone.getByRole('heading', { name: 'Mobile plan' }).waitFor();
   await phone.getByLabel('Select report page', { exact: true }).tap();
@@ -780,7 +780,7 @@ try {
   await phone.getByRole('button', { name: 'Results', exact: true }).click();
   await frame.getByRole('heading', { name: 'Report ready' }).waitFor();
   await phone.getByLabel('Select report page', { exact: true }).tap();
-  await phone.getByRole('button', { name: 'Close report', exact: true }).click();
+  await phone.getByRole('button', { name: 'Close report', exact: true }).tap();
   await phone.getByRole('heading', { name: 'Workspace', exact: true }).waitFor();
   const listRefresh = phone.waitForRequest(request => request.url().endsWith('/mobile/api/reports'));
   await pullDown(phone.locator('.mobile-results-list'), 200);
