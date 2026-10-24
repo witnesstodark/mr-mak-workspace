@@ -79,7 +79,7 @@ try {
   await page.getByRole('img', { name: 'Reference', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Image preview', exact: true });
   await dialog.waitFor();
-  assert.equal(await dialog.evaluate(node => getComputedStyle(node).backgroundColor), 'rgb(12, 13, 17)');
+  assert.equal(await dialog.evaluate(node => getComputedStyle(node).backgroundColor), 'rgb(35, 35, 41)');
   assert.equal(await dialog.evaluate(node => getComputedStyle(node).display), 'flex');
   await dialog.getByRole('button', { name: 'Close', exact: true }).click();
   await dialog.waitFor({ state: 'hidden' });
@@ -93,7 +93,7 @@ try {
   assert.equal(await page.locator('.mak-markdown h1').evaluate(node => getComputedStyle(node).color), 'rgb(17, 21, 33)');
   await page.getByRole('img', { name: 'Reference', exact: true }).click();
   await dialog.waitFor();
-  assert.equal(await dialog.evaluate(node => getComputedStyle(node).backgroundColor), 'rgb(242, 244, 247)');
+  assert.equal(await dialog.evaluate(node => getComputedStyle(node).backgroundColor), 'rgb(232, 235, 241)');
   await dialog.getByRole('button', { name: 'Close', exact: true }).click();
   await page.goto(`${url}#/creative-mcp/0`);
   await page.locator('.report-document[aria-busy=false]').waitFor();

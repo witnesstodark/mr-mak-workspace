@@ -7,6 +7,8 @@ export const platform = process.platform;
 export const isWindows = platform === 'win32';
 export const isLinux = platform === 'linux';
 export const isMacOS = platform === 'darwin';
+// PowerShell treats these typographic apostrophes as quote delimiters too.
+export const powerShellLiteral = value => "'" + value.replace(/['\u2018\u2019\u201a\u201b]/g, '$&$&') + "'";
 
 export function shellLabel() {
   return isWindows ? 'PowerShell' : 'Shell';

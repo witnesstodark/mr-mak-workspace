@@ -7,7 +7,7 @@ import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createService } from '../server.mjs';
-import { launchBrowser } from './browser.mjs';
+import { launchBrowser, desktopAuth } from './browser.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 await mkdir(path.join(root, '.cache'), { recursive: true });
@@ -31,6 +31,7 @@ try {
   };
   browser = await launchBrowser();
   const page = await browser.newPage({ viewport: { width: 900, height: 600 } });
+  await desktopAuth(page.context(), service.urls.workspace);
   page.setDefaultTimeout(8000);
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   const names = () => page.locator('.chat-tabs .chat-tab-name').allTextContents();

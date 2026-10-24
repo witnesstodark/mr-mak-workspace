@@ -2,6 +2,7 @@ import path from 'node:path';
 import { mkdir, open, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { within } from './util.mjs';
+import { isWindows, powerShellLiteral } from './platform.mjs';
 
 export const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
 function imageExtension(data) {
@@ -74,6 +75,5 @@ export class Attachments {
 export function attachmentText(paths, agent) {
   // In a shell, literal single quotes prevent an attachment path from expanding.
   // PowerShell escapes a quote inside them as '', POSIX shells (zsh, bash) as '\''.
-  const quote = process.platform === 'win32' ? "''" : "'\\''";
-  return paths.map(file => agent === 'shell' ? "'" + file.replaceAll("'", quote) + "'" : '"' + file.replaceAll('"', '') + '"').join(' ') + ' ';
+  return paths.map(file => agent === 'shell' ? (isWindows ? powerShellLiteral(file) : "'" + file.replaceAll("'", "'\\''") + "'") : '"' + file.replaceAll('"', '') + '"').join(' ') + ' ';
 }

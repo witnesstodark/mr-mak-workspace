@@ -93,6 +93,30 @@ The local engine is the default. Choose Free/Paid/Off in the top-right phone
 button (**Phone settings**) or **Settings → Speech-to-text**. The choice is saved
 and shared with paired phones. Paid providers require an API key on the computer.
 
+## Workspace and Chat themes
+
+Settings → Appearance offers independent **Workspace theme** and **Chat theme**
+choices. Chat also has an Appearance button in its header. Thirteen named palettes
+are available, alongside Dark, Light and System. **Codex / ChatGPT**,
+**Antigravity** and **Claude Code** take visual inspiration from those tools;
+they are not exact copies. The other five families each offer a light and dark option:
+
+| Family | Light | Dark |
+| --- | --- | --- |
+| Nordic | Fjord | Polar Night |
+| Forest | Botanical | Moss & Brass |
+| Sandstone | Clay | Desert Night |
+| Ocean | Sea Glass | Harbor |
+| Plum | Orchid Paper | Velvet |
+
+Existing family preferences select Fjord, Moss & Brass, Clay, Harbor and Velvet
+respectively. Both approved variants are selectable by their family and name.
+
+Selections are saved and synchronised across open windows. Workspace also themes
+standard reports; custom artwork and games retain their colours. Chat themes apply
+to Conversation and Terminal without restarting a CLI or losing a draft. Terminal
+text has a minimum contrast ratio of 4.5; Original and Focus remain separate choices.
+
 ## Terminal appearance
 
 Settings → Chats → Terminal appearance offers **Original CLI colors** (the default)

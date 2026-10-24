@@ -34,7 +34,9 @@ function ThemedFrame({ url, onLoad, ...props }: Props) {
         doc.documentElement.dataset.mrmakTheme = resolved
       }
     } catch { /* Cross-origin reports use the message below. */ }
-    element.contentWindow?.postMessage({ type: 'mrmak:theme', theme: resolved }, new URL(url, location.href).origin)
+    // A desktop report runs in an opaque origin, which no target origin can name.
+    // The message only carries the theme name.
+    element.contentWindow?.postMessage({ type: 'mrmak:theme', theme: resolved }, '*')
   }, [resolved, url])
   useEffect(applyTheme, [applyTheme])
   return <iframe {...props} ref={frame} src={src} onLoad={() => { applyTheme(); onLoad?.() }} />

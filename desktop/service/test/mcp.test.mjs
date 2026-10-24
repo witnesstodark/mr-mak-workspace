@@ -142,3 +142,93 @@ test('agent environment forwards only explicitly scoped MCP values from the proj
   assert.equal(env.MRMAK_MCP_FIXTURE_VALUE,'mcp-value');
   assert.notEqual(env.OPENAI_KEY,'private-voice-key'); assert.notEqual(env.UNRELATED_FIXTURE_KEY,'private-value');
 });
+
+test('an empty or blank MCP file reads as no servers, while broken JSON still reports a problem', async () => {
+  const { repo, home, inventory } = await fixture();
+  const gemini = path.join(home, '.gemini/config/mcp_config.json');
+  await mkdir(path.dirname(gemini), { recursive: true });
+  await writeFile(gemini, '');
+  await writeFile(path.join(repo, '.mcp.json'), ' \n\t');
+  const empty = await inventory.list();
+  assert.deepEqual(empty.problems, []); assert.deepEqual(empty.servers, []);
+  await writeFile(gemini, '{"mcpServers":');
+  assert.deepEqual((await inventory.list()).problems.map(item => item.path), [gemini]);
+});
+
+const syncedOrg = '11111111-1111-4111-8111-111111111111', syncedAccount = '22222222-2222-4222-8222-222222222222';
+async function syncedFixture({ configDir = false } = {}) {
+  const base = await fixture();
+  const claudeHome = configDir ? path.join(base.home, 'claude-profile') : path.join(base.home, '.claude');
+  if (configDir) base.inventory.env = { ...base.inventory.env, CLAUDE_CONFIG_DIR: claudeHome };
+  const accountFile = configDir ? path.join(claudeHome, '.claude.json') : path.join(base.home, '.claude.json');
+  await mkdir(claudeHome, { recursive: true });
+  await base.json(accountFile, { oauthAccount: { organizationUuid: syncedOrg, accountUuid: syncedAccount } });
+  const synced = path.join(claudeHome, 'plugins/synced'), bucket = path.join(synced, `${syncedOrg}_${syncedAccount}`);
+  await mkdir(bucket, { recursive: true });
+  const plugin = async (folder, { manifest = {}, servers } = {}) => {
+    const root = path.join(bucket, folder);
+    await mkdir(path.join(root, '.claude-plugin'), { recursive: true });
+    await base.json(path.join(root, '.claude-plugin/plugin.json'), { name: folder, ...manifest });
+    if (servers) await base.json(path.join(root, '.mcp.json'), { mcpServers: servers });
+    return root;
+  };
+  const list = plugins => base.json(path.join(bucket, 'manifest.json'), { plugins });
+  return { ...base, claudeHome, accountFile, synced, bucket, plugin, list };
+}
+
+test('Claude plugins synced from claude.ai are listed for the signed-in account only', async () => {
+  let probes = 0;
+  const { home, json, plugin, list, synced, accountFile, inventory } = await syncedFixture();
+  inventory.probe = async () => { probes++; return { status: 'available', toolCount: 0 }; };
+  await plugin('viewer~g2', { servers: { pdf: { command: process.execPath } } });
+  await plugin('viewer', { servers: { stale_generation: { command: process.execPath } } });
+  await plugin('blocked', { servers: { blocked_server: { command: process.execPath } } });
+  const other = path.join(synced, `${syncedOrg}_33333333-3333-4333-8333-333333333333`, 'foreign');
+  await mkdir(other, { recursive: true }); await json(path.join(other, '.mcp.json'), { mcpServers: { foreign_server: { command: process.execPath } } });
+  await json(path.join(path.dirname(other), 'manifest.json'), { plugins: [{ name: 'foreign' }] });
+  await list([{ name: 'viewer', generation: 2, installationPreference: 'available' }, { name: 'blocked', installationPreference: 'not_available' }, { name: '../escape' }, { name: 42 }, null]);
+  const result = await inventory.list();
+  assert.deepEqual(result.servers.map(item => item.name), ['pdf']);
+  const pdf = result.servers.find(item => item.name === 'pdf');
+  assert.equal(pdf.plugin, 'viewer@synced'); assert.equal(pdf.synced, true); assert.equal(pdf.scope, 'plugin');
+  assert.equal(pdf.enabled, true); assert.equal(pdf.readiness, 'managed'); assert.equal(pdf.canCheck, false);
+  await assert.rejects(inventory.check(pdf.id)); assert.equal(probes, 0);
+  await json(path.join(home, '.claude/settings.json'), { enabledPlugins: { 'viewer@synced': false } });
+  assert.equal((await inventory.list()).servers.find(item => item.name === 'pdf').enabled, false);
+  await json(accountFile, {});
+  assert.equal((await inventory.list()).servers.length, 0);
+});
+
+test('synced plugins follow Claude Code: required stays on, otherwise settings then defaultEnabled', async () => {
+  const { claudeHome, json, plugin, list, inventory } = await syncedFixture({ configDir: true });
+  await plugin('org', { servers: { org_server: { command: process.execPath } } });
+  await plugin('quiet', { manifest: { defaultEnabled: false }, servers: { quiet_server: { command: process.execPath } } });
+  const inline = await plugin('inline', { manifest: { mcpServers: { inline_server: { command: process.execPath } } } });
+  await list([{ name: 'org', installationPreference: 'required' }, { name: 'quiet' }, { name: 'inline', installationPreference: 'some_future_value' }]);
+  await json(path.join(claudeHome, 'settings.json'), { enabledPlugins: { 'org@synced': false } });
+  const enabled = async () => Object.fromEntries((await inventory.list()).servers.map(item => [item.name, item.enabled]));
+  assert.deepEqual(await enabled(), { inline_server: true, org_server: true, quiet_server: false });
+  const item = (await inventory.list()).servers.find(server => server.name === 'inline_server');
+  assert.equal(item.sources[0].path, path.join(inline, '.claude-plugin/plugin.json'));
+  await json(path.join(claudeHome, 'settings.json'), { enabledPlugins: { 'quiet@synced': true, 'inline@synced': false } });
+  assert.deepEqual(await enabled(), { inline_server: false, org_server: true, quiet_server: true });
+});
+
+test('malformed synced plugin files are skipped without breaking the inventory', async () => {
+  const { repo, json, bucket, plugin, list, inventory } = await syncedFixture();
+  await json(path.join(repo, '.mcp.json'), { mcpServers: { project_server: { url: 'https://example.test/mcp' } } });
+  for (const value of ['null', '[]', '"text"']) {
+    await writeFile(path.join(bucket, 'manifest.json'), value);
+    assert.deepEqual((await inventory.list()).servers.map(item => item.name), ['project_server']);
+  }
+  const nullManifest = await plugin('null-manifest'); await writeFile(path.join(nullManifest, '.claude-plugin/plugin.json'), 'null');
+  await plugin('null-inline', { manifest: { mcpServers: null } });
+  const nullConfig = await plugin('null-config'); await writeFile(path.join(nullConfig, '.mcp.json'), 'null');
+  const nullServers = await plugin('null-servers'); await writeFile(path.join(nullServers, '.mcp.json'), '{"mcpServers":null}');
+  await plugin('outside', { manifest: { mcpServers: '../null-config/.mcp.json' } });
+  await plugin('good', { servers: { good_server: { command: process.execPath } } });
+  await list(['null-manifest', 'null-inline', 'null-config', 'null-servers', 'outside', 'good'].map(name => ({ name })));
+  const result = await inventory.list();
+  assert.deepEqual(result.servers.map(item => item.name).sort(), ['good_server', 'project_server']);
+  assert.deepEqual(result.problems, []);
+});

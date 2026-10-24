@@ -38,6 +38,8 @@ export class McpInventory {
       try {
         if ((await stat(file)).size > 8 * 1024 * 1024) throw new Error('large');
         const text = (await readFile(file, 'utf8')).replace(/^\uFEFF/, '');
+        // Antigravity creates an empty mcp_config.json until a server is added.
+        if (!text.trim()) return {};
         return file.endsWith('.toml') ? toml(text) : JSON.parse(text);
       } catch (error) {
         if (error.code !== 'ENOENT') problems.push({ path: file, message: 'Configuration could not be read. Check its format and file permissions.' });
@@ -109,6 +111,35 @@ export class McpInventory {
       const config = typeof manifest.mcpServers === 'object' ? manifest.mcpServers : await read(file);
       add('claude', 'plugin', file, config.mcpServers || config, 5, { plugin: pluginId, pluginRoot: root, pluginEnabled: claudeSettings.enabledPlugins?.[pluginId] === true, managed: true });
     }
+    // Plugins that claude.ai syncs to the signed-in account live in one folder per
+    // organization and account, listed by that folder's manifest. A plugin past its
+    // first generation sits in "<name>~g<generation>". Claude Code keeps a plugin
+    // the organization requires enabled; otherwise enabledPlugins["<name>@synced"]
+    // decides, falling back to the plugin's defaultEnabled.
+    const account = object(values.claudeUser.oauthAccount);
+    const accountKey = [account.organizationUuid, account.accountUuid].every(id => typeof id === 'string' && /^[0-9a-f-]{36}$/i.test(id)) ? `${account.organizationUuid}_${account.accountUuid}` : null;
+    if (accountKey) {
+      const bucket = path.join(claudeHome, 'plugins/synced', accountKey);
+      const listed = object(await read(path.join(bucket, 'manifest.json')));
+      for (const item of Array.isArray(listed.plugins) ? listed.plugins : []) {
+        if (typeof item?.name !== 'string' || !item.name || /[\\/]|^\.{1,2}$/.test(item.name)) continue;
+        // claude.ai lists a plugin it no longer offers as not_available; Claude Code skips it.
+        if (item.installationPreference === 'not_available') continue;
+        const generation = Number.isInteger(item.generation) && item.generation > 1 ? item.generation : 1;
+        const root = path.join(bucket, generation > 1 ? `${item.name}~g${generation}` : item.name);
+        if (!key(root).startsWith(key(bucket) + '/')) continue;
+        const manifestPath = path.join(root, '.claude-plugin/plugin.json');
+        const manifest = object(await read(manifestPath));
+        const inline = typeof manifest.mcpServers === 'object' && manifest.mcpServers !== null;
+        const file = inline ? manifestPath : typeof manifest.mcpServers === 'string' ? path.resolve(root, manifest.mcpServers) : path.join(root, '.mcp.json');
+        if (!key(file).startsWith(key(root) + '/')) continue;
+        const config = object(inline ? manifest.mcpServers : await read(file));
+        const servers = object(config.mcpServers ?? config);
+        const pluginId = `${item.name}@synced`, preference = item.installationPreference, setting = claudeSettings.enabledPlugins?.[pluginId];
+        const pluginEnabled = preference === 'required' || (setting === undefined ? manifest.defaultEnabled !== false : setting !== false);
+        add('claude', 'plugin', file, servers, 5, { plugin: pluginId, pluginRoot: root, pluginEnabled, managed: true, synced: true });
+      }
+    }
     const projectEnv = await readFile(path.join(this.repo, '.env'), 'utf8').then(dotenv).catch(() => ({}));
     const grouped = new Map();
     for (const entry of entries) {
@@ -146,7 +177,7 @@ export class McpInventory {
       const connection = checked?.fingerprint === fingerprint ? { ...checked.result, stale: Date.now() - Date.parse(checked.result.checkedAt) > 5 * 60000 } : null;
       const data = {
         id, name: winner.name, client: winner.client, scope: winner.scope, enabled: !disabled, readiness, transport,
-        endpoint, executable: config.command ? path.basename(expanded.command) : null, plugin: winner.plugin || null,
+        endpoint, executable: config.command ? path.basename(expanded.command) : null, plugin: winner.plugin || null, synced: !!winner.synced,
         sources: [...layers].reverse().map(item => ({ scope: item.scope, path: item.file, effective: item === winner })),
         missingEnv: [...missing], credentialNames: Object.keys(headers), connection,
         canCheck: !disabled && !hostManaged && !approvalNeeded && !missing.size && (transport !== 'stdio' || !!executable) && !config.http_headers_helper,

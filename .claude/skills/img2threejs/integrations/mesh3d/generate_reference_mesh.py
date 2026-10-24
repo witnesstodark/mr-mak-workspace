@@ -35,12 +35,19 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import struct
 import sys
 from pathlib import Path
 
 DEFAULT_SPACE = "trellis-community/TRELLIS"
+
+
+def space_id(value: str) -> str:
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*", value):
+        raise argparse.ArgumentTypeError("Use a Hugging Face owner/space ID, not a URL.")
+    return value
 
 
 def parse_args() -> argparse.Namespace:
@@ -51,7 +58,7 @@ def parse_args() -> argparse.Namespace:
                    help="skip generation and convert an existing GLB. Generation costs finite "
                         "ZeroGPU quota, so a failure in the local conversion step must never force "
                         "a regeneration of a mesh that already exists")
-    p.add_argument("--space", default=DEFAULT_SPACE)
+    p.add_argument("--space", default=DEFAULT_SPACE, type=space_id)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--mesh-simplify", type=float, default=0.95,
                    help="TRELLIS simplify ratio, demo range 0.9-0.98. In the reference demo this is "
@@ -60,7 +67,6 @@ def parse_args() -> argparse.Namespace:
                         "the direction stated here")
     p.add_argument("--texture-size", type=int, default=512,
                    help="kept small on purpose: geometry is what is being scored")
-    p.add_argument("--hf-token", default=None)
     return p.parse_args()
 
 
@@ -77,7 +83,9 @@ def generate(args: argparse.Namespace) -> Path:
     # anonymous.
     from huggingface_hub import get_token
 
-    token = args.hf_token or get_token()
+    # Use HF_TOKEN or the local `hf auth login` store. Credentials must never
+    # appear in command-line arguments, shell history, or generated receipts.
+    token = get_token()
     client = Client(args.space, token=token, verbose=False)
     print(f"auth       : {'token' if token else 'anonymous'}")
     primary = handle_file(str(args.images[0]))

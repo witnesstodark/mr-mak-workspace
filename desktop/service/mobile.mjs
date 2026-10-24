@@ -1,4 +1,5 @@
 import http from 'node:http';
+import { isIP } from 'node:net';
 import path from 'node:path';
 import { createHash, randomInt, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
@@ -22,6 +23,7 @@ const uuid = value => typeof value === 'string' && /^[a-f0-9-]{36}$/i.test(value
 const COOKIE = 'mrmak_mobile';
 const PAIR_TTL = 5 * 60 * 1000;
 const DEVICE_TTL = 180 * 24 * 60 * 60 * 1000;
+const DEVICE_IDLE_TTL = 30 * 24 * 60 * 60 * 1000;
 const send = (ws, value) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(value)); };
 
 export class MobileGateway {
@@ -29,7 +31,7 @@ export class MobileGateway {
     Object.assign(this, { repo, uiDir, sessions, attachments, settings, changed, closeChat, transport });
     this.file = path.join(stateDir, 'mobile-access.json');
     this.saves = Promise.resolve(); this.pending = new Map(); this.clients = new Set(); this.inflight = new Map(); this.uploads = new Map(); this.queues = new Map();
-    this.transcripts = transcripts; this.conversationMedia = new ConversationMedia(); this.active = false; this.error = ''; this.origin = ''; this.rate = { at: Date.now(), count: 0 };
+    this.transcripts = transcripts; this.conversationMedia = new ConversationMedia(); this.active = false; this.error = ''; this.origin = ''; this.rates = new Map();
     this.reports = new MobileReports(this);
     this.readAloud = readAloud; this.dictation = dictation; this.chooseDictation = chooseDictation;
   }
@@ -62,7 +64,7 @@ export class MobileGateway {
       if (this.pairing?.expires < Date.now()) this.pairing = null;
       for (const [id, upload] of this.uploads) if (upload.expires < Date.now()) this.uploads.delete(id);
       for (const ws of this.clients) {
-        if (!this.state.devices.some(device => device.id === ws.deviceId && device.expires > Date.now()) || ws.alive === false) ws.terminate();
+        if (!this.state.devices.some(device => device.id === ws.deviceId && this.validDevice(device)) || ws.alive === false) ws.terminate();
         else { ws.alive = false; ws.ping(); }
       }
     }, 30000); this.timer.unref();
@@ -76,7 +78,7 @@ export class MobileGateway {
   status() {
     return {
       enabled: this.active, origin: this.active ? this.origin : '', error: this.error,
-      devices: this.state.devices.filter(device => device.expires > Date.now()).map(({ hash: _hash, ...device }) => ({ ...device, connected: [...this.clients].some(ws => ws.deviceId === device.id && ws.readyState === WebSocket.OPEN) })),
+      devices: this.state.devices.filter(device => this.validDevice(device)).map(({ hash: _hash, ...device }) => ({ ...device, connected: [...this.clients].some(ws => ws.deviceId === device.id && ws.readyState === WebSocket.OPEN) })),
       pending: [...this.pending.values()].filter(item => item.expires > Date.now() && !item.approved).map(({ id, name, code, expires }) => ({ id, name, code, expires })),
     };
   }
@@ -108,14 +110,29 @@ export class MobileGateway {
     const url = `${this.origin}/mobile/#pair=${token}`;
     return { url, code, expires, qr: await QRCode.toDataURL(url, { width: 280, margin: 2, errorCorrectionLevel: 'M' }) };
   }
-  rateLimit() {
-    if (Date.now() - this.rate.at > 60000) this.rate = { at: Date.now(), count: 0 };
-    if (++this.rate.count > 60) fail('Too many pairing attempts. Wait a minute and try again.', 429);
+  source(request) {
+    const remote = request?.socket?.remoteAddress || 'local';
+    // Serve overwrites X-Forwarded-For with the tailnet peer's IP. Only trust it
+    // from our loopback proxy, never a remote socket or a client-supplied chain.
+    const forwarded = request?.headers?.['x-forwarded-for'];
+    return ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(remote) && typeof forwarded === 'string' && isIP(forwarded) ? forwarded : remote;
   }
-  claim(data) {
-    this.rateLimit();
-    if (typeof data.token !== 'string' || !this.pairing || this.pairing.expires < Date.now() || !(equalSecret(this.pairing.hash, digest(data.token)) || equalSecret(this.pairing.codeHash, digest(data.token)))) fail('This QR code has expired or was already used. Create a new one in Chats.', 403);
-    if (this.state.devices.filter(item => item.expires > Date.now()).length >= 8) fail('Disconnect an old device before adding another.');
+  rateLimit(source = 'local', route = 'claim') {
+    const now = Date.now(), key = `${route}:${source}`;
+    for (const [key, rate] of this.rates) if (now - rate.at >= 60000) this.rates.delete(key);
+    if (!this.rates.has(key)) {
+      if (this.rates.size >= 1024) this.rates.delete(this.rates.keys().next().value);
+      this.rates.set(key, { at: now, count: 0 });
+    }
+    if (++this.rates.get(key).count > 60) fail('Too many pairing attempts. Wait a minute and try again.', 429);
+  }
+  claim(data, source = 'local') {
+    this.rateLimit(source);
+    if (typeof data.token !== 'string' || data.token.length > 100 || !this.pairing || this.pairing.expires < Date.now() || !(equalSecret(this.pairing.hash, digest(data.token)) || equalSecret(this.pairing.codeHash, digest(data.token)))) {
+      if (this.pairing && (this.pairing.failures = (this.pairing.failures || 0) + 1) >= 10) { this.pairing = null; this.notify(); }
+      fail('This QR code has expired or was already used. Create a new one in Chats.', 403);
+    }
+    if (this.state.devices.filter(item => this.validDevice(item)).length >= 8) fail('Disconnect an old device before adding another.');
     this.pairing = null;
     const id = randomUUID(), claim = secret(), code = String(randomInt(100000, 1000000));
     const name = String(data.name || 'My phone').replace(/[\x00-\x1f\x7f<>]/g, '').trim().slice(0, 60) || 'My phone';
@@ -142,11 +159,20 @@ export class MobileGateway {
   cookie(value, remove = false) {
     return `${COOKIE}=${value}; HttpOnly; SameSite=Strict; Path=/mobile/; Max-Age=${remove ? 0 : DEVICE_TTL / 1000}${this.origin.startsWith('https:') ? '; Secure' : ''}`;
   }
+  validDevice(device) {
+    const lastSeen = Date.parse(device.lastSeen || device.createdAt);
+    return device.expires > Date.now() && Number.isFinite(lastSeen) && Date.now() - lastSeen < DEVICE_IDLE_TTL;
+  }
+  touch(device) {
+    if (Date.now() - Date.parse(device.lastSeen || 0) < 60000) return;
+    device.lastSeen = new Date().toISOString(); this.save().catch(() => {});
+  }
   device(request) {
     const credential = String(request.headers.cookie || '').split(';').map(item => item.trim()).find(item => item.startsWith(`${COOKIE}=`))?.slice(COOKIE.length + 1);
     if (!credential || credential.length > 100) fail('Connect this phone from the QR code in Mr. Mak Chats.', 401);
-    const hash = digest(credential), device = this.state.devices.find(item => item.expires > Date.now() && equalSecret(item.hash, hash));
+    const hash = digest(credential), device = this.state.devices.find(item => this.validDevice(item) && equalSecret(item.hash, hash));
     if (!device) fail('This phone is disconnected. Scan a new QR code in Chats.', 401);
+    this.touch(device);
     return device;
   }
   checkRequest(request, mutation = false) {
@@ -174,10 +200,10 @@ export class MobileGateway {
     ws.deviceId = device.id; ws.alive = true; ws.sessionId = null; this.clients.add(ws);
     device.lastSeen = new Date().toISOString(); this.save().catch(() => {}); this.notify();
     send(ws, { type: 'connected', sessions: this.list() });
-    ws.on('pong', () => { ws.alive = true; });
+    ws.on('pong', () => { ws.alive = true; if (this.validDevice(device)) this.touch(device); });
     ws.on('message', async raw => {
       try {
-        if (!this.active || !this.state.devices.some(item => item.id === device.id && item.expires > Date.now())) return ws.close(1008, 'Disconnected');
+        if (!this.active || !this.state.devices.some(item => item.id === device.id && this.validDevice(item))) return ws.close(1008, 'Disconnected');
         const event = JSON.parse(raw.toString());
         if (event.type === 'subscribe') {
           this.session(event.id); ws.sessionId = event.id;
@@ -222,7 +248,7 @@ export class MobileGateway {
       const delivery = previous.catch(() => {}).then(async () => {
         const current = this.session(id), process = current.process;
         if (!process) { receipt.status = 'failed'; receipt.error = 'The chat stopped before delivery.'; return; }
-        if (!this.active || !this.state.devices.some(item => item.id === device.id)) { receipt.status = 'failed'; receipt.error = 'This phone was disconnected before delivery.'; return; }
+        if (!this.active || !this.state.devices.some(item => item.id === device.id && this.validDevice(item))) { receipt.status = 'failed'; receipt.error = 'This phone was disconnected before delivery.'; return; }
         const clean = `${text}${paths.length ? '\n' + attachmentText(paths, current.agent) : ''}`.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '').replaceAll('\r', '');
         try {
           // A whole prompt is pasted in one write; desktop selection/geometry is untouched.
@@ -250,11 +276,14 @@ export class MobileGateway {
         const binary = route === '/mobile/api/images' || route === '/mobile/api/transcribe';
         if (mutation && !binary && !String(request.headers['content-type'] || '').startsWith('application/json')) fail('JSON is required', 415);
         const data = mutation && !binary ? await body(request, 256 * 1024) : {};
-        if (method === 'POST' && route === '/mobile/api/pair') return json(response, 200, this.claim(data));
+        if (method === 'POST' && route === '/mobile/api/pair') return json(response, 200, this.claim(data, this.source(request)));
         if (method === 'POST' && route === '/mobile/api/pair/finish') {
-          this.rateLimit();
+          this.rateLimit(this.source(request), 'finish');
           const pending = this.pending.get(data.id);
-          if (!pending || pending.expires < Date.now() || typeof data.claim !== 'string' || !equalSecret(pending.claimHash, digest(data.claim))) fail('Connection request expired. Scan a new QR code.', 403);
+          if (!pending || pending.expires < Date.now() || typeof data.claim !== 'string' || data.claim.length > 100 || !equalSecret(pending.claimHash, digest(data.claim))) {
+            if (pending && (pending.failures = (pending.failures || 0) + 1) >= 10) { this.pending.delete(data.id); this.notify(); }
+            fail('Connection request expired. Scan a new QR code.', 403);
+          }
           if (!pending.approved) return json(response, 202, { status: 'waiting' });
           response.setHeader('Set-Cookie', this.cookie(pending.credential));
           return json(response, 200, { status: 'connected' });
@@ -265,7 +294,7 @@ export class MobileGateway {
         if (media && ['GET', 'HEAD'].includes(method)) { this.session(media[1]); return await this.conversationMedia.serve(request, response, media[1], media[2], device.id, url.searchParams.get('download') === '1'); }
         if (method === 'GET' && route === '/mobile/api/dictation') return json(response, 200, await this.dictation.status());
         if (method === 'POST' && route === '/mobile/api/dictation') return json(response, 200, await this.chooseDictation(data.provider));
-        if (method === 'POST' && route === '/mobile/api/transcribe') return json(response, 200, await this.dictation.transcribe(request, device.id, () => this.active && this.state.devices.some(item => item.id === device.id && item.expires > Date.now())));
+        if (method === 'POST' && route === '/mobile/api/transcribe') return json(response, 200, await this.dictation.transcribe(request, device.id, () => this.active && this.state.devices.some(item => item.id === device.id && this.validDevice(item))));
         if (method === 'GET' && route === '/mobile/api/reports') return json(response, 200, await this.reports.list());
         if (method === 'POST' && route === '/mobile/api/reports/open') return json(response, 200, await this.reports.open(device, data));
         if (method === 'GET' && route === '/mobile/api/bootstrap') return json(response, 200, { sessions: this.list(), agents: inventory().filter(item => item.id !== 'shell'), device: { id: device.id, name: device.name }, defaultAgent: this.settings().defaultAgent, defaultBypass: this.settings().defaultBypass, dictation: await this.dictation.status() });
@@ -296,7 +325,7 @@ export class MobileGateway {
             response.once('close', abort);
             try {
               const audio = await this.readAloud.synthesize(device.id, data, controller.signal);
-              if (!this.active || !this.state.devices.some(item => item.id === device.id && item.expires > Date.now())) fail('Phone disconnected', 401);
+              if (!this.active || !this.state.devices.some(item => item.id === device.id && this.validDevice(item))) fail('Phone disconnected', 401);
               complete = true; response.writeHead(200, { 'Content-Type': 'audio/wav', 'Content-Length': audio.length, 'Cache-Control': 'no-store' }); response.end(audio); return;
             } finally { response.off('close', abort); }
           }

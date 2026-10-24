@@ -14,7 +14,7 @@
 .report-loading,.report-error{display:flex;align-items:center;justify-content:center;flex-direction:column;height:100%;gap:16px;padding:32px;text-align:center;color:#b5afbf}.report-error a{color:#f0a0b0}
 .report-image{height:100%;display:flex;flex-direction:column;min-height:0;background:#101115}.report-image nav{display:flex;gap:18px;padding:14px 22px;font-size:12px;border-bottom:1px solid #ffffff12}.report-image>a{display:flex;min-height:0;flex:1;align-items:center;justify-content:center;padding:24px}.report-image img{max-width:100%;max-height:100%;object-fit:contain;cursor:zoom-in}
 .file-preview-body.image>a{display:flex;align-items:center;justify-content:center;width:100%;height:100%;padding:18px}.file-preview-body .mak-lightbox img{max-width:100%;max-height:100%}.file-preview-body .mak-lightbox-stage.actual img{max-width:none;max-height:none}
-.home .entity-card:not([data-entity="my-dream-game"]){padding:20px 22px;gap:14px;background:#18191ee6;border:1px solid #ffffff12;box-shadow:0 3px 12px #0002;backdrop-filter:none}
+.home .entity-card:not([data-entity="my-dream-game"]){--card-pt:20px;--card-px:22px;padding:20px 22px;gap:14px;background:#18191ee6;border:1px solid #ffffff12;box-shadow:0 3px 12px #0002;backdrop-filter:none}
 .home .entity-card:not([data-entity="my-dream-game"]):hover{background:#1d1b23;border-color:#f0a0b045;box-shadow:0 8px 28px #0004;transform:translateY(-2px)}
 .home .entity-card:not([data-entity="my-dream-game"]) .card-title{font:600 17px/1.45 var(--font-body);letter-spacing:-.02em;-webkit-line-clamp:3}
 .home .entity-card:not([data-entity="my-dream-game"]) .card-desc{font-size:12px;line-height:1.75;color:#a69dab}

@@ -76,3 +76,23 @@ test('coordinator cannot increase the UI-selected default chat permission level'
     await assert.rejects(create('true'), /valid chat permission/);
   } finally { await service.close(); }
 });
+
+test('coordinator cannot reuse an existing bypass chat or resume a shell to evade the selected permissions', async () => {
+  const { service, request, repo } = await fixture();
+  const session = service.sessions.make({ id: 'restricted-target', cwd: repo, agent: 'codex', bypass: true, open: false, status: 'stopped' });
+  service.sessions.items.set(session.id, session);
+  let sends = 0, resumes = 0;
+  service.sessions.input = () => { sends++; return { delivered: true }; };
+  service.sessions.resume = async () => { resumes++; return session; };
+  try {
+    for (const name of ['send_to_chat', 'reopen_chat', 'attach_files']) await assert.rejects(service.coordinator.execute(name, { id: session.id, text: 'task', paths: [] }, 'fixture'), /bypass permissions/);
+    assert.equal(sends + resumes, 0);
+    await request('/settings', { defaultBypass: true });
+    await service.coordinator.execute('send_to_chat', { id: session.id, text: 'task' }, 'fixture');
+    await service.coordinator.execute('reopen_chat', { id: session.id }, 'fixture');
+    assert.equal(sends, 1); assert.equal(resumes, 1);
+    session.agent = 'shell';
+    for (const name of ['send_to_chat', 'reopen_chat', 'attach_files']) await assert.rejects(service.coordinator.execute(name, { id: session.id, text: 'task', paths: [] }, 'fixture'), /local shell directly/);
+    assert.equal(sends, 1); assert.equal(resumes, 1);
+  } finally { await service.close(); }
+});

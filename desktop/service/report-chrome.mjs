@@ -3,13 +3,14 @@ import {Transform} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 import {mobileReportStatePrelude} from './mobile-report-state.mjs';
 import {reportThemeCSS} from './report-theme.mjs';
+import {palettes, resolveTheme, themePalette} from './appearance.mjs';
 
 // Shared browser chrome and external-link routing. The selected reader theme
 // applies to standard reports; custom designs and artwork keep their colours.
 function preludeFor({theme = 'dark', parentOrigin = ''} = {}) {
-  theme = theme === 'light' ? 'light' : 'dark';
+  theme = resolveTheme(theme);
   const trustedOrigin = JSON.stringify(parentOrigin).replace(/</g, '\\u003c');
-  return Buffer.from(`<meta name="color-scheme" content="${theme}"><style data-mrmak-chrome>
+  return Buffer.from(`<meta name="color-scheme" content="${themePalette(theme).scheme}"><style data-mrmak-chrome>
 html{color-scheme:dark;background-color:#101115;color:#d3d0d9}
 html,body,body *{scrollbar-color:#514c59 #111217!important;scrollbar-width:thin}
 ::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-track,::-webkit-scrollbar-corner{background:#111217!important}
@@ -17,7 +18,7 @@ html,body,body *{scrollbar-color:#514c59 #111217!important;scrollbar-width:thin}
 ${reportThemeCSS}
 </style><script data-mrmak-links>
 (() => {
-  const setTheme = theme => { if (theme === 'dark' || theme === 'light') document.documentElement.dataset.mrmakTheme = theme; };
+  const setTheme = theme => { if (${JSON.stringify(palettes.map(palette => palette.id))}.includes(theme)) document.documentElement.dataset.mrmakTheme = theme; };
   setTheme('${theme}');
   window.addEventListener('message', event => {
     if (event.source === parent && event.origin === ${trustedOrigin} && event.data?.type === 'mrmak:theme') setTheme(event.data.theme);

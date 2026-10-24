@@ -175,6 +175,7 @@ export class ModelViewer {
   private ngonDeclared = false
   private ro: ResizeObserver
   private raf = 0
+  private dirty = true
   private disposed = false
   private applying = false
   private autoRotate = true
@@ -195,6 +196,7 @@ export class ModelViewer {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping
     this.renderer.toneMappingExposure = 1.05
     container.appendChild(this.renderer.domElement)
+    this.renderer.domElement.addEventListener('webglcontextrestored', this.onContextRestored)
 
     this.camera = new THREE.PerspectiveCamera(45, 1, 0.01, 200)
     this.camera.position.set(0, 0.4, 4)
@@ -206,6 +208,7 @@ export class ModelViewer {
     this.controls.maxDistance = 40
     this.controls.autoRotateSpeed = 0.9
     this.controls.addEventListener('change', () => {
+      this.dirty = true
       if (this.applying || !this.onCameraChange) return
       this.onCameraChange(this.cameraState())
     })
@@ -338,6 +341,7 @@ export class ModelViewer {
   // ── shading ──────────────────────────────────────────────────────────────
 
   setMode(mode: ShadingMode): void {
+    this.dirty = true
     this.mode = mode
     this.releaseOwned()
 
@@ -469,6 +473,7 @@ export class ModelViewer {
    *  already set by hand. Both models normalise to the same box, so the framings
    *  agree anyway. */
   frame(): void {
+    this.dirty = true
     const box = new THREE.Box3().setFromObject(this.root)
     if (box.isEmpty()) return
     this.applying = true
@@ -492,6 +497,7 @@ export class ModelViewer {
 
   /** Apply another pane's camera without echoing a change event back at it. */
   applyCamera(s: CameraState): void {
+    this.dirty = true
     this.applying = true
     this.camera.position.set(...s.pos)
     this.controls.target.set(...s.target)
@@ -500,6 +506,7 @@ export class ModelViewer {
   }
 
   setAutoRotate(on: boolean): void {
+    this.dirty = true
     this.autoRotate = on
     this.controls.autoRotate = on
   }
@@ -534,6 +541,7 @@ export class ModelViewer {
   }
 
   private clearModel(): void {
+    this.dirty = true
     this.releaseOwned()
     for (const g of this.ngonEdges.values()) g.dispose()
     this.ngonEdges.clear()
@@ -563,13 +571,24 @@ export class ModelViewer {
     this.renderer.setSize(w, h, false)
     this.camera.aspect = w / h
     this.camera.updateProjectionMatrix()
+    this.dirty = true
   }
 
   private tick = (): void => {
     if (this.disposed) return
     this.raf = requestAnimationFrame(this.tick)
-    this.controls.update()
-    this.renderer.render(this.scene, this.camera)
+    // Render only when the camera moved or the scene changed: a still model
+    // costs no GPU time.
+    if (this.controls.update() || this.dirty) {
+      this.dirty = false
+      this.renderer.render(this.scene, this.camera)
+    }
+  }
+
+  // An idle viewer no longer renders every frame. Once the browser rebuilds
+  // the WebGL context, redraw its contents even if the camera has not moved.
+  private onContextRestored = (): void => {
+    this.dirty = true
   }
 
   dispose(): void {
@@ -577,6 +596,7 @@ export class ModelViewer {
     cancelAnimationFrame(this.raf)
     this.ro.disconnect()
     this.controls.dispose()
+    this.renderer.domElement.removeEventListener('webglcontextrestored', this.onContextRestored)
     this.clearModel()
     this.envRT?.dispose()
     this.pmrem.dispose()

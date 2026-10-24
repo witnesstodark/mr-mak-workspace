@@ -8,7 +8,7 @@ import { fileManager } from './platform'
 type Check = { status: 'available' | 'agent-auth' | 'timeout' | 'unavailable'; toolCount: number | null; moreTools?: boolean; checkedAt: string; stale?: boolean }
 type Server = {
   id: string; name: string; client: 'codex' | 'claude' | 'antigravity' | 'kimi' | 'cursor'; scope: string; enabled: boolean
-  readiness: string; transport: string; endpoint: string; executable: string | null; plugin: string | null
+  readiness: string; transport: string; endpoint: string; executable: string | null; plugin: string | null; synced?: boolean
   sources: { scope: string; path: string; effective: boolean }[]; missingEnv: string[]; credentialNames: string[]; canCheck: boolean; connection: Check | null
 }
 type Inventory = { scannedAt: string; servers: Server[]; sources: { client: string; scope: string; path: string }[]; problems: { path: string; message: string }[] }
@@ -63,7 +63,7 @@ export default function McpPanel({ onClose }: { onClose: () => void }) {
         {server.missingEnv.length > 0 && <p className="mcp-note">Add to .env: {server.missingEnv.join(', ')}</p>}
         {server.readiness === 'missing-command' && <p className="mcp-note">Install this server on this computer.</p>}
         {server.readiness === 'approval' && <p className="mcp-note">Approve this project server in Claude.</p>}
-        {server.plugin && <p className="mcp-note">Provided by {server.plugin}.</p>}
+        {server.plugin && <p className="mcp-note">{server.synced ? `Provided by ${server.plugin.replace(/@synced$/, '')}, synced from your claude.ai account.` : `Provided by ${server.plugin}.`}</p>}
         <div className="mcp-check"><span className={server.connection?.status === 'available' && !server.connection.stale ? 'available' : ''}>{busy.has(server.id) ? 'Checking…' : server.connection ? `${server.connection.stale ? 'Last check: ' : ''}${checkLabel[server.connection.status]}` : 'Connection not checked'}{!busy.has(server.id) && server.connection?.toolCount != null && <small>{server.connection.toolCount}{server.connection.moreTools ? '+' : ''} tools</small>}</span>
           {server.canCheck && <button onClick={() => void check(server)} disabled={busy.has(server.id) || busy.size >= 2} aria-label={`Check ${server.name} for ${clients[server.client]}`}>Check</button>}
         </div>
@@ -73,6 +73,7 @@ export default function McpPanel({ onClose }: { onClose: () => void }) {
         <details className="mcp-sources"><summary>Configuration{server.sources.length > 1 ? ` · ${server.sources.length} locations` : ''}</summary>{server.sources.map(source => <div key={source.path}><span>{scopes[source.scope] || source.scope}{source.effective ? ' · effective source' : ' · lower priority'}</span><code>{source.path}</code><button onClick={() => api('/reveal', { path: source.path }).catch(error => setError(String(error.message || error)))}>Show in {fileManager} <Icon name="external" size={12} /></button></div>)}{server.credentialNames.length > 0 && <p>Credentials are hidden.</p>}</details>
       </article>)}
       {inventory && !visible.length && <p className="mcp-empty">No MCP servers match these filters.</p>}
+      {inventory && (client === 'all' || client === 'claude') && (scope === 'all' || scope === 'global') && <p className="mcp-note mcp-connectors">Claude Code can also load claude.ai connectors (such as Gmail or Notion) from a signed-in Claude account. They are not stored on this computer, so they are not listed here; run /mcp in a Claude chat to see them.</p>}
     </div>
     <footer className="mcp-footer"><p>Enabled means configured. A check opens its own temporary connection; each chat keeps its own MCP session. Desktop app connectors are managed by their host.</p><button onClick={() => { navigator.clipboard.writeText('/mcp').then(() => setCopied(true)).catch(error => setError(String(error.message || error))) }}>{copied ? 'Copied /mcp' : 'Copy /mcp for chat status'}</button></footer>
   </div>

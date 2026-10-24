@@ -6,9 +6,12 @@ const params = new URLSearchParams(window.location.search)
 export const isDesktop = params.get('desktop') === '1'
 export const surface = params.get('surface') === 'chats' ? 'chats' : 'workspace'
 export const clientId = crypto.randomUUID()
-let token = params.get('token') || sessionStorage.getItem('mrmak.token') || ''
+const native = window as Window & { __MRMAK_BOOTSTRAP_TOKEN__?: string }
+let token = native.__MRMAK_BOOTSTRAP_TOKEN__ || params.get('token') || ''
+delete native.__MRMAK_BOOTSTRAP_TOKEN__
+// Remove credentials left by older versions. Authentication now stays in memory.
+sessionStorage.removeItem('mrmak.token')
 if (isDesktop && token) {
-  sessionStorage.setItem('mrmak.token', token)
   params.delete('token')
   history.replaceState(null, '', `${location.pathname}?${params}${location.hash}`)
 }

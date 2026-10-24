@@ -67,6 +67,18 @@ Codex 0.163 chats are supported: Mr. Mak starts Codex with `--no-daemon` when
 the installed version offers it, so every chat stays linked to its conversation,
 and a chat follows a rewind or a `/new` made in its terminal.
 
+## Workspace and Chat themes
+
+Choose independent themes for Workspace and Chat in **Settings → Appearance**,
+or use the Chat header's Appearance button. Thirteen named palettes include
+**Codex / ChatGPT**, **Antigravity** and **Claude Code**, plus light and dark
+variants of **Nordic**, **Forest**, **Sandstone**, **Ocean** and **Plum**.
+Dark, Light and System remain available.
+
+Workspace themes also style standard reports. Chat themes cover Conversation
+and Terminal while retaining drafts and terminal connections. Choices save and
+sync across open windows. See the [palette list](desktop/README.md#workspace-and-chat-themes).
+
 ## Projects and long chats
 
 **New chat** lists the folders you have worked in: the Workspace, projects

@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createService } from '../server.mjs';
 import { localDay } from '../workspace.mjs';
-import { launchBrowser } from './browser.mjs';
+import { launchBrowser, desktopAuth } from './browser.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 await mkdir(path.join(root, '.cache'), { recursive: true });
@@ -23,6 +23,7 @@ let browser;
 try {
   browser = await launchBrowser();
   const context = await browser.newContext({ viewport: { width: 1100, height: 820 } });
+  await desktopAuth(context, service.urls.workspace);
   const page = await context.newPage(), peer = await context.newPage();
   page.setDefaultTimeout(15000); peer.setDefaultTimeout(15000);
   const errors = []; page.on('pageerror', error => errors.push(error.message));

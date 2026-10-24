@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createService } from '../server.mjs';
 import { localDay } from '../workspace.mjs';
-import { launchBrowser } from './browser.mjs';
+import { launchBrowser, desktopAuth } from './browser.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const sampleAssets = process.env.MRMAK_CARDS_SAMPLE_DIR || path.join(root, 'workspace/2026-09-15_my-dream-game/assets');
@@ -24,6 +24,7 @@ let browser;
 try {
   browser = await launchBrowser();
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await desktopAuth(context, service.urls.workspace);
   await context.route('https://source.example/**', route => route.fulfill({ contentType: 'text/html', body: '<h1>Research source</h1>' }));
   const page = await context.newPage(); page.setDefaultTimeout(12000);
   const errors = []; page.on('pageerror', error => errors.push(error.message));

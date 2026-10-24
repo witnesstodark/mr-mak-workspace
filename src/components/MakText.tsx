@@ -56,28 +56,44 @@ export default function MakText({ height = 28, animated = true }: { height?: num
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     }
 
+    // The shimmer is subtle, so a low frame rate is indistinguishable from full
+    // refresh. Dots are batched into a few alpha buckets: one fill per bucket
+    // instead of one per dot keeps the WebView GPU process near idle.
+    const FRAME_MS = 1000 / 24
+    const BUCKETS = 6
+    let last = -Infinity
+
     const draw = (time: number) => {
       ctx.clearRect(0, 0, textW, textH)
       const pulse = Math.sin(time * 0.001) * 0.04 + 1
+      const paths = Array.from({ length: BUCKETS }, () => new Path2D())
 
       for (const pt of points) {
-        const jx = Math.sin(time * 0.0015 + pt.x * 0.25 + pt.y * 0.3) * 0.3
-        const jy = Math.cos(time * 0.0012 + pt.x * 0.2 + pt.y * 0.4) * 0.2
+        const x = pt.x + Math.sin(time * 0.0015 + pt.x * 0.25 + pt.y * 0.3) * 0.3
+        const y = pt.y + Math.cos(time * 0.0012 + pt.x * 0.2 + pt.y * 0.4) * 0.2
         const r = (0.75 + Math.sin(time * 0.002 + pt.x * 0.1 + pt.y * 0.15) * 0.12) * pulse
-        const alpha = 0.5 + Math.sin(time * 0.0018 + pt.x * 0.3 + pt.y * 0.2) * 0.2
-
-        ctx.beginPath()
-        ctx.arc(pt.x + jx, pt.y + jy, r, 0, Math.PI * 2)
-        ctx.fillStyle = `rgba(235, 235, 240, ${alpha})`
-        ctx.fill()
+        const level = (Math.sin(time * 0.0018 + pt.x * 0.3 + pt.y * 0.2) + 1) / 2
+        const path = paths[Math.min(BUCKETS - 1, Math.floor(level * BUCKETS))]
+        path.moveTo(x + r, y)
+        path.arc(x, y, r, 0, Math.PI * 2)
       }
 
-      if (!reduced) animId = requestAnimationFrame(draw)
+      paths.forEach((path, i) => {
+        ctx.fillStyle = `rgba(235, 235, 240, ${0.3 + ((i + 0.5) / BUCKETS) * 0.4})`
+        ctx.fill(path)
+      })
+    }
+
+    const loop = (time: number) => {
+      animId = requestAnimationFrame(loop)
+      if (document.hidden || time - last < FRAME_MS) return
+      last = time
+      draw(time)
     }
 
     sample()
     if (reduced) draw(0)
-    else animId = requestAnimationFrame(draw)
+    else animId = requestAnimationFrame(loop)
 
     // Inter may swap in after first paint — re-sample for crisp glyphs.
     document.fonts?.ready.then(() => {

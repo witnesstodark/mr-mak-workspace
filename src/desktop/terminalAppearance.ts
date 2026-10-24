@@ -1,5 +1,6 @@
 import type { IDecoration, IMarker, ITheme, Terminal } from '@xterm/xterm'
 import type { AgentId } from './types'
+import { themePalette, themeVariables, type PaletteId } from '../../desktop/service/appearance.mjs'
 
 export type TerminalAppearance = 'focus' | 'original'
 export type TerminalRole = 'user' | 'agent' | 'detail'
@@ -19,6 +20,28 @@ export const focusTheme: ITheme = {
     if (index >= 216) { const gray = (8 + (index - 216) * 10).toString(16).padStart(2, '0'); return `#${gray}${gray}${gray}` }
     return '#b8bec6'
   }),
+}
+
+export function terminalRoleColors(theme: PaletteId) {
+  if (theme === 'dark') return roleColors
+  const palette = themePalette(theme)
+  return { user: palette.secondary, agent: palette.text, detail: palette.muted }
+}
+
+export function terminalTheme(appearance: TerminalAppearance, theme: PaletteId): ITheme {
+  const base = appearance === 'focus' ? focusTheme : originalTheme
+  if (theme === 'dark') return base
+  const palette = themePalette(theme), variables = themeVariables(theme)
+  return {
+    ...base,
+    background: palette.bg, foreground: palette.text, cursor: palette.accent, cursorAccent: palette.bg,
+    selectionBackground: palette.accent + '44',
+    black: palette.scheme === 'light' ? palette.text : palette.raised,
+    brightBlack: palette.muted, white: palette.text, brightWhite: palette.scheme === 'light' ? palette.text : '#fafaf7',
+    red: variables['--red'], brightRed: variables['--red'], green: variables['--green'], brightGreen: variables['--green'],
+    yellow: variables['--amber'], brightYellow: variables['--amber'], blue: variables['--blue'], brightBlue: variables['--blue'],
+    magenta: palette.secondary, brightMagenta: palette.secondary, cyan: palette.accent, brightCyan: palette.accent,
+  }
 }
 
 // Presentation cues in the native CLI, not a conversation parser. Never change
@@ -44,7 +67,7 @@ export function terminalRoles(lines: { text: string; wrapped?: boolean }[], agen
 
 type RowDecoration = { marker: IMarker; decorations: IDecoration[]; signature: string }
 
-export function decorateTerminal(terminal: Terminal, agent: AgentId) {
+export function decorateTerminal(terminal: Terminal, agent: AgentId, colors = roleColors) {
   if (agent !== 'codex' && agent !== 'claude') return () => {}
   let rows: RowDecoration[] = [], timer = 0, disposed = false
   const remove = (row: RowDecoration) => { row.decorations.forEach(item => item.dispose()); row.marker.dispose() }
@@ -65,7 +88,7 @@ export function decorateTerminal(terminal: Terminal, agent: AgentId) {
     for (let y = buffer.viewportY; y < end; y++) {
       const line = buffer.getLine(y)
       if (!line) continue
-      const color = roleColors[roles[y - from]]
+      const color = colors[roles[y - from]]
       const spans: { start: number; width: number }[] = []
       let start = -1
       for (let x = 0; x <= terminal.cols; x++) {

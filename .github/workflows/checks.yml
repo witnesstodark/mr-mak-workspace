@@ -19,7 +19,9 @@ jobs:
       - run: npm run test:template
       - run: npm run build
       - run: npm run test:preview
+      - run: npm run test:gpu
       - run: node desktop/service/test/theme-ui.mjs
+      - run: node desktop/service/test/links-ui.mjs
       - run: node desktop/service/test/voice-ui.mjs
       - run: node desktop/service/test/clipboard-ui.mjs
       - run: node desktop/service/test/desktop-dictation-ui.mjs
@@ -44,7 +46,7 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
           toolchain: stable
       - run: sudo apt-get update && sudo apt-get install -y build-essential file libssl-dev libwebkit2gtk-4.1-dev libappindicator3-dev libxdo-dev librsvg2-dev libwayland-dev patchelf
@@ -71,7 +73,7 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
           toolchain: stable
       - run: npm ci
@@ -102,6 +104,7 @@ jobs:
       - run: npx playwright install webkit
       - run: npm run test:preview
       - run: node desktop/service/test/theme-ui.mjs
+      - run: node desktop/service/test/links-ui.mjs
       - run: node desktop/service/test/voice-ui.mjs
       - run: node desktop/service/test/groups-ui.mjs
       - run: node desktop/service/test/conversation-ui.mjs

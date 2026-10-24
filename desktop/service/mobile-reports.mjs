@@ -41,7 +41,7 @@ export class MobileReports {
     const gateway = this.gateway;
     if (!gateway.active || !['GET', 'HEAD'].includes(request.method) || request.headers.host !== new URL(gateway.origin).host) fail('Not allowed');
     const match = /^\/mobile\/view\/([a-zA-Z0-9_-]+)\/(.+)$/.exec(url.pathname), grant = match && this.grants.get(match[1]);
-    if (!grant || grant.expires < Date.now() || !gateway.state.devices.some(device => device.id === grant.deviceId && device.expires > Date.now())) fail('Reopen this report to refresh its preview.', 401);
+    if (!grant || grant.expires < Date.now() || !gateway.state.devices.some(device => device.id === grant.deviceId && gateway.validDevice(device))) fail('Reopen this report to refresh its preview.', 401);
     const relative = decodeURIComponent(match[2]);
     if (!safePath(relative)) fail('Invalid report path');
     let root, filePath;

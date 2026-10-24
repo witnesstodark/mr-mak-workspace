@@ -3,15 +3,14 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { parse as parseEnv } from 'dotenv';
-import { isWindows, macLocale, resolveCommand, shellCommand, shellLabel } from './platform.mjs';
+import { isWindows, macLocale, powerShellLiteral, resolveCommand, shellCommand, shellLabel } from './platform.mjs';
 import { validAntigravityId } from './antigravity.mjs';
 
 export { shellCommand };
 
 export function wrapCommand(file, args = []) {
   if (!isWindows || /\.exe$/i.test(file)) return { file, args };
-  const quote = value => "'" + value.replaceAll("'", "''") + "'";
-  const script = `[Console]::InputEncoding = [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new(); & ${[file, ...args].map(quote).join(' ')}; exit $LASTEXITCODE`;
+  const script = `[Console]::InputEncoding = [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new(); & ${[file, ...args].map(powerShellLiteral).join(' ')}; exit $LASTEXITCODE`;
   return { file: shellCommand().file, args: ['-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')] };
 }
 

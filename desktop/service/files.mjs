@@ -18,6 +18,9 @@ const mime = {
 if (isMacOS) Object.assign(mime, { '.mov': 'video/quicktime', '.heic': 'image/heic', '.heif': 'image/heif' });
 const textExtensions = new Set(['.txt', '.md', '.json', '.js', '.mjs', '.ts', '.tsx', '.jsx', '.css', '.py', '.rs', '.toml', '.yaml', '.yml', '.csv', '.log', '.xml', '.ini', '.ps1', '.cmd', '.sh', '.gitignore']);
 const secretPart = value => value.startsWith('.') || /^(node_modules|target|oauth_.*\.json|.*_secret.*\.json|tokens?\.json|auth\.json)$/i.test(value);
+const SCOPED_GRANT_MS = 12 * 60 * 60 * 1000;
+const sharedReportFile = relative => /^workspace\/_shared\/(report\.(css|js)|examples\.css)$/.test(relative);
+const encodePath = relative => relative.split('/').map(encodeURIComponent).join('/');
 
 export async function serveFile(request, response, file, info, headers = {}) {
   const contentType = mime[path.extname(file).toLowerCase()] || 'application/octet-stream';
@@ -40,7 +43,21 @@ export async function serveFile(request, response, file, info, headers = {}) {
 }
 
 export class Files {
-  constructor(repo) { this.repo = repo; this.grants = new Map(); this.repoGrant = this.grant(repo); this.writes = Promise.resolve(); }
+  constructor(repo) { this.repo = repo; this.grants = new Map(); this.scoped = new Map(); this.repoGrant = this.grant(repo); this.writes = Promise.resolve(); }
+  scopedGrant(root, relative) {
+    const folder = relative.split('/').slice(0, -1);
+    // A report can use its own card and the shared chrome, never the whole repository.
+    const prefix = root === this.repo && folder[0] === 'workspace' && folder.length > 1 ? `workspace/${folder[1]}/`
+      : root === this.repo && (!folder.length || folder.join('/') === 'workspace') ? relative
+      : folder.length ? folder.join('/') + '/' : '';
+    const now = Date.now();
+    for (const [token, grant] of this.scoped) {
+      if (grant.expires < now) this.scoped.delete(token);
+      else if (grant.root === root && grant.prefix === prefix) { grant.expires = now + SCOPED_GRANT_MS; return token; }
+    }
+    if (this.scoped.size >= 200) this.scoped.delete(this.scoped.keys().next().value);
+    const token = secret(); this.scoped.set(token, { root, prefix, expires: now + SCOPED_GRANT_MS }); return token;
+  }
   grant(root) {
     for (const [token, value] of this.grants) if (value === root) return token;
     const token = secret(); this.grants.set(token, root); return token;
@@ -111,12 +128,43 @@ export class Files {
   }
   async content(request, response, url) {
     const match = /^\/view\/([\w-]+)\/(.*)$/.exec(url.pathname);
-    if (!match || !this.grants.has(match[1])) throw Object.assign(new Error('Preview not found'), { status: 404 });
-    const relative = decodeURIComponent(match[2]);
-    if (relative.split(/[\\/]/).some(secretPart)) throw Object.assign(new Error('Private application files cannot be loaded by reports'), { status: 403 });
-    const { file, info } = await realFile(this.grants.get(match[1]), relative);
+    const scoped = match && this.scoped.get(match[1]);
+    if (scoped && scoped.expires < Date.now()) this.scoped.delete(match[1]);
+    if (!match || !(this.grants.has(match[1]) || this.scoped.has(match[1]))) throw Object.assign(new Error('Preview not found'), { status: 404 });
+    const relative = decodeURIComponent(match[2]).replaceAll('\\', '/');
+    if (relative.split('/').some(secretPart)) throw Object.assign(new Error('Private application files cannot be loaded by reports'), { status: 403 });
+    const root = scoped ? scoped.root : this.grants.get(match[1]);
+    let fileRoot = root, filePath = relative;
+    if (scoped) {
+      const folder = !scoped.prefix || scoped.prefix.endsWith('/');
+      if (folder && relative.startsWith(scoped.prefix)) {
+        fileRoot = path.resolve(root, scoped.prefix); filePath = relative.slice(scoped.prefix.length);
+      } else if (!folder && relative === scoped.prefix) {
+        fileRoot = path.dirname(path.resolve(root, scoped.prefix)); filePath = path.basename(scoped.prefix);
+      } else if (root === this.repo && sharedReportFile(relative)) {
+        fileRoot = path.join(root, 'workspace/_shared'); filePath = relative.slice('workspace/_shared/'.length);
+      } else throw Object.assign(new Error('This file is outside the selected report.'), { status: 403 });
+    }
+    // Resolve links against the allowed folder, not the repository root.
+    const { file, info } = await realFile(fileRoot, filePath);
     if (!info.isFile()) throw Object.assign(new Error('File not found'), { status: 404 });
+    const headers = { 'Referrer-Policy': 'no-referrer', 'Access-Control-Allow-Origin': this.uiOrigin, 'Cross-Origin-Resource-Policy': 'cross-origin' };
+    const document = /\.(html?|svg)$/i.test(file);
+    if (document && !scoped) {
+      response.writeHead(302, { ...headers, 'Cache-Control': 'no-store', Location: `/view/${this.scopedGrant(root, relative)}/${encodePath(relative)}${url.search}` });
+      response.end(); return;
+    }
+    if (scoped) {
+      scoped.expires = Date.now() + SCOPED_GRANT_MS;
+      headers['Access-Control-Allow-Origin'] = '*';
+      headers['Cache-Control'] = 'no-store';
+    }
+    if (document) {
+      const base = `${this.origin}/view/${match[1]}/`, own = base + encodePath(scoped.prefix);
+      const shared = root === this.repo ? ` ${base}workspace/_shared/` : '';
+      headers['Content-Security-Policy'] = `sandbox allow-scripts allow-forms allow-popups allow-downloads; default-src 'none'; script-src 'unsafe-inline' ${own}${shared}; style-src 'unsafe-inline' ${own}${shared}; img-src data: blob: ${own}${shared}; media-src blob: ${own}; font-src data: ${own}${shared}; connect-src ${own}; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors ${this.uiOrigin}`;
+    }
     const serve = /\.html?$/i.test(file) ? serveReport : serveFile;
-    await serve(request, response, file, info, { 'Referrer-Policy': 'no-referrer', 'Access-Control-Allow-Origin': this.uiOrigin, 'Cross-Origin-Resource-Policy': 'cross-origin' });
+    await serve(request, response, file, info, headers, { parentOrigin: this.uiOrigin });
   }
 }

@@ -1,0 +1,202 @@
+[
+  {
+    "id": "nordic",
+    "name": "Nordic",
+    "options": [
+      {
+        "letter": "A",
+        "name": "Fjord",
+        "idea": "Porcelain panels over cool mist, with steel-blue actions and a restrained green-grey secondary accent.",
+        "scheme": "light",
+        "palette": {
+          "bg": "#e9eff3",
+          "deep": "#d9e3eb",
+          "panel": "#f8fafc",
+          "raised": "#dde6ed",
+          "text": "#253747",
+          "muted": "#506475",
+          "accent": "#315e83",
+          "secondary": "#3d6864",
+          "onAccent": "#ffffff"
+        }
+      },
+      {
+        "letter": "B",
+        "name": "Polar Night",
+        "idea": "Blue-grey slate, frosted blue controls and a small mist-green counterpoint.",
+        "scheme": "dark",
+        "palette": {
+          "bg": "#202936",
+          "deep": "#18212d",
+          "panel": "#2a3545",
+          "raised": "#354356",
+          "text": "#edf2f7",
+          "muted": "#b7c7d7",
+          "accent": "#a7cce5",
+          "secondary": "#a8cbbd",
+          "onAccent": "#17212b"
+        }
+      }
+    ]
+  },
+  {
+    "id": "forest",
+    "name": "Forest",
+    "options": [
+      {
+        "letter": "A",
+        "name": "Moss & Brass",
+        "idea": "Deep woodland neutrals, pale moss highlights and a touch of muted brass.",
+        "scheme": "dark",
+        "palette": {
+          "bg": "#19211c",
+          "deep": "#121a15",
+          "panel": "#252f26",
+          "raised": "#334037",
+          "text": "#edf1e7",
+          "muted": "#b8c6b2",
+          "accent": "#b9cf96",
+          "secondary": "#dfc28f",
+          "onAccent": "#172015"
+        }
+      },
+      {
+        "letter": "B",
+        "name": "Botanical",
+        "idea": "Leaf-tinted ivory, deep pine ink, botanical green controls and a small clay accent.",
+        "scheme": "light",
+        "palette": {
+          "bg": "#eef1e8",
+          "deep": "#dfe5d8",
+          "panel": "#fbfcf6",
+          "raised": "#e2e8db",
+          "text": "#2b3d31",
+          "muted": "#546651",
+          "accent": "#426c47",
+          "secondary": "#82542f",
+          "onAccent": "#ffffff"
+        }
+      }
+    ]
+  },
+  {
+    "id": "sandstone",
+    "name": "Sandstone",
+    "options": [
+      {
+        "letter": "A",
+        "name": "Clay",
+        "idea": "Warm paper and limestone panels, dark brown ink, terracotta actions and quiet olive details.",
+        "scheme": "light",
+        "palette": {
+          "bg": "#f3eee5",
+          "deep": "#e5dccc",
+          "panel": "#fffbf4",
+          "raised": "#e8dece",
+          "text": "#49392c",
+          "muted": "#705b48",
+          "accent": "#8d4b32",
+          "secondary": "#4f623d",
+          "onAccent": "#ffffff"
+        }
+      },
+      {
+        "letter": "B",
+        "name": "Desert Night",
+        "idea": "Warm charcoal, pale sandstone text, amber controls and a small sage-green contrast.",
+        "scheme": "dark",
+        "palette": {
+          "bg": "#27221c",
+          "deep": "#1f1b16",
+          "panel": "#342d25",
+          "raised": "#44392d",
+          "text": "#f4eadb",
+          "muted": "#cabb9f",
+          "accent": "#e8c17e",
+          "secondary": "#b9c9a3",
+          "onAccent": "#251e16"
+        }
+      }
+    ]
+  },
+  {
+    "id": "ocean",
+    "name": "Ocean",
+    "options": [
+      {
+        "letter": "A",
+        "name": "Harbor",
+        "idea": "Deep petrol blue, steel-blue panels, sea-glass actions and pale silver-blue details.",
+        "scheme": "dark",
+        "palette": {
+          "bg": "#15232c",
+          "deep": "#101b23",
+          "panel": "#1e313d",
+          "raised": "#2d4350",
+          "text": "#e7f0f2",
+          "muted": "#b1c6d0",
+          "accent": "#94cfd6",
+          "secondary": "#aec0e5",
+          "onAccent": "#10232a"
+        }
+      },
+      {
+        "letter": "B",
+        "name": "Sea Glass",
+        "idea": "Pale water-grey, clean light panels, deep teal ink and actions, with a muted coral counterpoint.",
+        "scheme": "light",
+        "palette": {
+          "bg": "#eaf2f1",
+          "deep": "#d9e7e5",
+          "panel": "#f9fdfc",
+          "raised": "#dce9e7",
+          "text": "#243e42",
+          "muted": "#4c6568",
+          "accent": "#286e78",
+          "secondary": "#914f43",
+          "onAccent": "#ffffff"
+        }
+      }
+    ]
+  },
+  {
+    "id": "plum",
+    "name": "Plum",
+    "options": [
+      {
+        "letter": "A",
+        "name": "Velvet",
+        "idea": "Aubergine charcoal, soft lilac controls, warm white text and a small champagne accent.",
+        "scheme": "dark",
+        "palette": {
+          "bg": "#251f2b",
+          "deep": "#1c1722",
+          "panel": "#322a3a",
+          "raised": "#44384d",
+          "text": "#f6edf8",
+          "muted": "#cdbbd2",
+          "accent": "#d8afe5",
+          "secondary": "#dfbd92",
+          "onAccent": "#251a2e"
+        }
+      },
+      {
+        "letter": "B",
+        "name": "Orchid Paper",
+        "idea": "Barely lilac paper, almost-white panels, plum ink and controls, with a muted blue-green secondary accent.",
+        "scheme": "light",
+        "palette": {
+          "bg": "#f3edf4",
+          "deep": "#e6dce8",
+          "panel": "#fffaff",
+          "raised": "#eadfec",
+          "text": "#432e4a",
+          "muted": "#725a7a",
+          "accent": "#7e4f86",
+          "secondary": "#44636b",
+          "onAccent": "#ffffff"
+        }
+      }
+    ]
+  }
+]

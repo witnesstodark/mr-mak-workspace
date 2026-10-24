@@ -582,9 +582,18 @@ try {
   assert.equal(await input.inputValue(), 'Keep this draft while I switch chats.');
 
   const beforeKeys = writes.length;
-  for (const name of ['Arrow left', 'Arrow up', 'Arrow down', 'Arrow right']) await phone.getByRole('button', { name, exact: true }).click();
-  await phone.waitForTimeout(100);
-  assert.deepEqual(writes.slice(beforeKeys), ['\x1b[D', '\x1b[A', '\x1b[B', '\x1b[C'].map(data => ({ id: ids[1], data })));
+  const arrowKeys = [['Arrow left', '\x1b[D'], ['Arrow up', '\x1b[A'], ['Arrow down', '\x1b[B'], ['Arrow right', '\x1b[C']];
+  for (const [index, [name]] of arrowKeys.entries()) {
+    // A tap only dispatches input; delivery happens asynchronously over HTTP.
+    // Wait for each reply and verify the exact terminal writes, even on a slow runner.
+    const [response] = await Promise.all([
+      phone.waitForResponse(response => response.url().endsWith(`/mobile/api/sessions/${ids[1]}/key`) && response.request().method() === 'POST'),
+      phone.getByRole('button', { name, exact: true }).tap(),
+    ]);
+    assert.equal(response.status(), 200, `${name} is accepted`);
+    assert.deepEqual(await response.json(), { delivered: true });
+    assert.deepEqual(writes.slice(beforeKeys), arrowKeys.slice(0, index + 1).map(([, data]) => ({ id: ids[1], data })), `${name} is delivered once, in order`);
+  }
   for (const width of [320, 390]) {
     await phone.setViewportSize({ width, height: 844 });
     await expect.poll(() => phone.locator('.mobile-terminal-reader').evaluate(node => node.scrollWidth - node.clientWidth), { message: `Wrapped terminal needs no horizontal scrolling at ${width}px` }).toBeLessThanOrEqual(1);
@@ -620,16 +629,16 @@ try {
   await phone.getByRole('button', { name: /A useful report/ }).click();
   const frame = phone.frameLocator('iframe'); await frame.getByRole('heading', { name: 'Report ready' }).waitFor();
   // Returning from Chats remounts the header menu above an already composited
-  // iframe. A visible menu must receive both clicks and taps, and stay on screen.
+  // iframe. Use the phone's touch input and keep its menu on screen at each size.
   for (const width of [320, 390, 768]) {
     await phone.setViewportSize({ width, height: 844 });
     for (let round = 0; round < 4; round++) {
       await phone.getByRole('button', { name: 'Chats', exact: true }).click();
       await phone.getByRole('button', { name: 'Results', exact: true }).click();
-      await phone.getByLabel('Select report page', { exact: true }).click();
+      await phone.getByLabel('Select report page', { exact: true }).tap();
       const menuBox = await phone.locator('.mobile-page-menu').boundingBox();
       assert.ok(menuBox && menuBox.x >= 0 && menuBox.x + menuBox.width <= width, `Report menu stays in bounds at ${width}px`);
-      await phone.getByRole('button', { name: 'Plan', exact: true }).click();
+      await phone.getByRole('button', { name: 'Plan', exact: true }).tap();
       await phone.getByRole('heading', { name: 'Mobile plan' }).waitFor();
       await phone.getByLabel('Select report page', { exact: true }).tap();
       await phone.getByRole('button', { name: 'Report', exact: true }).tap();
@@ -637,9 +646,9 @@ try {
     }
   }
   await phone.setViewportSize({ width: 390, height: 844 });
-  await phone.getByLabel('Select report page', { exact: true }).click();
+  await phone.getByLabel('Select report page', { exact: true }).tap();
   await phone.screenshot({ path: path.join(repo, 'phone-report-menu.png') });
-  await phone.getByLabel('Select report page', { exact: true }).click();
+  await phone.getByLabel('Select report page', { exact: true }).tap();
   await frame.getByAltText('Report image', { exact: true }).click();
   await frame.getByRole('dialog', { name: 'Image preview' }).waitFor();
   const downloadEvent = phone.waitForEvent('download'); await frame.getByRole('link', { name: 'Download', exact: true }).click();
@@ -670,6 +679,18 @@ try {
   assert.equal(await frame.locator('#nested-scroll').evaluate(node => node.scrollTop), 180);
 
   // Attach navigation only, freeze it for retries, and keep the transcript readable.
+  // Capture this transition's event order on slower CI browsers without adding
+  // waits or changing the interaction under test. Only synthetic fixture data.
+  await phone.evaluate(() => {
+    window.testMenuTrace = [];
+    const record = value => { window.testMenuTrace.push({ at: Math.round(performance.now()), ...value }); if (window.testMenuTrace.length > 50) window.testMenuTrace.shift(); };
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) { if (key === 'mrmak.mobile.workspace') record({ type: 'selection', value }); return original.call(this, key, value); };
+    for (const type of ['pointerdown', 'pointerup', 'click', 'toggle']) document.addEventListener(type, event => {
+      const target = event.target, menu = document.querySelector('.mobile-page-picker');
+      record({ type, pointer: event.pointerType, target: target.tagName, label: target.closest('button,summary')?.getAttribute('aria-label') || target.textContent?.slice(0, 40), menuContains: menu?.contains(target), menuOpen: menu?.open });
+    }, true);
+  });
   const contextRoute = `/mobile/api/sessions/${ids[1]}/send`, contextPayloads = [];
   const originalSubmit = service.mobile.submit;
   service.mobile.submit = function (device, id, data) { if (id === ids[1]) contextPayloads.push(structuredClone(data)); return originalSubmit.call(this, device, id, data); };
@@ -685,8 +706,8 @@ try {
   assert.match(deliveredContext, /Do not read, open, or investigate this Workspace merely because this note is attached/);
   assert.ok(!deliveredContext.includes('/mobile/view/') && !deliveredContext.includes('Report ready'), 'No grant URL or report content is copied');
   await phone.getByRole('button', { name: 'Results', exact: true }).click();
-  await phone.getByLabel('Select report page', { exact: true }).click();
-  await phone.getByRole('button', { name: 'Plan', exact: true }).click(); await phone.getByRole('heading', { name: 'Mobile plan' }).waitFor();
+  await phone.getByLabel('Select report page', { exact: true }).tap();
+  await phone.getByRole('button', { name: 'Plan', exact: true }).tap(); await phone.getByRole('heading', { name: 'Mobile plan' }).waitFor();
   await phone.getByRole('button', { name: 'Chats', exact: true }).click(); await reloadPhone();
   await phone.getByRole('button', { name: 'Retry', exact: true }).waitFor();
   await restoreReplies(phone, contextRoute);
@@ -711,8 +732,8 @@ try {
   service.mobile.transcripts.read = contextReader;
   await phone.getByRole('button', { name: 'Results', exact: true }).click();
   await phone.getByRole('heading', { name: 'Mobile plan' }).waitFor();
-  await phone.getByLabel('Select report page', { exact: true }).click();
-  await phone.getByRole('button', { name: 'Report', exact: true }).click();
+  await phone.getByLabel('Select report page', { exact: true }).tap();
+  await phone.getByRole('button', { name: 'Report', exact: true }).tap();
   await frame.getByRole('heading', { name: 'Report ready' }).waitFor();
 
   // Pull to refresh reloads the report only from the top, and keeps its page.
@@ -742,8 +763,8 @@ try {
   assert.equal(await frame.locator('body').evaluate(() => location.hash), '#chapter-two');
   await expect(phone.locator('.mobile-pull-refresh')).toHaveCount(0);
 
-  await phone.getByLabel('Select report page', { exact: true }).click();
-  await phone.getByRole('button', { name: 'Plan', exact: true }).click(); await phone.getByRole('heading', { name: 'Mobile plan' }).waitFor();
+  await phone.getByLabel('Select report page', { exact: true }).tap();
+  await phone.getByRole('button', { name: 'Plan', exact: true }).tap(); await phone.getByRole('heading', { name: 'Mobile plan' }).waitFor();
   await phone.locator('.mobile-report-markdown').evaluate(node => { node.scrollTop = 350; node.dispatchEvent(new Event('scroll')); });
   await phone.getByRole('button', { name: 'Chats', exact: true }).click();
   await expect(stableDraft).toBeVisible();
@@ -758,17 +779,17 @@ try {
     await phone.setViewportSize({ width, height: 844 });
     assert.equal(await phone.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, `No page overflow at ${width}px`);
   }
-  await phone.getByLabel('Select report page', { exact: true }).click();
-  await phone.getByRole('button', { name: 'Close report', exact: true }).click();
+  await phone.getByLabel('Select report page', { exact: true }).tap();
+  await phone.getByRole('button', { name: 'Close report', exact: true }).tap();
   await phone.getByRole('button', { name: /A useful report/ }).click();
   await phone.getByRole('heading', { name: 'Mobile plan' }).waitFor();
-  await phone.getByLabel('Select report page', { exact: true }).click();
-  await phone.getByRole('button', { name: 'Report', exact: true }).click();
+  await phone.getByLabel('Select report page', { exact: true }).tap();
+  await phone.getByRole('button', { name: 'Report', exact: true }).tap();
   await frame.getByRole('heading', { name: 'Report ready' }).waitFor();
   await phone.getByRole('button', { name: 'Results', exact: true }).click();
   await frame.getByRole('heading', { name: 'Report ready' }).waitFor();
-  await phone.getByLabel('Select report page', { exact: true }).click();
-  await phone.getByRole('button', { name: 'Close report', exact: true }).click();
+  await phone.getByLabel('Select report page', { exact: true }).tap();
+  await phone.getByRole('button', { name: 'Close report', exact: true }).tap();
   await phone.getByRole('heading', { name: 'Workspace', exact: true }).waitFor();
   const listRefresh = phone.waitForRequest(request => request.url().endsWith('/mobile/api/reports'));
   await pullDown(phone.locator('.mobile-results-list'), 200);
@@ -849,7 +870,7 @@ try {
       report: document.querySelector('.mobile-results')?.textContent?.slice(0, 800),
       headings: [...document.querySelectorAll('h1,h2')].map(node => node.textContent),
     })).catch(() => null);
-    console.error(JSON.stringify({ mobileFailure: state, reportResponses }));
+    console.error(JSON.stringify({ mobileFailure: state, reportResponses, menuTrace: await diagnosticPhone.evaluate(() => window.testMenuTrace).catch(() => null) }));
     await diagnosticPhone.screenshot({ path: path.join(repo, 'failure.png') }).catch(() => {});
   }
   throw error;

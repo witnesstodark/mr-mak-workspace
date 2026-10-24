@@ -204,6 +204,11 @@ fn window_defaults(builder: WebviewWindowBuilder<'_, tauri::Wry, tauri::AppHandl
 }
 
 fn make_windows(app: &tauri::AppHandle, workspace: &str, chats: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let service_url: tauri::Url = workspace.parse()?;
+    let service_token = service_url.query_pairs().find(|(key, _)| key == "token").map(|(_, value)| value.into_owned()).ok_or("Service credential unavailable")?;
+    let auth_script = include_str!("desktop-auth.js")
+        .replace("__MRMAK_SERVICE_ORIGIN__", &serde_json::to_string(&service_url.origin().ascii_serialization())?)
+        .replace("__MRMAK_SERVICE_TOKEN__", &serde_json::to_string(&service_token)?);
     let (mut x, mut y, mut width, mut height) = (0.0, 0.0, 1440.0, 900.0);
     if let Some(monitor) = app.primary_monitor()? {
         let scale = monitor.scale_factor();
@@ -213,12 +218,14 @@ fn make_windows(app: &tauri::AppHandle, workspace: &str, chats: &str) -> Result<
     }
     let chat_width = (width * 0.27).clamp(360.0, 560.0);
     let workspace_window = window_defaults(WebviewWindowBuilder::new(app, "workspace", WebviewUrl::External(workspace.parse()?)))
+        .initialization_script(&auth_script)
         .on_new_window(|url, _| external_links::open_popup(url))
         .disable_drag_drop_handler().visible(false)
         .title(format!("{} — Workspace", app.config().product_name.as_deref().unwrap_or("Mr. Mak"))).inner_size((width - chat_width - 8.0).max(500.0), (height - 6.0).max(450.0))
         .position(x + chat_width + 6.0, y + 2.0).min_inner_size(500.0, 400.0)
         .build()?;
     let chats_window = window_defaults(WebviewWindowBuilder::new(app, "chats", WebviewUrl::External(chats.parse()?)))
+        .initialization_script(&auth_script)
         .on_new_window(|url, _| external_links::open_popup(url))
         .visible(false)
         .title(format!("{} — Chats", app.config().product_name.as_deref().unwrap_or("Mr. Mak"))).inner_size(chat_width, (height - 6.0).max(450.0))

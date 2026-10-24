@@ -13,91 +13,105 @@ html[data-theme-switching] *,html[data-theme-switching] *::before,html[data-them
 .browser-settings-panel{position:absolute;right:0;top:calc(100% + 10px);width:min(280px,calc(100vw - 40px));padding:18px;border:1px solid var(--hairline-strong);border-radius:12px;background:var(--surface-solid);box-shadow:var(--shadow-2);color:var(--text)}
 .browser-settings-panel h2{font:600 13px var(--font-body);margin:0 0 14px}
 
-html[data-workspace-theme=light]{
-  color-scheme:light;background:#fff;
-  --bg:#f7f8fa;--bg-deep:#eef0f4;--surface-1:#fff;--surface-2:#f0f2f6;--surface-3:#e8ebf1;
-  --surface-solid:#fff;--sidebar-glass:#fff;--topbar-glass:#fffffff2;
-  --text:#232735;--text-bright:#111521;--text-dim:#505b70;--text-muted:#626d81;
-  --pink:#98445e;--pink-bright:#7e3049;--purple:#6b48a4;--green:#216c45;--amber:#80541b;--blue:#245c9e;--red:#b13643;
-  --pink-dim:#98445e0f;--purple-dim:#6b48a412;--green-dim:#216c4512;--amber-dim:#80541b12;--red-dim:#b1364312;
-  --hairline:#202a4017;--hairline-strong:#202a4030;
-  --edge:linear-gradient(135deg,#98445e40,#6b48a428 45%,#202a4017 80%);
-  --edge-soft:linear-gradient(135deg,#202a4030,#202a4014);
-  --edge-amber:linear-gradient(135deg,#80541b60,#98445e30 60%,#202a4017);
-  --shadow-1:0 2px 10px #1821360a;--shadow-2:0 8px 28px #18213618;
-  --glow-pink:0 0 20px #98445e08;--glow-pink-strong:0 0 28px #98445e14;--glow-amber:0 0 24px #80541b0a;
-  --focus-ring:0 0 0 2px #98445e70;
-  --mak-bg:#fff;--mak-surface:#f5f6f9;--mak-border:#202a4020;--mak-text:#232735;--mak-muted:#505b70;--mak-accent:#98445e;
-}
-html[data-workspace-theme=light] *{scrollbar-color:#99a2b3 #edf0f4!important}
-html[data-workspace-theme=light] ::-webkit-scrollbar-track,html[data-workspace-theme=light] ::-webkit-scrollbar-corner{background:#edf0f4}
-html[data-workspace-theme=light] ::-webkit-scrollbar-thumb{background:#99a2b3;border-color:#edf0f4}
-html[data-workspace-theme=light] body::before,html[data-workspace-theme=light] body::after{opacity:0}
-html[data-workspace-theme=light] .workspace-root{background:var(--bg);color:var(--text)}
-html[data-workspace-theme=light] .content{background:var(--bg)}
-html[data-workspace-theme=light] .report-frame,html[data-workspace-theme=light] .file-preview-body iframe{background:#fff;color-scheme:light}
-html[data-workspace-theme=light] .workspace-root .sidebar{box-shadow:20px 0 60px #18213614}
-html[data-workspace-theme=light] .app-layout .step-tab{border-color:var(--hairline);color:var(--text-dim)}
-html[data-workspace-theme=light] .app-layout .step-tab.active{border-color:#98445e50;background:var(--pink-dim);color:var(--pink-bright)}
-html[data-workspace-theme=light] .home .entity-card{background:#fff;border-color:var(--hairline-strong);box-shadow:var(--shadow-1)}
-html[data-workspace-theme=light] .home .entity-card:hover{background:#fff;border-color:#98445e60;box-shadow:var(--shadow-2)}
-html[data-workspace-theme=light] .home .entity-card .card-desc{color:var(--text-dim)}
-html[data-workspace-theme=light] .home .entity-card .card-foot{color:var(--text-muted);border-color:var(--hairline)}
-html[data-workspace-theme=light] .report-document,html[data-workspace-theme=light] .report-document>.report-loading,
-html[data-workspace-theme=light] .markdown-document,html[data-workspace-theme=light] .markdown-reader,
-html[data-workspace-theme=light] .markdown-editor,html[data-workspace-theme=light] .file-preview,
-html[data-workspace-theme=light] .desktop-boot{background:#fff;color:var(--text)}
-html[data-workspace-theme=light] .mak-markdown{color:var(--text)}
-html[data-workspace-theme=light] .mak-markdown :is(h1,h2,h3,h4,th,strong){color:var(--text-bright);border-color:var(--hairline-strong)}
-html[data-workspace-theme=light] .mak-markdown a,html[data-workspace-theme=light] .report-error a{color:var(--pink)}
-html[data-workspace-theme=light] .mak-markdown :is(pre,code,th){background:#f1f3f7;border-color:var(--hairline-strong)}
-html[data-workspace-theme=light] .mak-markdown pre code{background:none}
-html[data-workspace-theme=light] .mak-markdown :is(td,hr){border-color:var(--hairline-strong)}
-html[data-workspace-theme=light] .mak-markdown blockquote{color:var(--text-dim);background:var(--pink-dim);border-color:var(--pink)}
-html[data-workspace-theme=light] .report-loading,html[data-workspace-theme=light] .report-error,
-html[data-workspace-theme=light] .document-status{color:var(--text-dim)}
-html[data-workspace-theme=light] .report-error-actions button{background:#f1f3f7;color:var(--text);border-color:var(--hairline-strong)}
-html[data-workspace-theme=light] .report-error details{color:var(--text-dim)}
-html[data-workspace-theme=light] .document-toolbar,html[data-workspace-theme=light] .file-preview>header{border-color:var(--hairline-strong);background:#fafbfc;color:var(--text)}
-html[data-workspace-theme=light] .document-toolbar button{color:var(--text-dim);background:#fff;border-color:var(--hairline-strong)}
-html[data-workspace-theme=light] .document-toolbar button[aria-pressed=true],html[data-workspace-theme=light] .document-save:not(:disabled){background:var(--pink-dim);color:var(--pink-bright);border-color:#98445e50}
-html[data-workspace-theme=light] .file-preview-body>pre{background:#fff;color:var(--text)}
-html[data-workspace-theme=light] .file-preview>header small{color:var(--text-muted)}
-html[data-workspace-theme=light] .report-image{background:#f2f4f7;color:var(--text)}
-html[data-workspace-theme=light] .report-image nav{background:#fff;border-color:var(--hairline-strong)}
-html[data-workspace-theme=light] dialog.mak-lightbox{background:#f2f4f7;color:var(--text);border-color:var(--hairline-strong);box-shadow:var(--shadow-2)}
-html[data-workspace-theme=light] .mak-lightbox .mak-lightbox-toolbar{background:#fff;border-color:var(--hairline-strong)}
-html[data-workspace-theme=light] .mak-lightbox .mak-lightbox-caption{color:var(--text)}
-html[data-workspace-theme=light] .mak-lightbox .mak-lightbox-toolbar :is(button,a){background:#f5f6f9;border-color:var(--hairline-strong);color:var(--text)}
-html[data-workspace-theme=light] .mak-lightbox .mak-lightbox-note{color:var(--text-dim)}
+
+html[data-workspace-theme] *{scrollbar-color:var(--text-muted) var(--bg-deep)!important}
+html[data-workspace-theme] ::-webkit-scrollbar-track,html[data-workspace-theme] ::-webkit-scrollbar-corner{background:var(--bg-deep)}
+html[data-workspace-theme] ::-webkit-scrollbar-thumb{background:var(--text-muted);border-color:var(--bg-deep)}
+html[data-workspace-theme] body::before,html[data-workspace-theme] body::after{opacity:0}
+html[data-workspace-theme] .workspace-root{background:var(--bg);color:var(--text)}
+html[data-workspace-theme] .content{background:var(--bg)}
+html[data-workspace-theme] .report-frame,html[data-workspace-theme] .file-preview-body iframe{background:var(--surface-solid);color-scheme:inherit}
+html[data-workspace-theme] .workspace-root .sidebar{box-shadow:var(--shadow-2)}
+html[data-workspace-theme] .app-layout .step-tab{border-color:var(--hairline);color:var(--text-dim)}
+html[data-workspace-theme] .app-layout .step-tab.active{border-color:var(--hairline-strong);background:var(--pink-dim);color:var(--pink-bright)}
+html[data-workspace-theme] .home .entity-card{background:var(--surface-solid);border-color:var(--hairline-strong);box-shadow:var(--shadow-1)}
+html[data-workspace-theme] .home .entity-card:hover{background:var(--surface-solid);border-color:var(--pink);box-shadow:var(--shadow-2)}
+html[data-workspace-theme] .home .entity-card .card-desc{color:var(--text-dim)}
+html[data-workspace-theme] .home .entity-card .card-foot{color:var(--text-muted);border-color:var(--hairline)}
+html[data-workspace-theme] .report-document,html[data-workspace-theme] .report-document>.report-loading,
+html[data-workspace-theme] .markdown-document,html[data-workspace-theme] .markdown-reader,
+html[data-workspace-theme] .markdown-editor,html[data-workspace-theme] .file-preview,
+html[data-workspace-theme] .desktop-boot{background:var(--surface-solid);color:var(--text)}
+html[data-workspace-theme] .mak-markdown{color:var(--text)}
+html[data-workspace-theme] .mak-markdown :is(h1,h2,h3,h4,th,strong){color:var(--text-bright);border-color:var(--hairline-strong)}
+html[data-workspace-theme] .mak-markdown a,html[data-workspace-theme] .report-error a{color:var(--pink)}
+html[data-workspace-theme] .mak-markdown :is(pre,code,th){background:var(--surface-2);border-color:var(--hairline-strong)}
+html[data-workspace-theme] .mak-markdown pre code{background:none}
+html[data-workspace-theme] .mak-markdown :is(td,hr){border-color:var(--hairline-strong)}
+html[data-workspace-theme] .mak-markdown blockquote{color:var(--text-dim);background:var(--pink-dim);border-color:var(--pink)}
+html[data-workspace-theme] .report-loading,html[data-workspace-theme] .report-error,
+html[data-workspace-theme] .document-status{color:var(--text-dim)}
+html[data-workspace-theme] .report-error-actions button{background:var(--surface-2);color:var(--text);border-color:var(--hairline-strong)}
+html[data-workspace-theme] .report-error details{color:var(--text-dim)}
+html[data-workspace-theme] .document-toolbar,html[data-workspace-theme] .file-preview>header{border-color:var(--hairline-strong);background:var(--surface-solid);color:var(--text)}
+html[data-workspace-theme] .document-toolbar button{color:var(--text-dim);background:var(--surface-solid);border-color:var(--hairline-strong)}
+html[data-workspace-theme] .document-toolbar button[aria-pressed=true],html[data-workspace-theme] .document-save:not(:disabled){background:var(--pink-dim);color:var(--pink-bright);border-color:var(--hairline-strong)}
+html[data-workspace-theme] .file-preview-body>pre{background:var(--surface-solid);color:var(--text)}
+html[data-workspace-theme] .file-preview>header small{color:var(--text-muted)}
+html[data-workspace-theme] .report-image{background:var(--surface-2);color:var(--text)}
+html[data-workspace-theme] .report-image nav{background:var(--surface-solid);border-color:var(--hairline-strong)}
+html[data-workspace-theme] dialog.mak-lightbox{background:var(--surface-2);color:var(--text);border-color:var(--hairline-strong);box-shadow:var(--shadow-2)}
+html[data-workspace-theme] .mak-lightbox .mak-lightbox-toolbar{background:var(--surface-solid);border-color:var(--hairline-strong)}
+html[data-workspace-theme] .mak-lightbox .mak-lightbox-caption{color:var(--text)}
+html[data-workspace-theme] .mak-lightbox .mak-lightbox-toolbar :is(button,a){background:var(--surface-2);border-color:var(--hairline-strong);color:var(--text)}
+html[data-workspace-theme] .mak-lightbox .mak-lightbox-note{color:var(--text-dim)}
 
 /* Files, Settings, Skills and MCP share the same readable panel surfaces. */
-html[data-workspace-theme=light] .files-rail,html[data-workspace-theme=light] .files-panel{background:#fff;border-color:var(--hairline-strong);color:var(--text)}
-html[data-workspace-theme=light] :is(.rail-tool,.file-row,.settings-scroll label,.mcp-server h3,.mcp-summary strong){color:var(--text)}
-html[data-workspace-theme=light] .rail-tool.active,html[data-workspace-theme=light] .rail-tool:hover{background:var(--pink-dim);color:var(--pink)}
-html[data-workspace-theme=light] .settings-scroll h3{color:var(--text-bright)}
-html[data-workspace-theme=light] :is(.settings-scroll p,.setting-toggle small,.skill-locations p,.file-tree-note,.file-filter,.file-row small,.files-panel footer,.mcp-summary p,.mcp-note,.mcp-state,.mcp-subtitle,.mcp-endpoint,.mcp-sources,.mcp-check>span,.mcp-check-time,.mcp-footer p){color:var(--text-dim)}
-html[data-workspace-theme=light] :is(.settings-scroll section,.mcp-sources>div,.mcp-footer){border-color:var(--hairline)}
-html[data-workspace-theme=light] :is(.settings-scroll select,.file-path,.mcp-filters select){background:#f6f7f9;color:var(--text);border-color:var(--hairline-strong)}
-html[data-workspace-theme=light] :is(.file-mode,.mcp-server){background:#f5f6f9;border-color:var(--hairline)}
-html[data-workspace-theme=light] :is(.file-mode button,.file-shortcuts button,.skill-locations button,.mcp-filters label){color:var(--text-dim)}
-html[data-workspace-theme=light] :is(.file-shortcuts button,.skill-locations button,.mcp-check button){background:#fff;border-color:var(--hairline-strong)}
-html[data-workspace-theme=light] :is(.file-row.selected,.file-mode button.selected,.skill-locations button[aria-pressed=true]){background:var(--pink-dim);color:var(--pink-bright);border-color:#98445e50}
-html[data-workspace-theme=light] .file-row:hover{background:var(--surface-2)}
-html[data-workspace-theme=light] :is(.file-row>svg,.file-reveal,.file-path button,.mcp-provider,.mcp-sources button,.mcp-check button,.files-panel .mcp-footer button){color:var(--pink)}
-html[data-workspace-theme=light] .file-path input{color:var(--text)}
-html[data-workspace-theme=light] :is(.mcp-sources span,.mcp-sources code,.file-unsupported,.desk-muted){color:var(--text-dim)}
-html[data-workspace-theme=light] .mcp-check>span.available{color:var(--green)}
-html[data-workspace-theme=light] :is(.mcp-problem,.desk-error-inline){color:var(--red)}
-html[data-workspace-theme=light] .desk-icon{color:var(--text-dim)!important}
-html[data-workspace-theme=light] .desk-icon:hover{color:var(--pink)!important;background:var(--pink-dim)}
-html[data-workspace-theme=light] .desktop-root input{border-color:var(--hairline-strong)}
+html[data-workspace-theme] .files-rail,html[data-workspace-theme] .files-panel{background:var(--surface-solid);border-color:var(--hairline-strong);color:var(--text)}
+html[data-workspace-theme] :is(.rail-tool,.file-row,.settings-scroll label,.mcp-server h3,.mcp-summary strong){color:var(--text)}
+html[data-workspace-theme] .rail-tool.active,html[data-workspace-theme] .rail-tool:hover{background:var(--pink-dim);color:var(--pink)}
+html[data-workspace-theme] .settings-scroll h3{color:var(--text-bright)}
+html[data-workspace-theme] :is(.settings-scroll p,.setting-toggle small,.skill-locations p,.file-tree-note,.file-filter,.file-row small,.files-panel footer,.mcp-summary p,.mcp-note,.mcp-state,.mcp-subtitle,.mcp-endpoint,.mcp-sources,.mcp-check>span,.mcp-check-time,.mcp-footer p){color:var(--text-dim)}
+html[data-workspace-theme] :is(.settings-scroll section,.mcp-sources>div,.mcp-footer){border-color:var(--hairline)}
+html[data-workspace-theme] :is(.settings-scroll select,.file-path,.mcp-filters select){background:var(--surface-2);color:var(--text);border-color:var(--hairline-strong)}
+html[data-workspace-theme] :is(.file-mode,.mcp-server){background:var(--surface-2);border-color:var(--hairline)}
+html[data-workspace-theme] :is(.file-mode button,.file-shortcuts button,.skill-locations button,.mcp-filters label){color:var(--text-dim)}
+html[data-workspace-theme] :is(.file-shortcuts button,.skill-locations button,.mcp-check button){background:var(--surface-solid);border-color:var(--hairline-strong)}
+html[data-workspace-theme] :is(.file-row.selected,.file-mode button.selected,.skill-locations button[aria-pressed=true]){background:var(--pink-dim);color:var(--pink-bright);border-color:var(--hairline-strong)}
+html[data-workspace-theme] .file-row:hover{background:var(--surface-2)}
+html[data-workspace-theme] :is(.file-row>svg,.file-reveal,.file-path button,.mcp-provider,.mcp-sources button,.mcp-check button,.files-panel .mcp-footer button){color:var(--pink)}
+html[data-workspace-theme] .file-path input{color:var(--text)}
+html[data-workspace-theme] :is(.mcp-sources span,.mcp-sources code,.file-unsupported,.desk-muted){color:var(--text-dim)}
+html[data-workspace-theme] .mcp-check>span.available{color:var(--green)}
+html[data-workspace-theme] :is(.mcp-problem,.desk-error-inline){color:var(--red)}
+html[data-workspace-theme] .desk-icon{color:var(--text-dim)!important}
+html[data-workspace-theme] .desk-icon:hover{color:var(--pink)!important;background:var(--pink-dim)}
+html[data-workspace-theme] .desktop-root input{border-color:var(--hairline-strong)}
 
-html[data-workspace-theme=light] .voice-panel{background:#fff;border-color:var(--hairline-strong);box-shadow:var(--shadow-2);color:var(--text)}
-html[data-workspace-theme=light] :is(.voice-panel h2,.voice-welcome p,.caption,.activity-item strong){color:var(--text)}
-html[data-workspace-theme=light] :is(.voice-welcome>span,.caption.user,.caption>span,.activity-item small,.activity-item time,.voice-settings,.voice-tabs>button,.voice-working,.previous-voice){color:var(--text-dim)}
-html[data-workspace-theme=light] :is(.voice-settings select,.voice-compose button){background:#f5f6f9;color:var(--pink);border-color:var(--hairline-strong)}
-html[data-workspace-theme=light] :is(.voice-panel header,.voice-settings,.voice-compose,.voice-tabs,.mak-exchange,.activity-item){border-color:var(--hairline)}
-html[data-workspace-theme=light] .voice-tabs>button.selected{color:var(--pink);border-color:var(--pink)}
-html[data-workspace-theme=light] .voice-caption-toggle{color:var(--pink)!important;background:#fff;border-color:var(--hairline-strong)}
-html[data-workspace-theme=light] .desktop-error{background:#fff1f2;color:#8b283d;border-color:#d09aa5}
+html[data-workspace-theme] .voice-panel{background:var(--surface-solid);border-color:var(--hairline-strong);box-shadow:var(--shadow-2);color:var(--text)}
+html[data-workspace-theme] :is(.voice-panel h2,.voice-welcome p,.caption,.activity-item strong){color:var(--text)}
+html[data-workspace-theme] :is(.voice-welcome>span,.caption.user,.caption>span,.activity-item small,.activity-item time,.voice-settings,.voice-tabs>button,.voice-working,.previous-voice){color:var(--text-dim)}
+html[data-workspace-theme] :is(.voice-settings select,.voice-compose button){background:var(--surface-2);color:var(--pink);border-color:var(--hairline-strong)}
+html[data-workspace-theme] :is(.voice-panel header,.voice-settings,.voice-compose,.voice-tabs,.mak-exchange,.activity-item){border-color:var(--hairline)}
+html[data-workspace-theme] .voice-tabs>button.selected{color:var(--pink);border-color:var(--pink)}
+html[data-workspace-theme] .voice-caption-toggle{color:var(--pink)!important;background:var(--surface-solid);border-color:var(--hairline-strong)}
+html[data-workspace-theme] .desktop-error{background:var(--surface-solid);color:var(--red);border-color:var(--red)}
+
+/* Semantic surfaces cover both independent windows and every named palette. */
+html[data-workspace-theme]{background:var(--bg)}
+html[data-workspace-theme] .home .entity-card{background:var(--surface-solid)}
+.theme-preview{border:1px solid;border-radius:9px;overflow:hidden;margin:10px 0 8px;font-size:11px;line-height:1.5}
+.theme-preview-bar{display:flex;align-items:center;gap:7px;padding:8px 10px;font-size:10px}
+.theme-preview-bar i{width:7px;height:7px;border-radius:50%}.theme-preview-bar i:last-child{margin-left:auto}
+.theme-preview-copy{display:flex;flex-direction:column;gap:5px;padding:12px}.theme-preview-copy strong{font-size:13px;font-weight:550}.theme-preview-copy>span:last-child{font-size:15px;letter-spacing:3px}
+.chats-header .browser-settings{z-index:40;align-self:center;margin-right:4px}
+.chats-header .browser-settings>summary{display:grid;place-items:center;width:30px;height:30px;padding:0;border:0;background:transparent}
+.chats-header .browser-settings-panel{max-height:calc(100dvh - 65px);overflow-y:auto}
+.chats-root .voice-dock.chats{right:153px}
+@media(max-width:400px){.chats-root .voice-dock.chats{right:149px}}
+html[data-workspace-theme] .desktop-root :is(button,input,select,textarea,summary):focus-visible{outline:2px solid var(--pink);outline-offset:2px}
+html[data-workspace-theme] .desktop-root ::selection{background:var(--pink-dim);color:var(--text-bright)}
+html[data-workspace-theme] .desktop-root .conversation-send{color:var(--on-accent)}
+html[data-color-scheme=light] .agent-label{color:var(--text-dim)!important;opacity:1}
+html[data-color-scheme=light] :is(.session-logo,.agent-mark,.choice-check){color:var(--pink)!important}
+html[data-color-scheme=light] .chat-tab.has-color .chat-tab-name{color:var(--text)}
+html[data-color-scheme=light] .chat-group-chip{color:var(--text)!important}
+
+/* The Antigravity logo's spectrum stays on narrow accents, away from reading surfaces. */
+html[data-workspace-theme=antigravity]{--antigravity-spectrum:linear-gradient(90deg,var(--green),var(--blue) 26%,var(--purple) 55%,var(--red) 78%,var(--amber))}
+html[data-workspace-theme=antigravity] .chat-tab.selected:not(.has-color):after{background:var(--antigravity-spectrum)}
+html[data-workspace-theme=antigravity] .app-layout .step-tab.active{background-image:var(--antigravity-spectrum);background-repeat:no-repeat;background-size:100% 2px;background-position:left bottom}
+
+/* The reference separates the graphite canvas, header and lighter composer. */
+html[data-workspace-theme=codex] :is(.chats-header,.topbar){background:var(--bg-deep)}
+html[data-workspace-theme=codex] .conversation-composer{background:var(--surface-2)}

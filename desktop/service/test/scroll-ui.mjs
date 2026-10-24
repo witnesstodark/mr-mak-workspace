@@ -5,7 +5,7 @@ import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createService } from '../server.mjs';
-import { clipboardPermissions, launchBrowser } from './browser.mjs';
+import { clipboardPermissions, launchBrowser, desktopAuth } from './browser.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const repo = await mkdtemp(path.join(root, '.cache/scroll-ui-'));
@@ -39,6 +39,7 @@ let browser;
 try {
   browser = await launchBrowser();
   const context = await browser.newContext({ viewport: { width: 640, height: 800 }, permissions: clipboardPermissions });
+  await desktopAuth(context, service.urls.workspace);
   const page = await context.newPage(); page.setDefaultTimeout(6000);
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   await page.goto(service.urls.chats);
