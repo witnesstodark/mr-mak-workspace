@@ -93,10 +93,6 @@
 .mobile-page-menu button > span:first-child { flex: 1; overflow-wrap: anywhere; }
 .mobile-app .mobile-page-menu button.active { background: #e4b6cd15; color: #ebc9da; }
 .mobile-app .mobile-page-menu button:active { background: #e4b6cd24; }
-/* A composited report can retain stale hit-test regions over a newly opened
-   menu in Chromium. Route input to the parent while the menu is open, also
-   allowing a tap on the report area to dismiss it instead of activating a link. */
-.mobile-app:has(.mobile-page-picker[open]) .mobile-results iframe { pointer-events: none; }
 
 /* One composer surface, with separate text and control rows in normal flow. */
 .mobile-app .mobile-composer { margin: 10px 12px max(10px, env(safe-area-inset-bottom)); padding: 10px 12px; border: 1px solid var(--m-line); border-radius: 18px; background: var(--m-panel); }
