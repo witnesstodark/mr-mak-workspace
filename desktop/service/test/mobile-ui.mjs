@@ -670,6 +670,18 @@ try {
   assert.equal(await frame.locator('#nested-scroll').evaluate(node => node.scrollTop), 180);
 
   // Attach navigation only, freeze it for retries, and keep the transcript readable.
+  // Capture this transition's event order on slower CI browsers without adding
+  // waits or changing the interaction under test. Only synthetic fixture data.
+  await phone.evaluate(() => {
+    window.testMenuTrace = [];
+    const record = value => { window.testMenuTrace.push({ at: Math.round(performance.now()), ...value }); if (window.testMenuTrace.length > 50) window.testMenuTrace.shift(); };
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) { if (key === 'mrmak.mobile.workspace') record({ type: 'selection', value }); return original.call(this, key, value); };
+    for (const type of ['pointerdown', 'pointerup', 'click', 'toggle']) document.addEventListener(type, event => {
+      const target = event.target, menu = document.querySelector('.mobile-page-picker');
+      record({ type, target: target.tagName, label: target.closest('button,summary')?.getAttribute('aria-label') || target.textContent?.slice(0, 40), menuContains: menu?.contains(target), menuOpen: menu?.open });
+    }, true);
+  });
   const contextRoute = `/mobile/api/sessions/${ids[1]}/send`, contextPayloads = [];
   const originalSubmit = service.mobile.submit;
   service.mobile.submit = function (device, id, data) { if (id === ids[1]) contextPayloads.push(structuredClone(data)); return originalSubmit.call(this, device, id, data); };
@@ -849,7 +861,7 @@ try {
       report: document.querySelector('.mobile-results')?.textContent?.slice(0, 800),
       headings: [...document.querySelectorAll('h1,h2')].map(node => node.textContent),
     })).catch(() => null);
-    console.error(JSON.stringify({ mobileFailure: state, reportResponses }));
+    console.error(JSON.stringify({ mobileFailure: state, reportResponses, menuTrace: await diagnosticPhone.evaluate(() => window.testMenuTrace).catch(() => null) }));
     await diagnosticPhone.screenshot({ path: path.join(repo, 'failure.png') }).catch(() => {});
   }
   throw error;
