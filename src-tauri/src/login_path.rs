@@ -5,8 +5,9 @@ use std::path::{Path, PathBuf};
 /// Config-location and locale variables taken from the login shell when the
 /// app's own environment lacks them. Never API keys or tokens.
 #[cfg(any(target_os = "macos", test))]
-pub const IMPORTED: [&str; 11] = [
+pub const IMPORTED: [&str; 13] = [
     "CODEX_HOME", "CLAUDE_CONFIG_DIR", "OPENCODE_CONFIG", "OPENCODE_CONFIG_DIR",
+    "PI_CODING_AGENT_DIR", "PI_CODING_AGENT_SESSION_DIR",
     "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME",
     "LANG", "LC_ALL", "LC_CTYPE",
 ];

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Add Pi chats. Each tab gets a Pi session ID before launch and follows `/new`, `/resume` and `/fork`, including a resume from another project folder, so History reopens the session it last showed. Needs Pi 0.84.4 or later. A small per-process observer reports work, prompts, errors and finished answers without changing what Pi sends. Pi keeps its own model and thinking defaults and has no permission prompts to bypass. The installer's `~/.pi/agent/bin` is found without a `PATH` change.
+- List Pi MCP servers from `~/.pi/agent/mcp.json` (or `PI_CODING_AGENT_DIR`) and `.pi/mcp.json`, including project entries that only turn a user server off.
+
 ## 0.6.1 - 2026-10-24
 
 - Reduce unnecessary drawing in the sidebar logo and 3D viewer. Static models stop submitting frames, while camera controls, shading changes and restored graphics contexts still repaint.

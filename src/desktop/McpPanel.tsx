@@ -7,12 +7,12 @@ import { fileManager } from './platform'
 
 type Check = { status: 'available' | 'agent-auth' | 'timeout' | 'unavailable'; toolCount: number | null; moreTools?: boolean; checkedAt: string; stale?: boolean }
 type Server = {
-  id: string; name: string; client: 'codex' | 'claude' | 'antigravity' | 'kimi' | 'cursor'; scope: string; enabled: boolean
+  id: string; name: string; client: 'codex' | 'claude' | 'antigravity' | 'kimi' | 'cursor' | 'pi'; scope: string; enabled: boolean
   readiness: string; transport: string; endpoint: string; executable: string | null; plugin: string | null; synced?: boolean
   sources: { scope: string; path: string; effective: boolean }[]; missingEnv: string[]; credentialNames: string[]; canCheck: boolean; connection: Check | null
 }
 type Inventory = { scannedAt: string; servers: Server[]; sources: { client: string; scope: string; path: string }[]; problems: { path: string; message: string }[] }
-const clients = { codex: 'Codex', claude: 'Claude', antigravity: 'Antigravity', kimi: 'Kimi', cursor: 'Cursor' }
+const clients = { codex: 'Codex', claude: 'Claude', antigravity: 'Antigravity', kimi: 'Kimi', cursor: 'Cursor', pi: 'Pi' }
 const scopes: Record<string, string> = { project: 'Project', local: 'Project · this PC', global: 'Global', plugin: 'Plugin', managed: 'Managed' }
 const stateLabel: Record<string, string> = { configured: 'Enabled', disabled: 'Disabled', managed: 'Host managed', 'missing-env': 'Needs setup', 'missing-command': 'Not installed', approval: 'Needs approval' }
 const checkLabel: Record<string, string> = { available: 'Available', 'agent-auth': 'Check login in agent', timeout: 'Timed out', unavailable: 'Not reachable' }

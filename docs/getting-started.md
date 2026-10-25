@@ -40,6 +40,10 @@ your operating system:
 [Kimi Code CLI](https://moonshotai.github.io/kimi-cli/en/) is available as an
 additional terminal integration after the base setup.
 
+[Pi](https://pi.dev/) is another terminal integration. Pi uses your own providers:
+sign in with `/login` or set a provider API key, then choose a model with `/model`.
+Pi has no permission prompts, so New chat shows no bypass option for it.
+
 Finish the CLI's sign-in flow with your own account. In Chats, press **+**, choose
 the provider and a descriptive English title. Start with a task such as
 `Dream Game Plan`. Choose the repository as the working folder. The normal CLI
@@ -75,7 +79,7 @@ apply when it is enabled.
 OpenCode 1.x and 2.x use different plugin APIs. Mr. Mak selects the corresponding
 small session observer at launch, without writing global configuration. OpenCode
 2.x runs a private server for each terminal so tab histories stay separate.
-The MCP inspector currently lists Claude, Codex, Kimi and Cursor configurations;
+The MCP inspector currently lists Claude, Codex, Kimi, Cursor and Pi configurations;
 use OpenCode's native MCP controls to inspect its own connections.
 
 ## Explore the examples

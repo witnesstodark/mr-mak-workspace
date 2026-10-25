@@ -5,6 +5,7 @@ import { promisify } from 'node:util';
 import { parse as parseEnv } from 'dotenv';
 import { isWindows, macLocale, powerShellLiteral, resolveCommand, shellCommand, shellLabel } from './platform.mjs';
 import { validAntigravityId } from './antigravity.mjs';
+import { piExtension, validPiSessionId } from './pi.mjs';
 
 export { shellCommand };
 
@@ -20,6 +21,7 @@ export const AGENTS = [
   { id: 'antigravity', label: 'Antigravity', color: '#8ab4f8', command: 'agy', subscription: true },
   { id: 'opencode', label: 'OpenCode', color: '#c8d2dc', command: 'opencode', subscription: false },
   { id: 'kimi', label: 'Kimi', color: '#b3a3f7', command: 'kimi', subscription: true },
+  { id: 'pi', label: 'Pi', color: '#f0b86e', command: 'pi', subscription: false },
   { id: 'shell', label: shellLabel(), color: '#89b7ed', command: 'shell', subscription: false },
 ];
 
@@ -131,6 +133,14 @@ export function terminalCommand(agent, { bypass = false, resumeId, nativeId, eff
     if (opencodeMajor >= 2) args.push('--standalone');
     if (resumeId) args.push('--session', resumeId);
     if (bypass) args.push('--auto');
+  } else if (agent === 'pi') {
+    // Pi has no permission prompts, so there is nothing to bypass. --session-id
+    // opens the exact project session or creates it with the assigned ID.
+    const id = resumeId || nativeId;
+    if (id && !validPiSessionId(id)) throw new Error('Use the Pi session ID shown by /session.');
+    args.push('--extension', piExtension);
+    if (id) args.push('--session-id', id);
+    if (effort) args.push('--thinking', effort);
   }
   if (!isWindows || agent === 'shell') return { file: command.file || command, args: [...(command.args || []), ...args] };
   // No -NoExit: stale coordinator input cannot become shell commands after the agent exits.
@@ -147,7 +157,7 @@ export function childEnvironment(repo) {
   }
   // Drop host-agent identity from the parent so every terminal is an independent CLI.
   for (const key of Object.keys(env)) {
-    if (/^(CLAUDECODE|CLAUDE_CODE_ENTRYPOINT|CODEX_THREAD_ID|CODEX_TURN_ID|CODEX_SHELL|ANTIGRAVITY_AGENT|MRMAK_TOKEN|MRMAK_PARENT_PID)$/.test(key) || key.startsWith('MRMAK_OPENCODE_')) delete env[key];
+    if (/^(CLAUDECODE|CLAUDE_CODE_ENTRYPOINT|CODEX_THREAD_ID|CODEX_TURN_ID|CODEX_SHELL|ANTIGRAVITY_AGENT|AI_AGENT|PI_CODING_AGENT|PI_SESSION_ID|PI_SESSION_FILE|PI_PROVIDER|PI_MODEL|PI_REASONING_LEVEL|MRMAK_TOKEN|MRMAK_PARENT_PID)$/.test(key) || key.startsWith('MRMAK_OPENCODE_') || key.startsWith('MRMAK_PI_')) delete env[key];
   }
   return env;
 }

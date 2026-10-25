@@ -27,7 +27,7 @@ await writeFile(path.join(repo, '.claude/settings.local.json'), JSON.stringify({
 await writeFile(path.join(mcpHome, '.codex/config.toml'), '[mcp_servers."global-tools"]\nurl="https://global.example/mcp"\n');
 const service = await createService({ repo, uiDir: path.join(root, 'dist'), mcpOptions: { home: mcpHome, env: {}, probe: async () => ({ status: 'available', toolCount: 7 }) } });
 const writes = new Map();
-for (const agent of ['codex', 'claude', 'opencode', 'kimi', 'shell']) {
+for (const agent of ['codex', 'claude', 'opencode', 'kimi', 'pi', 'shell']) {
   const session = service.sessions.make({ id: agent, name: `${agent} fixture`, agent, cwd: repo, status: 'running', open: true, pinned: false, createdAt: new Date().toISOString(), cols: 90, rows: 30 });
   service.sessions.items.set(agent, session); await service.sessions.hydrate(session);
   const received = []; writes.set(agent, received);
@@ -119,7 +119,7 @@ try {
   }
   await page.setViewportSize({ width: 900, height: 800 });
   await setTerminalFontSize(13);
-  for (const agent of ['codex', 'claude', 'opencode', 'kimi', 'shell']) {
+  for (const agent of ['codex', 'claude', 'opencode', 'kimi', 'pi', 'shell']) {
     await page.locator(`[data-chat-tab="${agent}"] [role="tab"]`).click();
     const screen = page.locator('.terminal-area .xterm-screen'); await screen.waitFor();
     await page.locator('.xterm-rows').filter({ hasText: 'Fixture line' }).waitFor();
@@ -149,7 +149,7 @@ try {
     }
   }
   assert.deepEqual(errors, []);
-  console.log('UI passed: 12 clickable wrapping tabs; Markdown preview/edit/save/conflict/draft; local Skills; MCP filtering, checks and hidden credentials; terminal bottom row visible across four window/font sizes; Codex/Claude/OpenCode/Kimi copy and scroll; PowerShell interrupt.');
+  console.log('UI passed: 12 clickable wrapping tabs; Markdown preview/edit/save/conflict/draft; local Skills; MCP filtering, checks and hidden credentials; terminal bottom row visible across four window/font sizes; Codex/Claude/OpenCode/Kimi/Pi copy and scroll; PowerShell interrupt.');
 } finally {
   await browser?.close();
   for (const session of service.sessions.items.values()) session.process = null;

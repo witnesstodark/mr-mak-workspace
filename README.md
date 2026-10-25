@@ -4,7 +4,7 @@ Your CLI agents, a visual Workspace, and access from your phone.
 
 Mr. Mak has **two connected desktop windows**:
 
-- **Chats** is where you give tasks to Codex, Claude Code, Antigravity, OpenCode or Kimi. Each
+- **Chats** is where you give tasks to Codex, Claude Code, Antigravity, OpenCode, Kimi or Pi. Each
   conversation runs in a real CLI terminal, with its own tab and saved history.
 - **Workspace** is where you review the results: project pages, research, images,
   saved prompts and reports. Files, skills, MCP connections and settings sit
@@ -174,8 +174,8 @@ the optional Live voice coordinator still uses OpenAI API billing.
 
 ## Before you start
 
-**Prerequisite: install and configure Codex CLI, Claude Code CLI, Antigravity, OpenCode or Kimi
-before setting up Mr. Mak.** You need at least one. They can run side by side
+**Prerequisite: install and configure Codex CLI, Claude Code CLI, Antigravity, OpenCode, Kimi
+or Pi before setting up Mr. Mak.** You need at least one. They can run side by side
 and are separate installations, not bundled with Mr. Mak.
 
 - [Install Codex CLI](https://developers.openai.com/codex/cli)
@@ -183,6 +183,7 @@ and are separate installations, not bundled with Mr. Mak.
 - [Install OpenCode](https://opencode.ai/docs/)
 - [Install Antigravity CLI](https://www.antigravity.google/docs/cli/install/)
 - [Install Kimi Code CLI](https://moonshotai.github.io/kimi-cli/)
+- [Install Pi](https://pi.dev/)
 
 **Do I need an API key?** No, not for Claude Code or Codex chats when you sign
 in with an eligible subscription. Mr. Mak runs the real CLI with its existing
@@ -236,7 +237,7 @@ with `--repo /path/to/your/workspace`. On macOS (Apple Silicon), download the
 Chats to open an installed CLI and sign in with your own account.
 
 The installer includes the local Node service. It does not include Codex,
-Claude Code, Antigravity, OpenCode, Kimi, Blender, Python or provider accounts.
+Claude Code, Antigravity, OpenCode, Kimi, Pi, Blender, Python or provider accounts.
 
 **Already using Mr. Mak?** Read the [update notes](CHANGELOG.md) for the
 Conversation view, recent projects and fresh-chat handoff, and for 0.5.1's

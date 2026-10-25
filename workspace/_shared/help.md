@@ -17,6 +17,10 @@ and pinned tabs keep its native conversation ID. Keep one conversation per tab.
 OpenCode connections are managed in its own MCP controls, separately from the
 Workspace MCP inspector.
 
+Pi is available in **+ > Pi** after installation. Choose its provider and model
+with `/login` and `/model` in the terminal. History and pinned tabs keep its native
+session ID, including after `/new`.
+
 ## Start with one task
 
 1. In Chats, press **+**, choose your agent and its working folder, and give the

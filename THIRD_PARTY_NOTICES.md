@@ -7,7 +7,7 @@ Third-party components retain their own licenses.
   in `.agents/skills/img2threejs`. Source: https://github.com/img2threejs/img2threejs.
 - JavaScript and Rust dependencies are recorded in their lockfiles. Their
   respective license files remain in the packaged dependency distributions.
-- Codex, Claude Code, Kimi, Blender, Higgsfield, fal.ai and the referenced MCP
+- Codex, Claude Code, Kimi, Pi, Blender, Higgsfield, fal.ai and the referenced MCP
   servers are separate products. This template does not grant access to their
   accounts, models or services. Provider names and logos identify integrations.
 - The Arachne and Mr. Mak 64 samples contain AI-generated concept images and motion studies

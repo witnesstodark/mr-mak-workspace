@@ -18,7 +18,7 @@ test('conversation IDs cannot be read as command-line options', () => {
   assert.equal(nativeConversationId(''), undefined);
   for (const id of ['--dangerously-skip-permissions', '-c', 'id --yolo', "id'; calc", '../../other', 'a'.repeat(129), 7, {}]) {
     assert.throws(() => nativeConversationId(id));
-    for (const agent of ['codex', 'claude', 'antigravity', 'opencode', 'kimi']) {
+    for (const agent of ['codex', 'claude', 'antigravity', 'opencode', 'kimi', 'pi']) {
       assert.throws(() => terminalCommand(agent, { resumeId: id }), /conversation ID/);
       assert.throws(() => terminalCommand(agent, { nativeId: id }), /conversation ID/);
     }

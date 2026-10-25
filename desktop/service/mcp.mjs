@@ -34,6 +34,7 @@ export class McpInventory {
     const problems = [], sources = [], entries = [];
     const codexHome = this.env.CODEX_HOME || path.join(this.home, '.codex');
     const claudeHome = this.env.CLAUDE_CONFIG_DIR || path.join(this.home, '.claude');
+    const piHome = this.env.PI_CODING_AGENT_DIR || path.join(this.home, '.pi', 'agent');
     const read = async file => {
       try {
         if ((await stat(file)).size > 8 * 1024 * 1024) throw new Error('large');
@@ -61,6 +62,7 @@ export class McpInventory {
       kimiUser: path.join(this.home, '.kimi/mcp.json'), kimiProject: path.join(this.repo, '.kimi-code/mcp.json'),
       cursorUser: path.join(this.home, '.cursor/mcp.json'), cursorProject: path.join(this.repo, '.cursor/mcp.json'),
       antigravityUser: path.join(this.home, '.gemini/config/mcp_config.json'), antigravityProject: path.join(this.repo, '.agents/mcp_config.json'),
+      piUser: path.join(piHome, 'mcp.json'), piProject: path.join(this.repo, '.pi/mcp.json'),
     };
     const values = Object.fromEntries(await Promise.all(Object.entries(paths).map(async ([name, file]) => [name, await read(file)])));
     const codex = merge(values.codexUser, values.codexProject);
@@ -71,7 +73,7 @@ export class McpInventory {
     const localProject = Object.entries(object(values.claudeUser.projects)).find(([folder]) => key(folder) === key(this.repo))?.[1] || {};
     add('claude', 'local', paths.claudeUser, localProject.mcpServers, 30);
     const claudeSettings = merge(merge(values.claudeSettings, values.claudeProjectSettings), values.claudeLocalSettings);
-    for (const client of ['kimi', 'cursor', 'antigravity']) {
+    for (const client of ['kimi', 'cursor', 'antigravity', 'pi']) {
       add(client, 'global', paths[`${client}User`], values[`${client}User`].mcpServers, 10);
       add(client, 'project', paths[`${client}Project`], values[`${client}Project`].mcpServers, 20);
     }
@@ -151,7 +153,11 @@ export class McpInventory {
     for (const [id, layers] of grouped) {
       layers.sort((a, b) => a.priority - b.priority);
       const winner = layers.at(-1);
-      const config = winner.client === 'codex' ? layers.reduce((result, item) => merge(result, item.config), {}) : winner.config;
+      const config = winner.client === 'codex' ? layers.reduce((result, item) => merge(result, item.config), {})
+        // A Pi project entry without a transport only switches the user-level server.
+        : winner.client === 'pi' && layers.length > 1 && !['command', 'url', 'type'].some(field => field in winner.config)
+          ? { ...layers.at(-2).config, ...Object.fromEntries(['enabled', 'exposure', 'toolExposure'].filter(field => field in winner.config).map(field => [field, winner.config[field]])) }
+          : winner.config;
       const hostManaged = winner.managed || (winner.client === 'codex' && ['node_repl', 'cua_repl'].includes(winner.name));
       const env = { ...projectEnv, ...this.env, CLAUDE_PROJECT_DIR: this.repo, CLAUDE_PLUGIN_ROOT: winner.pluginRoot || '', CODEX_PLUGIN_ROOT: winner.pluginRoot || '' };
       const missing = new Set();

@@ -35,6 +35,8 @@ export function commandSearchRoots(env = process.env, home = os.homedir()) {
   if (isWindows && env.APPDATA) roots.push(path.join(env.APPDATA, 'npm'));
   if (isWindows) roots.push(path.join(env.LOCALAPPDATA || path.join(home, 'AppData', 'Local'), 'agy', 'bin'));
   roots.push(path.join(home, '.opencode', 'bin'), path.join(home, '.kimi-code', 'bin'), path.join(home, '.local', 'bin'));
+  // Pi's installer puts a POSIX launcher here; Windows uses the npm shim instead.
+  if (!isWindows) roots.push(path.join(home, '.pi', 'agent', 'bin'));
   return roots;
 }
 

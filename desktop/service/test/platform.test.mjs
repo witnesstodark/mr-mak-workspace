@@ -33,6 +33,17 @@ test('typed home folders expand without changing other tildes', () => {
   assert.equal(expandHome(undefined), undefined);
 });
 
+test('Pi installer directory is included in command lookup roots on macOS and Linux', { skip: process.platform === 'win32' && 'Pi uses its npm shim on Windows' }, async () => {
+  const home = await mkdtemp(path.join(os.tmpdir(), 'mrmak-command-home-'));
+  const bin = path.join(home, '.pi', 'agent', 'bin');
+  await mkdir(bin, { recursive: true });
+  const executable = path.join(bin, 'pi');
+  await writeFile(executable, '', { mode: 0o755 });
+
+  assert.ok(commandSearchRoots({}, home).includes(bin));
+  assert.equal(resolveCommand('pi', { PATH: '' }, home), executable);
+});
+
 test('OpenCode install directory is included in command lookup roots', async () => {
   const home = await mkdtemp(path.join(os.tmpdir(), 'mrmak-command-home-'));
   const bin = path.join(home, '.opencode', 'bin');

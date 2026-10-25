@@ -1,6 +1,6 @@
 import type { ThemePreference } from '../../desktop/service/appearance.mjs'
 
-export type AgentId = 'codex' | 'claude' | 'antigravity' | 'opencode' | 'kimi' | 'shell'
+export type AgentId = 'codex' | 'claude' | 'antigravity' | 'opencode' | 'kimi' | 'pi' | 'shell'
 export interface AgentInfo { id: AgentId; label: string; color: string; available: boolean; subscription: boolean }
 export interface ChatSession {
   id: string; name: string; agent: AgentId; cwd: string; bypass: boolean

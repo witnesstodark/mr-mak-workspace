@@ -30,7 +30,9 @@ test('new and imported chats default to xhigh; explicit efforts survive saving a
       assert.equal(imported.effort, 'xhigh');
       expected.set(imported.id, 'xhigh');
     }
-    for (const agent of ['shell', 'kimi', 'opencode']) assert.equal(sessions.make({ agent }).effort, undefined);
+    for (const agent of ['shell', 'kimi', 'opencode', 'pi']) assert.equal(sessions.make({ agent }).effort, undefined);
+    // Pi keeps its own thinking default unless a level is chosen, for example by the coordinator.
+    assert.equal(sessions.make({ agent: 'pi', effort: 'high' }).effort, 'high');
   } finally { await sessions.close(); }
   const restored = await new Sessions(repo, stateDir).init();
   try {

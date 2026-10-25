@@ -29,6 +29,27 @@ test('MCP sources preserve agent precedence without exposing credentials or URL 
   for (const secret of ['password','secret-path','url-secret','header-secret','codex-secret','invisible']) assert.equal(JSON.stringify(result).includes(secret), false);
 });
 
+test('Pi MCP definitions follow PI_CODING_AGENT_DIR, project replacement and enabled-only overrides', async () => {
+  const { repo, home, json, inventory } = await fixture();
+  const piHome = path.join(home, 'custom-pi');
+  await mkdir(piHome, { recursive: true }); await mkdir(path.join(repo, '.pi'), { recursive: true });
+  await mkdir(path.join(home, '.pi/agent'), { recursive: true });
+  await json(path.join(home, '.pi/agent/mcp.json'), { mcpServers: { ignored: { url: 'https://ignored.example/mcp' } } });
+  await json(path.join(piHome, 'mcp.json'), { mcpServers: {
+    docs: { url: 'https://docs.example/private-path', headers: { Authorization: 'Bearer pi-secret' } },
+    replaced: { url: 'https://user.example/mcp' },
+  } });
+  await json(path.join(repo, '.pi/mcp.json'), { mcpServers: { docs: { enabled: false }, replaced: { url: 'https://project.example/mcp' } } });
+  inventory.env.PI_CODING_AGENT_DIR = piHome;
+  const result = await inventory.list();
+  const pi = result.servers.filter(item => item.client === 'pi');
+  assert.deepEqual(pi.map(item => item.name).sort(), ['docs', 'replaced']);
+  const docs = pi.find(item => item.name === 'docs'), replaced = pi.find(item => item.name === 'replaced');
+  assert.equal(docs.scope, 'project'); assert.equal(docs.enabled, false); assert.equal(docs.endpoint, 'https://docs.example');
+  assert.equal(replaced.scope, 'project'); assert.equal(replaced.endpoint, 'https://project.example');
+  for (const secret of ['pi-secret', 'private-path']) assert.equal(JSON.stringify(result).includes(secret), false);
+});
+
 test('Antigravity MCP definitions show project precedence and redact remote URLs and credentials', async () => {
   const { repo, home, json, inventory } = await fixture();
   await mkdir(path.join(home, '.gemini/config'), { recursive: true });

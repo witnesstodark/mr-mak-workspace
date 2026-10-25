@@ -125,6 +125,27 @@ and removed lines. The choice is saved for all desktop chats and applies to open
 terminals immediately without restarting sessions. Existing saved preferences
 are retained. The same choice is available in each chat’s options menu.
 
+## Pi terminals
+
+The service launches Pi's real TUI with `--session-id <id>`: a new chat gets its
+ID before launch, and a resume passes the recorded ID again, which Pi opens or
+creates. Pi owns model choice, provider authentication and thinking level; Mr. Mak
+passes `--thinking` only when a level was chosen, for example by the coordinator.
+Pi has no permission prompts, so there is no bypass flag. It needs Pi 0.84.4 or
+later (tested with 1.3.0); from 1.1.0 an interrupted run is told apart from a
+finished one.
+
+`--extension desktop/service/pi/mrmak-observer.mjs` loads a dependency-free
+observer for that process only. It registers no tools, commands or UI and saves
+only the native session ID and folder, launch identity and activity/completion
+metadata under `.mrmak/pi-<chat>.json`. It follows `/new`, `/resume` and `/fork`, so a tab resumes
+the session it last showed; a `/resume` of another project's session also moves
+the tab to that folder. Pi builds a new extension runtime for each switch and for
+`/reload`, and each one continues the launch's revision count. A session another
+chat already owns stays with that chat. Closing sends Ctrl+C twice within Pi's
+500 ms window.
+The Pi installer's `~/.pi/agent/bin` is searched even when it is not on `PATH`.
+
 ## OpenCode terminals
 
 The service detects installed OpenCode 1.x or 2.x and launches its real TUI.
