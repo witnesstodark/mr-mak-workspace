@@ -77,7 +77,7 @@ test('Two same-folder chats recover separate native IDs after restart, including
     sessions.launch = (session, resumeId) => { launches.push(resumeId); };
     await sessions.resume(first.id); await sessions.resume(second.id);
     assert.deepEqual(launches, [idA, idB]);
-    assert.equal(sessions.get(first.id).effort, 'xhigh');
+    assert.equal(sessions.get(first.id).effort, 'medium');
   } finally { await sessions.close(); }
 });
 
@@ -143,7 +143,7 @@ console.log('AGY_FIXTURE '+id); setTimeout(()=>process.exit(0),650);`);
     await until(() => [a,b].every(s => !sessions.get(s.id).process));
     const launches = (await readFile(trace,'utf8')).trim().split('\n').map(JSON.parse);
     assert.equal(launches.length,4);
-    for (const args of launches) { assert.ok(args.includes('--log-file')); assert.ok(args.includes('xhigh')); assert.ok(!args.includes('--dangerously-skip-permissions')); }
+    for (const args of launches) { assert.ok(args.includes('--log-file')); assert.ok(args.includes('medium')); assert.ok(!args.includes('--dangerously-skip-permissions')); }
     assert.deepEqual(launches.slice(2).map(args=>args[args.indexOf('--conversation')+1]).sort(),[a.id,b.id].sort());
   } finally { await sessions.close(); if (previous === undefined) delete process.env.PATH; else process.env.PATH = previous; }
 });
