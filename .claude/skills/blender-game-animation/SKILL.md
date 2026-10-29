@@ -13,6 +13,11 @@ When continuing another artist's file, inventory the rigs, Actions, slots,
 constraints, reference media and export settings before editing. Keep a source
 copy and distinguish approved clips from experiments.
 
+## Build in code with agents
+
+When agents build and iterate the model in Blender Python, follow the
+[agent build loop](references/agent-build-loop.md).
+
 ## Rig and skin
 
 Place joints from anatomy and give them stable rolls and bend directions. Keep
