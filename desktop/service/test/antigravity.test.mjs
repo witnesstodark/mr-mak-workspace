@@ -4,7 +4,8 @@ import { chmod, mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { antigravityConversation, antigravityLogPath, prepareAntigravityLog, readAntigravityConversation, watchAntigravity } from '../antigravity.mjs';
+import { DatabaseSync } from 'node:sqlite';
+import { antigravityConversation, antigravityLogPath, prepareAntigravityLog, readAntigravityConversation, readAntigravityTurn, watchAntigravity, watchAntigravityTurns } from '../antigravity.mjs';
 import { terminalCommand } from '../agents.mjs';
 import { commandSearchRoots, resolveCommand } from '../platform.mjs';
 import { Sessions } from '../sessions.mjs';
@@ -146,4 +147,35 @@ console.log('AGY_FIXTURE '+id); setTimeout(()=>process.exit(0),650);`);
     for (const args of launches) { assert.ok(args.includes('--log-file')); assert.ok(args.includes('xhigh')); assert.ok(!args.includes('--dangerously-skip-permissions')); }
     assert.deepEqual(launches.slice(2).map(args=>args[args.indexOf('--conversation')+1]).sort(),[a.id,b.id].sort());
   } finally { await sessions.close(); if (previous === undefined) delete process.env.PATH; else process.env.PATH = previous; }
+});
+
+// Protobuf wire encoding of agy's step payload, only the fields read.
+const varint = n => { const out = []; do { let byte = n % 128; n = Math.floor(n / 128); if (n) byte |= 0x80; out.push(byte); } while (n); return out; };
+const pb = (...fields) => Buffer.concat(fields.map(([number, value]) => typeof value === 'number' ? Buffer.from([...varint(number * 8), ...varint(value)]) : Buffer.concat([Buffer.from([...varint(number * 8 + 2), ...varint(value.length)]), value])));
+
+test('Antigravity turns end with a model step that calls no tool, and a resumed turn is not replayed', async () => {
+  const folder = await mkdtemp(path.join(os.tmpdir(), 'mak-agy-turns-'));
+  const file = id => path.join(folder, `${id}.db`);
+  const conversation = id => { const db = new DatabaseSync(file(id)); db.exec('PRAGMA journal_mode = WAL; CREATE TABLE steps (idx integer PRIMARY KEY, step_type integer NOT NULL DEFAULT 0, status integer NOT NULL DEFAULT 0, step_payload blob)'); return db; };
+  const step = (db, idx, type, status, payload = null) => db.prepare('INSERT INTO steps (idx, step_type, status, step_payload) VALUES (?, ?, ?, ?)').run(idx, type, status, payload);
+  const reply = text => pb([20, pb([1, Buffer.from(text)])]), toolCall = pb([20, pb([7, pb([1, Buffer.from('call_1')])])]);
+  const resumed = randomUUID(), fresh = randomUUID();
+  const db = conversation(resumed), other = conversation(fresh);
+  step(db, 0, 14, 3); step(db, 1, 15, 3, reply('Old answer.')); step(db, 2, 101, 3);
+  assert.deepEqual(await readAntigravityTurn(file(resumed)), { kind: 'turn-completed', step: 1, reply: 'Old answer.' });
+  let bound = resumed;
+  const events = [];
+  const stop = watchAntigravityTurns(() => bound, turn => events.push(turn), { file });
+  try {
+    await new Promise(resolve => setTimeout(resolve, 1300));
+    assert.equal(events.length, 0, 'the finished turn of a resumed conversation is history');
+    step(db, 3, 14, 3); await until(() => events.at(-1)?.kind === 'turn-started');
+    step(db, 4, 15, 3, toolCall); step(db, 5, 132, 3); await until(() => events.at(-1)?.id === `${resumed}:5`);
+    assert.equal(events.at(-1).kind, 'turn-started', 'a model step with a tool call does not end the turn');
+    step(db, 6, 15, 3, reply('Done.')); await until(() => events.at(-1)?.kind === 'turn-completed');
+    assert.deepEqual(events.at(-1), { kind: 'turn-completed', step: 6, reply: 'Done.', id: `${resumed}:6` });
+    step(db, 7, 14, 3); step(db, 8, 132, 6); await until(() => events.at(-1)?.kind === 'turn-interrupted');
+    step(other, 0, 14, 3); step(other, 1, 15, 3, reply('Fresh.')); bound = fresh;
+    await until(() => events.at(-1)?.reply === 'Fresh.');
+  } finally { stop(); db.close(); other.close(); }
 });

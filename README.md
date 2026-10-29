@@ -102,6 +102,26 @@ Group headers can be dragged, collapsed, renamed and coloured. Deleting a group
 keeps its chats, including those in History. Pinned tabs stay ahead of other
 tabs. Double-click a tab, or press F2, to rename its chat.
 
+## Chats that work together
+
+Agent chats can see and message each other. Each one starts with a small
+Mr. Mak MCP server, `mrmak_chats`, with five tools: `list_chats`,
+`read_chat`, `send_to_chat`, `open_chat` and `wait_for_chat`. Ask a chat to hand
+a part of its task to another chat, and to wait for the answer. A message
+arrives with the name and ID of the chat that sent it, so the receiver can
+reply. A chat opened this way uses the same folder, group and effort as the
+chat that opened it, and never gets more permissions. Shell tabs are not
+reachable. The tools work only while Mr. Mak is open.
+
+Codex, Claude Code and OpenCode get the server at launch. Antigravity and Kimi
+read MCP servers only from their global settings. To use the tools there, turn
+on **Chat tools for Antigravity and Kimi** in Settings. Mr. Mak then adds
+`mrmak_chats` to `~/.gemini/config/mcp_config.json` and `~/.kimi-code/mcp.json`
+(or `$KIMI_CODE_HOME/mcp.json`) and keeps the entry current after an update.
+Outside Mr. Mak the server has no tools. Turn the setting off to remove the
+entry. Kimi reports no completed turns, so read a Kimi chat instead of waiting
+for it.
+
 ## On your phone
 
 Read replies, send follow-ups or images, and open Workspace reports from a mobile

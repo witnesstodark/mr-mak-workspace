@@ -13,7 +13,8 @@ import { englishTitle, groupLabel, restoredTitle } from './titles.mjs';
 import { defaultWorkerEffort, workerEfforts } from './effort.mjs';
 import { ptyOptions } from './platform.mjs';
 import { opencodeVersion, opencodeEnvironment, readOpencodeState, watchOpencode } from './opencode.mjs';
-import { prepareAntigravityLog, readAntigravityConversation, validAntigravityId, watchAntigravity } from './antigravity.mjs';
+import { prepareAntigravityLog, readAntigravityConversation, validAntigravityId, watchAntigravity, watchAntigravityTurns } from './antigravity.mjs';
+import { CHAT_TOOL_AGENTS, chatToolArguments, chatToolEnvironment, opencodeChatToolConfig } from './chat-tools.mjs';
 
 const { Terminal } = headless;
 // Native CLIs record getcwd(): symlinks resolved (/tmp -> /private/tmp, cloud
@@ -49,6 +50,8 @@ export class Sessions extends EventEmitter {
     this.saveChain = Promise.resolve();
     this.dirty = false;
     this.closed = false;
+    // { url, token, claudeConfig } once the service listens; agent chats then get chat tools.
+    this.chatTools = null;
   }
 
   async init() {
@@ -179,7 +182,13 @@ export class Sessions extends EventEmitter {
     const antigravityLog = session.agent === 'antigravity' ? await prepareAntigravityLog(this.stateDir, session.id) : undefined;
     const noDaemon = session.agent === 'codex' && await codexSupportsNoDaemon(env);
     if (this.closed || !session.open) throw new Error('The chat was closed before its terminal started.');
-    const command = terminalCommand(session.agent, { bypass: session.bypass, resumeId, nativeId: session.nativeId, effort: session.effort, opencodeMajor, antigravityLog, noDaemon, ...first });
+    const chatTools = CHAT_TOOL_AGENTS.includes(session.agent) ? this.chatTools : null;
+    if (chatTools) {
+      const chatEnv = chatToolEnvironment({ url: chatTools.url, token: chatTools.token, id: session.id });
+      Object.assign(env, chatEnv);
+      if (session.agent === 'opencode') env.OPENCODE_CONFIG_CONTENT = opencodeChatToolConfig(env.OPENCODE_CONFIG_CONTENT, opencodeMajor, chatEnv);
+    }
+    const command = terminalCommand(session.agent, { bypass: session.bypass, resumeId, nativeId: session.nativeId, effort: session.effort, opencodeMajor, antigravityLog, noDaemon, chatTools: chatTools ? chatToolArguments(session.agent, chatTools) : undefined, ...first });
     if (session.agent === 'codex') env.CODEX_INTERNAL_ORIGINATOR_OVERRIDE = `mrmak_chat_${session.id}`;
     if (session.terminal) this.resetTerminal(session);
     const proc = pty.spawn(command.file, command.args, ptyOptions({ cwd: session.cwd, env, cols: session.cols, rows: session.rows }));
@@ -235,9 +244,17 @@ export class Sessions extends EventEmitter {
     this.changed(session);
     // Discovery is read-only, and only accepts an unambiguous native session.
     this.beginDiscovery(session);
-    if (session.agent === 'antigravity') session.stopNativeWatch = watchAntigravity(this.stateDir, session.id, id => {
-      if (session.process === proc) this.bindAntigravity(session, id);
-    });
+    if (session.agent === 'antigravity') {
+      const stopLog = watchAntigravity(this.stateDir, session.id, id => {
+        if (session.process === proc) this.bindAntigravity(session, id);
+      });
+      const stopTurns = watchAntigravityTurns(() => session.nativeId, turn => {
+        if (session.process !== proc) return;
+        if (turn.kind === 'turn-completed') this.nativeEvent(session, { kind: 'turn-completed', id: turn.id, text: 'The agent finished its turn. Review the result.', preview: turn.reply.slice(-350) });
+        else this.nativeEvent(session, { kind: turn.kind });
+      });
+      session.stopNativeWatch = () => { stopLog(); stopTurns(); };
+    }
     if (session.agent === 'opencode') session.stopNativeWatch = watchOpencode(this.stateDir, session, env.MRMAK_OPENCODE_LAUNCH_ID, state => {
       this.bindNative(session, { id: state.nativeId });
       if (session.nativeId !== state.nativeId) return;

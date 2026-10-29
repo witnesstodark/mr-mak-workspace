@@ -88,11 +88,12 @@ export function codexSupportsNoDaemon(env = process.env) {
   return codexHelp.get(key);
 }
 
-export function terminalCommand(agent, { bypass = false, resumeId, nativeId, effort, opencodeMajor = 1, antigravityLog, initialPrompt, readDir, noDaemon = false } = {}) {
+export function terminalCommand(agent, { bypass = false, resumeId, nativeId, effort, opencodeMajor = 1, antigravityLog, initialPrompt, readDir, noDaemon = false, chatTools = [] } = {}) {
   if (!AGENTS.some(item => item.id === agent)) throw new Error('Unknown agent');
   resumeId = nativeConversationId(resumeId); nativeId = nativeConversationId(nativeId);
   initialPrompt = initialPromptArgument(initialPrompt);
   if (initialPrompt && (resumeId || !['codex', 'claude'].includes(agent))) throw new Error('Only a new Codex or Claude chat can start with a message.');
+  if (!Array.isArray(chatTools) || chatTools.some(value => typeof value !== 'string')) throw new Error('Chat tool arguments must be strings.');
   if (readDir != null && (typeof readDir !== 'string' || !path.isAbsolute(readDir) || /[\x00-\x1f]/.test(readDir))) throw new Error('Choose an absolute folder.');
   const command = agent === 'shell' ? shellCommand() : { file: commandPath(AGENTS.find(item => item.id === agent).command), args: [] };
   if (!command || !command.file) throw new Error(`${agent} is not installed on this computer`);
@@ -107,11 +108,14 @@ export function terminalCommand(agent, { bypass = false, resumeId, nativeId, eff
     if (noDaemon) args.push('--no-daemon');
     if (bypass) args.push('--dangerously-bypass-approvals-and-sandbox');
     if (effort) args.push('-c', `model_reasoning_effort="${effort}"`);
+    args.push(...chatTools);
     // Codex reads outside its working folder by default.
     if (initialPrompt) args.push(initialPrompt);
   } else if (agent === 'claude') {
     // The prompt comes first: --add-dir takes every following argument.
     if (initialPrompt) args.push(initialPrompt);
+    // --mcp-config also takes every following argument until the next option.
+    args.push(...chatTools);
     if (resumeId) args.push('--resume', resumeId);
     else if (nativeId) args.push('--session-id', nativeId);
     if (bypass) args.push('--dangerously-skip-permissions');
@@ -147,7 +151,7 @@ export function childEnvironment(repo) {
   }
   // Drop host-agent identity from the parent so every terminal is an independent CLI.
   for (const key of Object.keys(env)) {
-    if (/^(CLAUDECODE|CLAUDE_CODE_ENTRYPOINT|CODEX_THREAD_ID|CODEX_TURN_ID|CODEX_SHELL|ANTIGRAVITY_AGENT|MRMAK_TOKEN|MRMAK_PARENT_PID)$/.test(key) || key.startsWith('MRMAK_OPENCODE_')) delete env[key];
+    if (/^(CLAUDECODE|CLAUDE_CODE_ENTRYPOINT|CODEX_THREAD_ID|CODEX_TURN_ID|CODEX_SHELL|ANTIGRAVITY_AGENT|MRMAK_TOKEN|MRMAK_PARENT_PID)$/.test(key) || key.startsWith('MRMAK_OPENCODE_') || key.startsWith('MRMAK_CHAT_')) delete env[key];
   }
   return env;
 }

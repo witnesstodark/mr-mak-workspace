@@ -34,10 +34,11 @@ import { LocalReadAloud } from './local-read-aloud.mjs';
 import { Handoffs } from './handoff.mjs';
 import { chatCommands } from './chat-commands.mjs';
 import { isThemePreference } from './appearance.mjs';
+import { ChatTools, globalChatToolFiles, globalChatToolStatus, setGlobalChatTools, writeClaudeChatToolConfig } from './chat-tools.mjs';
 
 const listen = server => new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', () => resolve(`http://127.0.0.1:${server.address().port}`)); });
 
-export async function createService({ repo, uiDir, stateDir, token = secret(), native = () => {}, restoreSessions = false, mcpOptions, mobileOptions }) {
+export async function createService({ repo, uiDir, stateDir, token = secret(), native = () => {}, restoreSessions = false, mcpOptions, mobileOptions, chatToolOptions }) {
   repo = await realpath(repo);
   stateDir ||= path.join(repo, '.mrmak');
   const dictation = mobileOptions?.dictation || new MobileDictation(repo);
@@ -160,6 +161,10 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
       }
     },
   }).init();
+  const chatTools = new ChatTools({ token, sessions, transcripts, settings: () => settings });
+  const chatToolFiles = globalChatToolFiles(chatToolOptions);
+  // A connected installation keeps the global entries pointing at itself after an update or move.
+  if (settings.globalChatTools === true) await setGlobalChatTools(true, chatToolFiles).catch(() => {});
   const quick = await new QuickActions({ stateDir, workspace, context: () => ({ chats: sessions.active(), route: workspaceRoute }), execute: (...args) => coordinator.execute(...args), completed: operation => broadcast('coordinator-result', { operation }) }).init();
   const askMak = async data => {
     if (coordinator.operationPromises.has(data.id) || coordinator.operations.has(data.id)) return coordinator.ask(data);
@@ -204,6 +209,9 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
       // is issued only through an authorized messages request for this chat.
       const media = /^\/media\/([a-f0-9-]{36})\/([a-zA-Z0-9_-]{43})$/.exec(url.pathname);
       if (media && ['GET', 'HEAD'].includes(request.method)) return await conversationMedia.serve(request, response, media[1], media[2], 'desktop', url.searchParams.get('download') === '1');
+      // Agent chats call their tools with their own chat key, never the service token.
+      const chatTool = /^\/chat-tools\/([a-z_]+)$/.exec(url.pathname);
+      if (chatTool && request.method === 'POST') { const caller = chatTools.caller(request.headers.authorization); return json(response, 200, await chatTools.execute(caller, chatTool[1], await body(request))); }
       if (url.pathname.startsWith('/api/')) {
         authorize(request);
         const method = request.method;
@@ -307,6 +315,13 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
         if (method === 'POST' && url.pathname === '/api/files/markdown') {
           const preview = await files.saveMarkdown(data); await integrations.publish('artifact', { kind: 'updated', path: preview.path, name: preview.name }); broadcast('workspace-changed', {});
           return json(response, 200, preview);
+        }
+        if (method === 'GET' && url.pathname === '/api/chat-tools') return json(response, 200, await globalChatToolStatus(chatToolFiles));
+        if (method === 'POST' && url.pathname === '/api/chat-tools') {
+          if (typeof data.connected !== 'boolean') throw Object.assign(new Error('Choose whether to connect chat tools.'), { status: 400 });
+          const status = await setGlobalChatTools(data.connected, chatToolFiles);
+          settings.globalChatTools = data.connected; await saveSettings();
+          return json(response, 200, status);
         }
         if (method === 'POST' && url.pathname === '/api/settings') {
           if (inventory().some(item => item.id === data.defaultAgent)) settings.defaultAgent = data.defaultAgent;
@@ -447,6 +462,7 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
     } catch (error) { if (!response.headersSent) json(response, error.status || 400, { error: publicError(error) }); }
   });
   const origin = await listen(server);
+  sessions.chatTools = { url: origin, token, claudeConfig: await writeClaudeChatToolConfig(stateDir) };
   files.uiOrigin = origin;
   mobile = await new MobileGateway({ ...mobileOptions, transcripts, readAloud, dictation, chooseDictation, repo, uiDir, stateDir, sessions, attachments, closeChat, settings: () => settings, changed: state => broadcast('mobile-state', { mobile: state }) }).init();
   const wss = new WebSocketServer({ noServer: true, maxPayload: 128 * 1024 });
@@ -485,7 +501,7 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
   try { watcher = watch(path.join(repo, 'workspace', 'workspace.json'), () => broadcast('workspace-changed', {})); watcher.on('error', () => {}); } catch { /* Registry may be created after first setup. */ }
   const restoreTimer = restoreSessions ? setTimeout(() => sessions.restore().catch(error => sessions.emit('service-error', error)), 100) : null;
   return {
-    origin, contentOrigin: files.origin, token, sessions, coordinator, quick, workspace, cards, files, projects, knowledge, integrations, mobile,
+    origin, contentOrigin: files.origin, token, sessions, chatTools, coordinator, quick, workspace, cards, files, projects, knowledge, integrations, mobile,
     urls: { workspace: `${origin}/?desktop=1&surface=workspace&token=${token}`, chats: `${origin}/?desktop=1&surface=chats&token=${token}` },
       nativeMessage: event => nativeSettings.receive(event),
       async close() {
