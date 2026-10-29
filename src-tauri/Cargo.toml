@@ -1,6 +1,6 @@
 [package]
 name = "mrmak-workspace"
-version = "0.6.1"
+version = "0.6.2"
 description = "Mr. Mak workspace and independent agent terminals"
 authors = ["Mr. Mak Workspace contributors"]
 edition = "2021"

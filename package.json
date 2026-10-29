@@ -1,7 +1,7 @@
 {
   "name": "mr-mak-workspace",
   "private": true,
-  "version": "0.6.1",
+  "version": "0.6.2",
   "type": "module",
   "scripts": {
     "postinstall": "npm --prefix desktop/service ci && node scripts/fix-pty-permissions.mjs",

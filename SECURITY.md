@@ -28,9 +28,11 @@ Keep `.env`, local state and native CLI histories out of shared repositories.
 
 ## Reports and paired phones
 
-Desktop HTML and SVG previews use an opaque sandbox and an expiring grant for
-the selected report folder. Mobile reports also use scoped grants tied to the
-paired device. Keep a report's data, images and scripts inside its card folder;
+Desktop HTML previews run in a sandbox on their report folder's own local port,
+with an expiring grant for that folder. Pages of one report share that origin,
+so a report can frame its own pages; other reports and the app windows use
+different origins. SVG previews keep an opaque sandbox. Mobile reports use
+an opaque sandbox and scoped grants tied to the paired device. Keep a report's data, images and scripts inside its card folder;
 the shared `workspace/_shared/report.css`, `report.js` and `examples.css` remain
 available. Bundle dependencies locally. Remote scripts, fonts and background
 network requests are blocked. User-opened web links still leave the report.

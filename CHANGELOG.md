@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.2 - 2026-10-29
+
+- Give each report folder its own local origin. Pages of one report can frame and read each other again, so multi-page reports such as a project wiki show their articles. Other reports, the app and the repository grant stay on separate origins, and a folder starts each session with empty browser storage.
+
 ## 0.6.1 - 2026-10-24
 
 - Reduce unnecessary drawing in the sidebar logo and 3D viewer. Static models stop submitting frames, while camera controls, shading changes and restored graphics contexts still repaint.

@@ -19,7 +19,7 @@ const probe = `<pre id="probe"></pre><script>(async () => {
     own: await read('data.json'), otherReport: await read('../other/data.json'), context: await read('../../context/goals.md'),
     repositoryRoot: await read('/view/' + location.pathname.split('/')[2] + '/README.md'),
     externalFetch: await read('https://browser-check.example/collect?fetch'), externalImage: await image('https://browser-check.example/collect?image'),
-    origin: self.origin, storage: storage(),
+    origin: self.origin, storage: storage(), app: (() => { try { return parent.document ? 'readable' : 'blocked'; } catch { return 'blocked'; } })(),
   });
 })();</script>`;
 await mkdir(path.join(repo, 'workspace/other'), { recursive: true }); await mkdir(path.join(repo, 'context'), { recursive: true });
@@ -53,15 +53,17 @@ try {
   }
   await page.goto(service.urls.workspace + '#/test/0');
   const frame = page.frameLocator('iframe.report-frame');
-  // The report runs in an opaque origin. Its policy blocks every request outside its own folder.
+  // The report runs on its folder's own origin. Its policy blocks every request outside that folder.
   const collected = []; await context.route('https://browser-check.example/collect**', route => { collected.push(route.request().url()); return route.fulfill({ body: 'collected' }); });
   await frame.locator('#probe').filter({ hasText: 'own-report-data' }).waitFor();
   assert.equal(await page.evaluate(() => sessionStorage.getItem('mrmak.token')), null);
   assert.equal(await page.evaluate(() => window.__MRMAK_BOOTSTRAP_TOKEN__), undefined);
   assert.equal(new URL(page.url()).searchParams.get('token'), null);
-  assert.deepEqual(JSON.parse(await frame.locator('#probe').textContent()), { own: 'own-report-data', otherReport: 'blocked', context: 'blocked', repositoryRoot: 'blocked', externalFetch: 'blocked', externalImage: 'blocked', origin: 'null', storage: 'blocked' });
+  const probed = JSON.parse(await frame.locator('#probe').textContent());
+  assert.deepEqual({ ...probed, origin: undefined }, { own: 'own-report-data', otherReport: 'blocked', context: 'blocked', repositoryRoot: 'blocked', externalFetch: 'blocked', externalImage: 'blocked', origin: undefined, storage: 'available', app: 'blocked' });
+  assert.match(probed.origin, /^http:\/\/127\.0\.0\.1:\d+$/); assert.notEqual(probed.origin, new URL(page.url()).origin); assert.notEqual(probed.origin, service.files.origin);
   assert.deepEqual(collected, []);
-  assert.ok(!(await page.locator('iframe.report-frame').getAttribute('sandbox')).includes('allow-same-origin'));
+  assert.ok(!(await page.locator('iframe.report-frame').getAttribute('sandbox')).includes('allow-top-navigation'));
   assert.ok(!(await page.locator('iframe.report-frame').getAttribute('src')).includes(new URL(page.frames().find(item => item.url().includes('/report.html')).url()).pathname.split('/')[2]));
   await popup(() => frame.getByText('External report link').click(), external);
   await frame.getByRole('heading', { name: 'Link report' }).waitFor();

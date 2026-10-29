@@ -1,8 +1,9 @@
 import { createReadStream } from 'node:fs';
+import http from 'node:http';
 import { readdir, readFile, stat, realpath, mkdir, writeFile, rename, unlink } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
-import { expandHome, realFile, secret, within } from './util.mjs';
+import { expandHome, json, publicError, realFile, secret, within } from './util.mjs';
 import { isMacOS } from './platform.mjs';
 import { serveReport } from './report-chrome.mjs';
 
@@ -43,7 +44,7 @@ export async function serveFile(request, response, file, info, headers = {}) {
 }
 
 export class Files {
-  constructor(repo) { this.repo = repo; this.grants = new Map(); this.scoped = new Map(); this.repoGrant = this.grant(repo); this.writes = Promise.resolve(); }
+  constructor(repo) { this.repo = repo; this.grants = new Map(); this.scoped = new Map(); this.sites = new Map(); this.repoGrant = this.grant(repo); this.writes = Promise.resolve(); }
   scopedGrant(root, relative) {
     const folder = relative.split('/').slice(0, -1);
     // A report can use its own card and the shared chrome, never the whole repository.
@@ -52,11 +53,41 @@ export class Files {
       : folder.length ? folder.join('/') + '/' : '';
     const now = Date.now();
     for (const [token, grant] of this.scoped) {
-      if (grant.expires < now) this.scoped.delete(token);
+      if (grant.expires < now) this.dropScoped(token);
       else if (grant.root === root && grant.prefix === prefix) { grant.expires = now + SCOPED_GRANT_MS; return token; }
     }
-    if (this.scoped.size >= 200) this.scoped.delete(this.scoped.keys().next().value);
+    if (this.scoped.size >= 200) this.dropScoped(this.scoped.keys().next().value);
     const token = secret(); this.scoped.set(token, { root, prefix, expires: now + SCOPED_GRANT_MS }); return token;
+  }
+  // Each report folder is served from its own local port. Its pages share one origin, so a
+  // multi-page report can frame and read its own pages, while other reports, the UI and the
+  // repository grant stay on different origins.
+  site(token) {
+    let site = this.sites.get(token);
+    if (site) return site.ready;
+    const server = http.createServer(async (request, response) => {
+      try {
+        if (request.headers.host !== site.host || !['GET', 'HEAD'].includes(request.method)) throw Object.assign(new Error('Not allowed'), { status: 403 });
+        await this.content(request, response, new URL(request.url, site.origin), token);
+      } catch (error) { if (!response.headersSent) json(response, error.status || 404, { error: publicError(error) }); }
+    });
+    site = { server, fresh: true };
+    site.ready = new Promise((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(0, '127.0.0.1', () => { site.host = `127.0.0.1:${server.address().port}`; site.origin = `http://${site.host}`; resolve(site); });
+    });
+    this.sites.set(token, site);
+    return site.ready;
+  }
+  dropScoped(token) {
+    this.scoped.delete(token);
+    const site = this.sites.get(token);
+    if (!site) return;
+    this.sites.delete(token);
+    site.server.closeAllConnections?.(); site.server.close();
+  }
+  async close() {
+    for (const token of [...this.sites.keys()]) this.dropScoped(token);
   }
   grant(root) {
     for (const [token, value] of this.grants) if (value === root) return token;
@@ -126,11 +157,15 @@ export class Files {
     this.writes = operation;
     return operation;
   }
-  async content(request, response, url) {
+  async content(request, response, url, siteToken = null) {
     const match = /^\/view\/([\w-]+)\/(.*)$/.exec(url.pathname);
-    const scoped = match && this.scoped.get(match[1]);
-    if (scoped && scoped.expires < Date.now()) this.scoped.delete(match[1]);
-    if (!match || !(this.grants.has(match[1]) || this.scoped.has(match[1]))) throw Object.assign(new Error('Preview not found'), { status: 404 });
+    // A folder's port serves that folder's grant only.
+    const scoped = match && (!siteToken || match[1] === siteToken) ? this.scoped.get(match[1]) : null;
+    if (scoped && scoped.expires < Date.now()) {
+      this.scoped.delete(match[1]); response.once('close', () => this.dropScoped(match[1]));
+      throw Object.assign(new Error('Preview not found'), { status: 404 });
+    }
+    if (!match || !(scoped || (!siteToken && this.grants.has(match[1])))) throw Object.assign(new Error('Preview not found'), { status: 404 });
     const relative = decodeURIComponent(match[2]).replaceAll('\\', '/');
     if (relative.split('/').some(secretPart)) throw Object.assign(new Error('Private application files cannot be loaded by reports'), { status: 403 });
     const root = scoped ? scoped.root : this.grants.get(match[1]);
@@ -149,7 +184,13 @@ export class Files {
     const { file, info } = await realFile(fileRoot, filePath);
     if (!info.isFile()) throw Object.assign(new Error('File not found'), { status: 404 });
     const headers = { 'Referrer-Policy': 'no-referrer', 'Access-Control-Allow-Origin': this.uiOrigin, 'Cross-Origin-Resource-Policy': 'cross-origin' };
-    const document = /\.(html?|svg)$/i.test(file);
+    const document = /\.(html?|svg)$/i.test(file), html = /\.html?$/i.test(file);
+    // HTML runs on its folder's port. SVG stays an opaque document on the shared port, so <img> keeps working in the UI.
+    if (html && !siteToken) {
+      const token = scoped ? match[1] : this.scopedGrant(root, relative), site = await this.site(token);
+      response.writeHead(302, { ...headers, 'Cache-Control': 'no-store', Location: `${site.origin}/view/${token}/${encodePath(relative)}${url.search}` });
+      response.end(); return;
+    }
     if (document && !scoped) {
       response.writeHead(302, { ...headers, 'Cache-Control': 'no-store', Location: `/view/${this.scopedGrant(root, relative)}/${encodePath(relative)}${url.search}` });
       response.end(); return;
@@ -160,9 +201,13 @@ export class Files {
       headers['Cache-Control'] = 'no-store';
     }
     if (document) {
-      const base = `${this.origin}/view/${match[1]}/`, own = base + encodePath(scoped.prefix);
+      const base = `${url.origin}/view/${match[1]}/`, own = base + encodePath(scoped.prefix);
       const shared = root === this.repo ? ` ${base}workspace/_shared/` : '';
-      headers['Content-Security-Policy'] = `sandbox allow-scripts allow-forms allow-popups allow-downloads; default-src 'none'; script-src 'unsafe-inline' ${own}${shared}; style-src 'unsafe-inline' ${own}${shared}; img-src data: blob: ${own}${shared}; media-src blob: ${own}; font-src data: ${own}${shared}; connect-src ${own}; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors ${this.uiOrigin}`;
+      const origin = html ? ' allow-same-origin' : '';
+      headers['Content-Security-Policy'] = `sandbox allow-scripts${origin} allow-forms allow-popups allow-downloads; default-src 'none'; script-src 'unsafe-inline' ${own}${shared}; style-src 'unsafe-inline' ${own}${shared}; img-src data: blob: ${own}${shared}; media-src blob: ${own}; font-src data: ${own}${shared}; connect-src ${own}; frame-src ${own}; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors ${this.uiOrigin} ${url.origin}`;
+      // A port can return in a later session for another folder; start each folder with empty storage.
+      const site = siteToken && this.sites.get(siteToken);
+      if (site?.fresh) { site.fresh = false; headers['Clear-Site-Data'] = '"storage"'; }
     }
     const serve = /\.html?$/i.test(file) ? serveReport : serveFile;
     await serve(request, response, file, info, headers, { parentOrigin: this.uiOrigin });
