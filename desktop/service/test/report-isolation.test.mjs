@@ -47,7 +47,7 @@ test('script-capable documents get an origin and an expiring grant for their own
     const policy = report.response.headers.get('content-security-policy'), folder = `${report.origin}/view/${report.token}/workspace/card/`;
     assert.match(policy, /^sandbox allow-scripts allow-same-origin allow-forms allow-popups allow-downloads;/);
     assert.ok(!policy.includes('allow-popups-to-escape-sandbox')); assert.ok(!policy.includes('allow-top-navigation'));
-    assert.ok(policy.includes(`connect-src ${folder};`)); assert.ok(policy.includes(`frame-src ${folder};`));
+    assert.ok(policy.includes(`connect-src ${folder};`)); assert.ok(policy.includes(`frame-src ${folder};`)); assert.ok(policy.includes("worker-src 'none';"));
     assert.ok(policy.includes("default-src 'none'")); assert.ok(policy.includes("form-action 'none'"));
     assert.ok(policy.endsWith(`frame-ancestors ${files.uiOrigin} ${report.origin}`));
     assert.ok(!policy.includes(repoToken));

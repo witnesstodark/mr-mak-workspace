@@ -204,7 +204,7 @@ export class Files {
       const base = `${url.origin}/view/${match[1]}/`, own = base + encodePath(scoped.prefix);
       const shared = root === this.repo ? ` ${base}workspace/_shared/` : '';
       const origin = html ? ' allow-same-origin' : '';
-      headers['Content-Security-Policy'] = `sandbox allow-scripts${origin} allow-forms allow-popups allow-downloads; default-src 'none'; script-src 'unsafe-inline' ${own}${shared}; style-src 'unsafe-inline' ${own}${shared}; img-src data: blob: ${own}${shared}; media-src blob: ${own}; font-src data: ${own}${shared}; connect-src ${own}; frame-src ${own}; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors ${this.uiOrigin} ${url.origin}`;
+      headers['Content-Security-Policy'] = `sandbox allow-scripts${origin} allow-forms allow-popups allow-downloads; default-src 'none'; script-src 'unsafe-inline' ${own}${shared}; style-src 'unsafe-inline' ${own}${shared}; img-src data: blob: ${own}${shared}; media-src blob: ${own}; font-src data: ${own}${shared}; connect-src ${own}; frame-src ${own}; worker-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors ${this.uiOrigin} ${url.origin}`;
       // A port can return in a later session for another folder; start each folder with empty storage.
       const site = siteToken && this.sites.get(siteToken);
       if (site?.fresh) { site.fresh = false; headers['Clear-Site-Data'] = '"storage"'; }

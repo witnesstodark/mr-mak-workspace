@@ -15,15 +15,18 @@ const probe = `<pre id="probe"></pre><script>(async () => {
   const read = async url => { try { const response = await fetch(url); return response.ok ? await response.text() : 'status ' + response.status; } catch { return 'blocked'; } };
   const image = url => new Promise(resolve => { const element = new Image(); element.onload = () => resolve('loaded'); element.onerror = () => resolve('blocked'); element.src = url; });
   const storage = () => { try { localStorage.setItem('probe', '1'); return 'available'; } catch { return 'blocked'; } };
+  const worker = () => new Promise(resolve => { try { const item = new Worker('worker.js'); item.onmessage = () => resolve('started'); item.onerror = () => resolve('blocked'); setTimeout(() => resolve('blocked'), 1500); } catch { resolve('blocked'); } });
+  const serviceWorker = async () => { try { await navigator.serviceWorker.register('worker.js'); return 'registered'; } catch { return 'blocked'; } };
   document.getElementById('probe').textContent = JSON.stringify({
     own: await read('data.json'), otherReport: await read('../other/data.json'), context: await read('../../context/goals.md'),
     repositoryRoot: await read('/view/' + location.pathname.split('/')[2] + '/README.md'),
     externalFetch: await read('https://browser-check.example/collect?fetch'), externalImage: await image('https://browser-check.example/collect?image'),
-    origin: self.origin, storage: storage(), app: (() => { try { return parent.document ? 'readable' : 'blocked'; } catch { return 'blocked'; } })(),
+    origin: self.origin, storage: storage(), worker: await worker(), serviceWorker: await serviceWorker(), app: (() => { try { return parent.document ? 'readable' : 'blocked'; } catch { return 'blocked'; } })(),
   });
 })();</script>`;
 await mkdir(path.join(repo, 'workspace/other'), { recursive: true }); await mkdir(path.join(repo, 'context'), { recursive: true });
 await writeFile(path.join(repo, 'workspace/test/data.json'), 'own-report-data');
+await writeFile(path.join(repo, 'workspace/test/worker.js'), "self.postMessage?.('ran'); fetch('https://browser-check.example/collect?worker')");
 await writeFile(path.join(repo, 'workspace/other/data.json'), 'other-report-data');
 await writeFile(path.join(repo, 'context/goals.md'), 'private-context');
 await writeFile(path.join(repo, 'README.md'), 'repository-readme');
@@ -60,7 +63,7 @@ try {
   assert.equal(await page.evaluate(() => window.__MRMAK_BOOTSTRAP_TOKEN__), undefined);
   assert.equal(new URL(page.url()).searchParams.get('token'), null);
   const probed = JSON.parse(await frame.locator('#probe').textContent());
-  assert.deepEqual({ ...probed, origin: undefined }, { own: 'own-report-data', otherReport: 'blocked', context: 'blocked', repositoryRoot: 'blocked', externalFetch: 'blocked', externalImage: 'blocked', origin: undefined, storage: 'available', app: 'blocked' });
+  assert.deepEqual({ ...probed, origin: undefined }, { own: 'own-report-data', otherReport: 'blocked', context: 'blocked', repositoryRoot: 'blocked', externalFetch: 'blocked', externalImage: 'blocked', origin: undefined, storage: 'available', worker: 'blocked', serviceWorker: 'blocked', app: 'blocked' });
   assert.match(probed.origin, /^http:\/\/127\.0\.0\.1:\d+$/); assert.notEqual(probed.origin, new URL(page.url()).origin); assert.notEqual(probed.origin, service.files.origin);
   assert.deepEqual(collected, []);
   assert.ok(!(await page.locator('iframe.report-frame').getAttribute('sandbox')).includes('allow-top-navigation'));

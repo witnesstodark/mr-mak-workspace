@@ -2,7 +2,7 @@
 
 ## 0.6.2 - 2026-10-29
 
-- Give each report folder its own local origin. Pages of one report can frame and read each other again, so multi-page reports such as a project wiki show their articles. Other reports, the app and the repository grant stay on separate origins, and a folder starts each session with empty browser storage.
+- Give each report folder its own local origin. Pages of one report can frame and read each other again, so multi-page reports such as a project wiki show their articles. Other reports, the app and the repository grant stay on separate origins, a folder starts each session with empty browser storage, and reports cannot start workers or service workers.
 
 ## 0.6.1 - 2026-10-24
 
