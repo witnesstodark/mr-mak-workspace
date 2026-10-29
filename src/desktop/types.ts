@@ -11,6 +11,11 @@ export interface ChatSession {
   activity: 'idle' | 'working' | 'waiting'; unread: boolean; completionVersion: number
   tabOrder: number; tabColor: string | null; group: string | null
   open: boolean; pinned: boolean; updatedAt: string; preview?: string; hasConversation?: boolean; restoreError?: string | null
+  contextUsage?: ContextUsage
+}
+export interface ContextUsage {
+  usedTokens: number | null; limitTokens: number | null; source: AgentId
+  updatedAt: string | null; reason: 'waiting' | 'compacted' | 'unavailable'
 }
 export interface RecentProject { path: string; name: string; sources: ('workspace' | 'mrmak' | 'claude' | 'codex')[]; pinned: boolean; lastUsedAt: string | null }
 export interface Handoff { status: 'summarizing' | 'opening' | 'done' | 'failed'; error?: string | null; sessionId?: string | null; file?: string | null; at: string }

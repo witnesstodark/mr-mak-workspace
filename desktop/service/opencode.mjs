@@ -54,14 +54,19 @@ export async function readOpencodeState(stateDir, chatId) {
 }
 
 export function watchOpencode(stateDir, session, launchId, update) {
-  let stopped = false, busy = false, revision = -1;
+  let stopped = false, busy = false, revision = -1, contextRevision = -1;
   const poll = async () => {
     if (stopped || busy) return;
     busy = true;
     try {
       const state = await readOpencodeState(stateDir, session.id);
       if (!stopped && state?.launchId === launchId && Number.isInteger(state.revision) && state.revision > revision) {
-        revision = state.revision; update(state);
+        revision = state.revision;
+        // Activity snapshots carry the last context too. Forward it only once,
+        // so an input/reset cannot be undone by an unrelated activity change.
+        const freshContext = Number.isInteger(state.contextRevision) && state.contextRevision > contextRevision;
+        if (freshContext) contextRevision = state.contextRevision;
+        update({ ...state, contextUsage: freshContext ? state.contextUsage : undefined });
       }
     } finally { busy = false; }
   };

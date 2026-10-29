@@ -13,7 +13,8 @@ import { englishTitle, groupLabel, restoredTitle } from './titles.mjs';
 import { defaultWorkerEffort, workerEfforts } from './effort.mjs';
 import { ptyOptions } from './platform.mjs';
 import { opencodeVersion, opencodeEnvironment, readOpencodeState, watchOpencode } from './opencode.mjs';
-import { prepareAntigravityLog, readAntigravityConversation, validAntigravityId, watchAntigravity } from './antigravity.mjs';
+import { prepareAntigravityLog, readAntigravityConversation, validAntigravityId, watchAntigravity, watchAntigravityContext } from './antigravity.mjs';
+import { unknownContext } from './native-context.mjs';
 
 const { Terminal } = headless;
 // Native CLIs record getcwd(): symlinks resolved (/tmp -> /private/tmp, cloud
@@ -25,7 +26,7 @@ async function workingFolder(value) {
 }
 const publicSession = session => {
   const { id, name, agent, cwd, bypass, effort, status, createdAt, lastOutputAt, lastInputAt, exitCode, nativeId, attention, activity, unread, completionVersion, lastCompletedId, cols, rows, open, pinned, tabOrder, tabColor, group, updatedAt, preview, hasConversation, restoreError } = session;
-  return { id, name, agent, cwd, bypass, effort, status, createdAt, lastOutputAt, lastInputAt, exitCode, nativeId, attention, activity, unread, completionVersion, lastCompletedId, cols, rows, open, pinned, tabOrder, tabColor, group, updatedAt, preview, hasConversation, restoreError };
+  return { id, name, agent, cwd, bypass, effort, status, createdAt, lastOutputAt, lastInputAt, exitCode, nativeId, attention, activity, unread, completionVersion, lastCompletedId, cols, rows, open, pinned, tabOrder, tabColor, group, updatedAt, preview, hasConversation, restoreError, contextUsage: session.contextUsage };
 };
 
 // Grouped tabs sit together at the position of their earliest open member; a tab
@@ -65,7 +66,7 @@ export class Sessions extends EventEmitter {
   }
 
   make(metadata) {
-    return { activity: 'idle', unread: false, completionVersion: 0, tabOrder: this.items.size, tabColor: null, group: null, ...metadata, effort: ['codex', 'claude', 'antigravity'].includes(metadata.agent) ? metadata.effort || defaultWorkerEffort : undefined, terminal: null, serializer: null, process: null, sequence: 0, pendingOutput: '', outputTimer: null };
+    return { activity: 'idle', unread: false, completionVersion: 0, tabOrder: this.items.size, tabColor: null, group: null, ...metadata, contextUsage: unknownContext(metadata.agent), effort: ['codex', 'claude', 'antigravity'].includes(metadata.agent) ? metadata.effort || defaultWorkerEffort : undefined, terminal: null, serializer: null, process: null, sequence: 0, pendingOutput: '', outputTimer: null };
   }
 
   async hydrate(session) {
@@ -164,6 +165,7 @@ export class Sessions extends EventEmitter {
   }
 
   async launch(session, resumeId, nativeWatch, first = {}) {
+    session.contextUsage = unknownContext(session.agent);
     let env = childEnvironment(this.repo);
     let opencodeMajor;
     if (session.agent === 'opencode') {
@@ -235,12 +237,19 @@ export class Sessions extends EventEmitter {
     this.changed(session);
     // Discovery is read-only, and only accepts an unambiguous native session.
     this.beginDiscovery(session);
-    if (session.agent === 'antigravity') session.stopNativeWatch = watchAntigravity(this.stateDir, session.id, id => {
-      if (session.process === proc) this.bindAntigravity(session, id);
-    });
+    if (session.agent === 'antigravity') {
+      const stopLog = watchAntigravity(this.stateDir, session.id, id => {
+        if (session.process === proc) this.bindAntigravity(session, id);
+      });
+      const stopContext = watchAntigravityContext(() => session.nativeId, usage => {
+        if (session.process === proc) this.nativeEvent(session, { kind: 'context-usage', usage });
+      });
+      session.stopNativeWatch = () => { stopLog(); stopContext(); };
+    }
     if (session.agent === 'opencode') session.stopNativeWatch = watchOpencode(this.stateDir, session, env.MRMAK_OPENCODE_LAUNCH_ID, state => {
       this.bindNative(session, { id: state.nativeId });
       if (session.nativeId !== state.nativeId) return;
+      if (state.contextUsage) this.nativeEvent(session, { kind: 'context-usage', usage: state.contextUsage });
       if (state.completion) this.nativeEvent(session, { kind: 'turn-completed', id: state.completion });
       if (state.activity === 'working') this.nativeEvent(session, { kind: 'turn-started' });
       else if (state.activity === 'waiting') this.nativeEvent(session, { kind: 'attention' });
@@ -261,6 +270,8 @@ export class Sessions extends EventEmitter {
   watchNative(session, file, offset = 0) {
     if (!session.process) return;
     session.stopNativeWatch?.();
+    session.contextUsage = unknownContext(session.agent);
+    this.changed(session);
     const stopTail = tailNativeFile(file, session.agent, event => this.nativeEvent(session, event), offset);
     if (session.agent !== 'codex') { session.stopNativeWatch = stopTail; return; }
     // A Codex rewind continues the thread in a new rollout, and /new starts another
@@ -284,6 +295,11 @@ export class Sessions extends EventEmitter {
   }
 
   nativeEvent(session, event) {
+    if (event.kind === 'context-usage') {
+      session.contextUsage = event.usage;
+      this.changed(session);
+      return;
+    }
     if (event.kind === 'turn-started') {
       if (session.activity === 'working') return;
       session.activity = 'working'; session.attention = false;
@@ -383,6 +399,10 @@ export class Sessions extends EventEmitter {
     if (coordinator && session.agent === 'shell') throw new Error('Mr. Mak can send messages to agent chats; type shell commands directly in the local shell.');
     if (typeof data !== 'string' || data.length > 64000) throw new Error('Message is too large');
     if (coordinator && Date.now() - Date.parse(session.lastInputAt || 0) < 2500) throw new Error('You are typing in this chat. Wait a moment before sending through Mr. Mak.');
+    // Enter can submit /compact, /clear, /new or /resume in a native CLI. Drop
+    // the previous snapshot until fresh telemetry arrives; do not parse the TUI
+    // input editor or assume that submitted text was accepted as a command.
+    if (data.includes('\r') || data.includes('\n') || submit) session.contextUsage = unknownContext(session.agent);
     if (coordinator) {
       // Bracketed paste keeps multi-line text a single CLI prompt, then Enter submits it.
       const clean = data.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '').replaceAll('\r', '');

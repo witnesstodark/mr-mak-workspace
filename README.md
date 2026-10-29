@@ -58,6 +58,10 @@ Workspace preview, resolved against the chat's folder.
   started it, and how long each has been running.
 - **Know the model.** The status bar shows the model the chat last used, next to
   reasoning effort and permissions.
+- **Check session context.** The Context row shows native context usage. Codex,
+  Claude and Antigravity show percent and used/limit tokens. OpenCode shows
+  reported tokens with an unknown limit. Missing data is marked Unknown or Unavailable.
+  See [context usage](docs/session-context-usage.md) for data sources and limits.
 - **Read aloud on the desktop** with the same local voices as the phone.
   *Preparing audio…* shows while your computer generates each part.
 

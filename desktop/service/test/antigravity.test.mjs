@@ -53,6 +53,9 @@ test('Native ID discovery ignores echoed UUIDs, partial records and unrelated me
   assert.equal(antigravityConversation(line(idA) + `tool result ${idB}\n`), idA);
   assert.equal(antigravityConversation(line(idA) + line(idB, 'Resuming')), idB);
   assert.equal(antigravityConversation(line('not-a-uuid')), null);
+  // agy 1.4.7 appends the backend after the ID.
+  assert.equal(antigravityConversation(`I1024 10:32:30.034484    1066 server.go:1225] Created conversation ${idA} (backend=BACKEND_TYPE_UNSPECIFIED)\n`), idA);
+  assert.equal(antigravityConversation(`I1024 10:32:30.034484    1066 server.go:1225] Created conversation ${idA} (backend=x) extra\n`), null);
   assert.throws(() => antigravityLogPath(os.tmpdir(), '../secret'), /Invalid/);
 });
 

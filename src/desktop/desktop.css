@@ -203,4 +203,7 @@
 .handoff-offer button{padding:5px 10px;border:1px solid color-mix(in srgb,var(--text) 12%,transparent);border-radius:7px;background:transparent;color:var(--text);font-size:10.5px}.handoff-offer button.primary{border-color:color-mix(in srgb,var(--pink) 33%,transparent);background:color-mix(in srgb,var(--pink) 10%,transparent);color:var(--text-bright)}
 .handoff-offer.working>i{width:7px;height:7px;border-radius:50%;background:var(--pink);animation:conversation-pulse 1.2s ease-in-out infinite}.handoff-offer.failed{background:var(--surface-solid);color:var(--amber)}
 .chat-status-model{color:var(--text)}
+.chat-context-usage{display:flex;align-items:center;flex-wrap:wrap;gap:8px;flex-shrink:0;padding:6px 16px;border-bottom:1px solid var(--hairline);color:var(--text-dim);font-size:11px;line-height:1.5}
+.chat-context-usage strong{margin-left:8px;color:var(--text);font-weight:500;font-variant-numeric:tabular-nums}
+.chat-context-usage meter{width:64px;height:8px;accent-color:var(--pink)}
 .option-select-setting{display:flex;flex-direction:column;gap:6px;padding:8px 9px;border-top:1px solid color-mix(in srgb,var(--text) 12%,transparent);font-size:11px;color:var(--text-dim)}.option-select-setting small{color:var(--text-dim);font-size:9.5px;margin-left:4px}.option-select-setting select{padding:5px 7px;border:1px solid color-mix(in srgb,var(--text) 12%,transparent);border-radius:6px;background:var(--surface-solid);color:var(--text);font:inherit;font-size:11px}
