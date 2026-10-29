@@ -1,9 +1,11 @@
 # Project skills
 
 Twenty skills live in this project. `.agents/skills` is the maintained source
-for Codex; `.claude/skills` contains complete, identical copies for Claude Code,
-including scripts and references. Both Skills sections open the full instructions.
-These are local project files, not global installations.
+for Codex. `.claude/skills` contains complete, identical copies for Claude Code,
+including scripts and references. Cursor Agent reads both directories, so this
+repository does not keep a third copy under `.cursor/skills`. Both Skills
+sections in Files open the full instructions. These are local project files,
+not global installations.
 
 Claude reads the instructions in its own `SKILL.md` when a skill is used; a
 Markdown link is just a request to read another file, not automatic inheritance.

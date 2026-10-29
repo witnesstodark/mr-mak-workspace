@@ -30,7 +30,7 @@ test('new and imported chats default to xhigh; explicit efforts survive saving a
       assert.equal(imported.effort, 'xhigh');
       expected.set(imported.id, 'xhigh');
     }
-    for (const agent of ['shell', 'kimi', 'opencode']) assert.equal(sessions.make({ agent }).effort, undefined);
+    for (const agent of ['shell', 'kimi', 'opencode', 'cursor']) assert.equal(sessions.make({ agent }).effort, undefined);
   } finally { await sessions.close(); }
   const restored = await new Sessions(repo, stateDir).init();
   try {

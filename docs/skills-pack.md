@@ -1,8 +1,8 @@
 # Mr. Mak agent skills
 
-This pack contains 20 project-local workflows for Codex CLI and Claude Code.
-You can use them in a game or creative project without installing Mr. Mak's
-desktop app. Sign in to at least one of those CLIs first.
+This pack contains 20 project-local workflows for Codex CLI, Claude Code, and
+Cursor Agent. You can use them in a game or creative project without installing
+Mr. Mak's desktop app. Sign in to at least one of those CLIs first.
 
 Read `docs/skills.md` for the complete index. The six new game workflows cover
 VFX, UI, animation integration, levels, audio and native visual review. Existing
@@ -13,8 +13,9 @@ inspection, Workspace reports and local dictation setup.
 
 1. Extract the ZIP to a temporary folder. Keep your project files where they are.
 2. Ask your agent to inspect the index and choose the skills useful for this
-   project. Copy each whole folder from `.agents/skills/` for Codex or
-   `.claude/skills/` for Claude. Use both if you use both agents.
+   project. Copy each whole folder from `.agents/skills/` for Codex or Cursor
+   Agent, or from `.claude/skills/` for Claude. Cursor also reads
+   `.claude/skills/`. Copy both trees when the project uses Claude.
 3. Merge the required support files listed below. Preserve your own instructions,
    edited skills and report styles. Do not replace `AGENTS.md`, `CLAUDE.md`,
    context, MCP configuration or existing Workspace cards.

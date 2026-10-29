@@ -13,7 +13,7 @@ the same app from source.
 
 Prerequisites: Node.js 22.20+, [Rust](https://rustup.rs), Xcode Command Line Tools
 (`xcode-select --install`; `./setup.sh check` reports them), and at least one agent CLI
-(Claude Code, Codex or OpenCode).
+(Claude Code, Codex, OpenCode or Cursor Agent).
 
 ```bash
 ./setup.sh check      # report prerequisites

@@ -4,10 +4,10 @@ Mr. Mak is a local desktop workspace for working with several agents. Its files
 are ordinary project files, and its chats are ordinary CLI sessions. You can
 keep using the same agents outside the app.
 
-**Required before setup: Codex CLI, Claude Code CLI or OpenCode, installed and
-configured with your own account.** Use at least one to guide the setup below.
-The optional voice coordinator requires Codex specifically; Kimi is another
-available terminal integration.
+**Required before setup: Codex CLI, Claude Code CLI, OpenCode or Cursor Agent,
+installed and configured with your own account.** Use at least one to guide the
+setup below. The optional voice coordinator requires Codex specifically; Kimi
+is another available terminal integration.
 
 ## Choose a folder
 
@@ -49,6 +49,7 @@ your operating system:
 - [Codex CLI](https://developers.openai.com/codex/cli)
 - [Claude Code](https://code.claude.com/docs/en/setup)
 - [OpenCode](https://opencode.ai/docs/)
+- [Cursor Agent](https://cursor.com/docs/cli/overview) (`agent`)
 
 [Kimi Code CLI](https://moonshotai.github.io/kimi-cli/en/) is available as an
 additional terminal integration after the base setup.

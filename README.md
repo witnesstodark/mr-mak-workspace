@@ -4,7 +4,7 @@ Your CLI agents, a visual Workspace, and access from your phone.
 
 Mr. Mak has **two connected desktop windows**:
 
-- **Chats** is where you give tasks to Codex, Claude Code, Antigravity, OpenCode or Kimi. Each
+- **Chats** is where you give tasks to Codex, Claude Code, Antigravity, OpenCode, Kimi or Cursor Agent. Each
   conversation runs in a real CLI terminal, with its own tab and saved history.
 - **Workspace** is where you review the results: project pages, research, images,
   saved prompts and reports. Files, skills, MCP connections and settings sit
@@ -174,7 +174,7 @@ the optional Live voice coordinator still uses OpenAI API billing.
 
 ## Before you start
 
-**Prerequisite: install and configure Codex CLI, Claude Code CLI, Antigravity, OpenCode or Kimi
+**Prerequisite: install and configure Codex CLI, Claude Code CLI, Antigravity, OpenCode, Kimi or Cursor Agent
 before setting up Mr. Mak.** You need at least one. They can run side by side
 and are separate installations, not bundled with Mr. Mak.
 
@@ -183,6 +183,7 @@ and are separate installations, not bundled with Mr. Mak.
 - [Install OpenCode](https://opencode.ai/docs/)
 - [Install Antigravity CLI](https://www.antigravity.google/docs/cli/install/)
 - [Install Kimi Code CLI](https://moonshotai.github.io/kimi-cli/)
+- [Install Cursor Agent](https://cursor.com/docs/cli/overview) (`agent`)
 
 **Do I need an API key?** No, not for Claude Code or Codex chats when you sign
 in with an eligible subscription. Mr. Mak runs the real CLI with its existing
@@ -307,8 +308,9 @@ integration, level design, audio and native visual review**. Read the
 into another project.
 
 The maintained instructions live in `.agents/skills`. Complete copies in
-`.claude/skills` include the same instructions and resources. Both agents get the
-full skills. Run `npm run skills:sync` after editing the maintained source.
+`.claude/skills` include the same instructions and resources. Codex and Claude
+each read their own folder. Cursor Agent reads both, so no `.cursor/skills`
+copy is kept. Run `npm run skills:sync` after editing the maintained source.
 Copy a skill together with its referenced resources; keep `.env`, job receipts
 and account configuration private.
 
