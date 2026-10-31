@@ -39,7 +39,7 @@ export function useWorkspace() {
       if (res && !res.ok) throw new Error(`HTTP ${res.status}`)
       const text = res ? await res.text() : JSON.stringify(await api<WorkspaceState>('/workspace'))
       if (text !== rawRef.current) {
-        const parsed = JSON.parse(text) as WorkspaceState
+        const parsed = JSON.parse(text.replace(/^\uFEFF/, '')) as WorkspaceState
         rawRef.current = text
         setWorkspace(parsed)
       }

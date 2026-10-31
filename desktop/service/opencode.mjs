@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { PLAN_SERVER } from './chat-plan.mjs';
 import { promisify } from 'node:util';
 import { randomUUID } from 'node:crypto';
 import { stat, readFile } from 'node:fs/promises';
@@ -24,7 +25,7 @@ export async function opencodeVersion(env) {
   return versions.get(key);
 }
 
-export function opencodeEnvironment(env, { stateDir, session, major, launchId = randomUUID() }) {
+export function opencodeEnvironment(env, { stateDir, session, major, launchId = randomUUID(), instructions = null, planServer = null }) {
   if (session.nativeId && !validSessionId(session.nativeId)) throw new Error('Use an OpenCode session ID starting with ses_.');
   let config;
   try { config = env.OPENCODE_CONFIG_CONTENT ? JSON.parse(env.OPENCODE_CONFIG_CONTENT) : {}; }
@@ -33,9 +34,14 @@ export function opencodeEnvironment(env, { stateDir, session, major, launchId = 
   const key = major >= 2 ? 'plugins' : 'plugin';
   if (config[key] !== undefined && !Array.isArray(config[key])) throw new Error(`OpenCode ${key} must be an array.`);
   const plugin = new URL(major === 2 ? './opencode/v2/' : './opencode/v1.mjs', import.meta.url).href;
+  if (config.instructions !== undefined && !Array.isArray(config.instructions)) throw new Error('OpenCode instructions must be an array.');
+  // The project's rules file joins the instruction files OpenCode reads.
+  const extra = instructions ? { instructions: [...(config.instructions || []), instructions] } : {};
+  // The Plan tool, when the owner turned it on.
+  if (planServer) extra.mcp = { ...(config.mcp || {}), [PLAN_SERVER]: { type: 'local', command: [planServer.command, ...planServer.args], environment: planServer.env, enabled: true } };
   return {
     ...env,
-    OPENCODE_CONFIG_CONTENT: JSON.stringify({ ...config, [key]: [...(config[key] || []), plugin] }),
+    OPENCODE_CONFIG_CONTENT: JSON.stringify({ ...config, ...extra, [key]: [...(config[key] || []), plugin] }),
     MRMAK_OPENCODE_STATE: opencodeStatePath(stateDir, session.id),
     MRMAK_OPENCODE_CHAT_ID: session.id,
     MRMAK_OPENCODE_LAUNCH_ID: launchId,

@@ -63,7 +63,7 @@ for (const [index, id] of ids.entries()) {
   session.process = { write: data => writes.push({ id, data }), resize: () => {}, onExit: callback => { exits.add(callback); return { dispose: () => exits.delete(callback) }; }, kill: () => { session.process = null; session.status = 'closed'; service.sessions.changed(session); for (const callback of [...exits]) callback({ exitCode: 0 }); } };
   service.sessions.items.set(id, session); await service.sessions.hydrate(session);
   session.preview = 'Latest notes: [Review the animation](C:/Projects/game/characters/' + 'very-long-character-name-'.repeat(12) + '/review.html) and https://example.com/research/' + 'reference'.repeat(40);
-  await new Promise(resolve => session.terminal.write(Array.from({ length: 90 }, (_, line) => `Line ${line + 1}: live agent output\r\n`).join('') + `╭${'─'.repeat(60)}╮\r\n│ A long reply line that the desktop terminal draws at its full width and the phone wraps.      │\r\n`, resolve));
+  await new Promise(resolve => session.terminal.write(Array.from({ length: 90 }, (_, line) => `Line ${line + 1}: live agent output\r\n`).join('') + `╭${'─'.repeat(60)}╮\r\n│ A framed row that the desktop terminal draws at its full width keeps its shape on the phone.    │\r\nA long prose reply wraps to the phone screen instead of running off its edge.\r\n`, resolve));
 }
 service.mobile.transcripts.read = async session => ({ supported: true, activity: [{ id: 'tool-one', name: 'Read test file', status: 'completed', at: new Date().toISOString() }],
   agents: [{ id: 'agent-one', name: 'Bot Coder: task 8', type: 'general-purpose', step: 'Bash · Run the tests', startedAt: new Date(Date.now() - 5 * 60000).toISOString(), updatedAt: new Date().toISOString() }],
@@ -488,6 +488,42 @@ try {
   service.mobile.transcripts.read = readerBeforeScroll;
   await phone.waitForFunction(() => document.querySelectorAll('.mobile-message').length === 5);
 
+  // Terminal menus answered from the phone: an approval, then Claude Code's
+  // multiple choice, whose boxes change in the page until Submit sends them.
+  const readScreen = service.sessions.read.bind(service.sessions);
+  let menu = { focus: 0 };
+  const menuScreen = () => menu.checked
+    ? ['│ Which checks should run?', '', ...['Unit', 'Browser', 'Type something'].map((label, i) => `${menu.focus === i ? '❯' : ' '} ${i + 1}. [${menu.checked[i] ? '✔' : ' '}] ${label}`), `${menu.focus === 3 ? '❯' : ' '}    Submit`, '', 'Enter to select · Tab/Arrow keys to navigate · Esc to cancel'].join('\n')
+    : ['Allow command?', '$ npm test', '', ...['Yes, proceed', 'No'].map((label, i) => `${menu.focus === i ? '❯' : ' '} ${i + 1}. ${label}`), 'Press enter to confirm'].join('\n');
+  service.sessions.read = async (id, lines) => menu ? { screen: menuScreen() } : readScreen(id, lines);
+  const menuWrites = [], writers = ids.map(id => {
+    const process = service.sessions.get(id).process, write = process.write;
+    process.write = data => {
+      if (!menu) return write(data);
+      menuWrites.push(data);
+      if (data === '\x1b[B') menu.focus++;
+      if (data === '\x1b[A') menu.focus--;
+      if (data === ' ' && menu.checked) menu.checked[menu.focus] = !menu.checked[menu.focus];
+      if (data === '\r') menu = menu.checked ? null : { focus: 0, checked: [false, false, false] };
+    };
+    return () => { process.write = write; };
+  });
+  await phone.locator('.conversation-prompt pre').getByText('$ npm test').waitFor();
+  await phone.getByRole('button', { name: '2 No', exact: true }).click();
+  await phone.getByRole('checkbox', { name: /Browser/ }).waitFor();
+  assert.deepEqual(menuWrites, ['\x1b[B', '\r']);
+  await expect(phone.getByRole('button', { name: /Type something/ })).toBeDisabled();
+  await phone.getByRole('checkbox', { name: /Browser/ }).click();
+  await expect(phone.getByRole('checkbox', { name: /Browser/ })).toHaveAttribute('aria-checked', 'true');
+  assert.equal(menuWrites.length, 2, 'Checking a box on the phone sends no keys');
+  const option = await phone.getByRole('checkbox', { name: /Unit/ }).boundingBox();
+  assert.ok(option.height >= 44 && option.x >= 0 && option.x + option.width <= phone.viewportSize().width, 'Menu options are thumb-sized and on screen');
+  await phone.locator('.conversation-prompt').screenshot({ path: path.join(repo, 'phone-multiple-choice.png') });
+  await phone.getByRole('button', { name: 'Submit · 1', exact: true }).click();
+  await phone.locator('.conversation-prompt').waitFor({ state: 'detached' });
+  assert.deepEqual(menuWrites.slice(2), ['\x1b[B', ' ', '\x1b[B', '\x1b[B', '\r']);
+  service.sessions.read = readScreen; for (const restore of writers) restore();
+
   assert.deepEqual(ids.map(id => ({ cols: service.sessions.get(id).cols, rows: service.sessions.get(id).rows })), dimensions);
   assert.equal((await (await fetch(`${service.origin}/api/bootstrap`, { headers: { Authorization: `Bearer ${service.token}` } })).json()).selectedId, desktopSelected);
   const input = phone.getByRole('textbox', { name: 'Message this chat' });
@@ -600,10 +636,12 @@ try {
     const keyLayout = await phone.locator('.mobile-terminal-keys').evaluate(node => ({ client: node.clientWidth, scroll: node.scrollWidth, keys: [...node.querySelectorAll('button')].map(button => { const r = button.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, width: r.width, height: r.height }; }) }));
     assert.ok(keyLayout.scroll <= keyLayout.client + 1);
     assert.equal(new Set(keyLayout.keys.map(r => r.top)).size, 1, 'Terminal controls occupy one row');
-    const wrapped = await phone.locator('.mobile-terminal-reader').evaluate(node => ({ width: node.clientWidth, scroll: node.scrollWidth, text: node.textContent }));
+    const wrapped = await phone.locator('.mobile-terminal-reader').evaluate(node => ({ width: node.clientWidth, scroll: node.scrollWidth, text: node.textContent, blocks: [...node.querySelectorAll('pre > span')].map(block => ({ fixed: block.classList.contains('mobile-terminal-fixed'), text: block.textContent, client: block.clientWidth, scroll: block.scrollWidth, height: block.getBoundingClientRect().height })) }));
     assert.ok(wrapped.text.trim(), 'Wrapped terminal shows the terminal text');
-    assert.match(wrapped.text, /│ A long reply line that the desktop terminal draws at its full width and the phone wraps\.$/, 'Box padding and its right border are removed');
-    assert.ok(!wrapped.text.includes('─'.repeat(7)), 'Long rules are shortened');
+    const frame = wrapped.blocks.find(block => block.text.includes('A framed row')), prose = wrapped.blocks.at(-1);
+    assert.ok(frame?.fixed && frame.text.includes(`╭${'─'.repeat(60)}╮`) && frame.text.endsWith('on the phone.    │'), 'A frame keeps its border and padding');
+    assert.ok(frame.scroll > frame.client + 1, `A frame scrolls sideways as its own block at ${width}px`);
+    assert.ok(!prose.fixed && prose.text === 'A long prose reply wraps to the phone screen instead of running off its edge.' && prose.scroll <= prose.client + 1 && prose.height > 30, `Prose wraps at ${width}px`);
     assert.ok(wrapped.scroll <= wrapped.width + 1, `Wrapped terminal needs no horizontal scrolling at ${width}px`);
     assert.ok(keyLayout.keys.every(r => r.left >= 0 && r.right <= width && r.width >= 30 && r.height >= 44));
   }
@@ -660,7 +698,7 @@ try {
   assert.equal(await phone.locator('.mobile-header h1').innerText(), 'A useful report');
   await expect.poll(() => frame.locator('#delayed-content').evaluate(node => node.offsetHeight)).toBe(2200);
   const htmlIdentity = await frame.locator('body').evaluate(() => { window.testReportIdentity = Math.random(); location.hash = '#chapter-two'; window.scrollTo(0,500); document.getElementById('nested-scroll').scrollTop = 180; return window.testReportIdentity; });
-  const reportKey = 'mrmak.mobile.report.mobile-report.0';
+  const reportKey = 'mrmak.mobile.report.mobile-report.page.' + encodeURIComponent('workspace/report/index.html');
   await expect.poll(() => phone.evaluate(key => JSON.parse(localStorage.getItem(key) || '{}').top, reportKey)).toBe(500);
   await phone.getByRole('button', { name: 'Chats', exact: true }).click();
   await expect(stableDraft).toBeVisible();

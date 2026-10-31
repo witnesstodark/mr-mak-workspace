@@ -16,6 +16,8 @@ import { ConversationTranscripts } from './mobile-transcript.mjs';
 import { projectKey, recentProjects } from './recent-projects.mjs';
 import { MobileReports } from './mobile-reports.mjs';
 import { MobileDictation } from './mobile-dictation.mjs';
+import { answerPrompt, readPrompt } from './terminal-prompt.mjs';
+import { MobilePush } from './mobile-push.mjs';
 
 const digest = value => createHash('sha256').update(value).digest('hex');
 const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status }); };
@@ -23,22 +25,24 @@ const uuid = value => typeof value === 'string' && /^[a-f0-9-]{36}$/i.test(value
 const COOKIE = 'mrmak_mobile';
 const PAIR_TTL = 5 * 60 * 1000;
 const DEVICE_TTL = 180 * 24 * 60 * 60 * 1000;
+const ENABLE_RETRIES = [10, 30, 60, 120, 300].map(seconds => seconds * 1000);
 const DEVICE_IDLE_TTL = 30 * 24 * 60 * 60 * 1000;
 const send = (ws, value) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(value)); };
 
 export class MobileGateway {
-  constructor({ repo, uiDir, stateDir, sessions, attachments, settings, changed, closeChat, transport = new TailscaleTransport(), dictation = new MobileDictation(repo), chooseDictation, readAloud = new LocalReadAloud(repo), transcripts = new ConversationTranscripts() }) {
-    Object.assign(this, { repo, uiDir, sessions, attachments, settings, changed, closeChat, transport });
+  constructor({ repo, uiDir, stateDir, sessions, attachments, settings, changed, closeChat, transport = new TailscaleTransport(), dictation = new MobileDictation(repo), chooseDictation, readAloud = new LocalReadAloud(repo), transcripts = new ConversationTranscripts(), sendPush, chatExtras = null }) {
+    Object.assign(this, { repo, uiDir, sessions, attachments, settings, changed, closeChat, transport, chatExtras });
     this.file = path.join(stateDir, 'mobile-access.json');
     this.saves = Promise.resolve(); this.pending = new Map(); this.clients = new Set(); this.inflight = new Map(); this.uploads = new Map(); this.queues = new Map();
     this.transcripts = transcripts; this.conversationMedia = new ConversationMedia(); this.active = false; this.error = ''; this.origin = ''; this.rates = new Map();
-    this.reports = new MobileReports(this);
+    this.reports = new MobileReports(this); this.push = new MobilePush(this, sendPush);
     this.readAloud = readAloud; this.dictation = dictation; this.chooseDictation = chooseDictation;
   }
   async init() {
     this.state = { enabled: false, devices: [], receipts: [], ...await readJson(this.file, {}) };
     // A process restart cannot prove whether an interrupted write reached the CLI.
     for (const receipt of this.state.receipts) if (receipt.status === 'sending') receipt.status = 'uncertain';
+    this.push.watch(this.sessions.list());
     this.server = http.createServer((request, response) => this.request(request, response));
     this.server.requestTimeout = 30000; this.server.headersTimeout = 15000;
     await new Promise((resolve, reject) => { this.server.once('error', reject); this.server.listen(0, '127.0.0.1', resolve); });
@@ -53,7 +57,7 @@ export class MobileGateway {
       } catch { socket.destroy(); }
     });
     this.handlers = {
-      session: session => { if (session.agent !== 'shell') this.broadcast({ type: 'session', session }); },
+      session: session => { if (session.agent !== 'shell') { this.broadcast({ type: 'session', session }); this.push.session(session); } },
       output: output => { for (const ws of this.clients) if (ws.sessionId === output.id) { if (ws.bufferedAmount > 2 * 1024 * 1024) ws.close(1013, 'Reconnect'); else send(ws, { type: 'output', ...output }); } },
       'screen-cleared': value => this.broadcast({ type: 'screen-cleared', ...value }),
       'terminal-resized': value => this.broadcast({ type: 'terminal-resized', ...value }),
@@ -68,8 +72,18 @@ export class MobileGateway {
         else { ws.alive = false; ws.ping(); }
       }
     }, 30000); this.timer.unref();
-    if (this.state.enabled) await this.enable().catch(error => { this.error = publicError(error); });
+    if (this.state.enabled) await this.enable().catch(error => this.retryEnable(error, 0));
     return this;
+  }
+  // Tailscale can fail while the computer or the app is still starting. Without the
+  // route a paired phone stays on its splash screen, so try again for a few minutes.
+  retryEnable(error, attempt) {
+    console.error(`Mobile access could not start: ${publicError(error)}`);
+    if (attempt >= ENABLE_RETRIES.length) return;
+    this.retry = setTimeout(() => {
+      if (!this.closed && this.state.enabled && !this.active) this.enable().catch(next => this.retryEnable(next, attempt + 1));
+    }, ENABLE_RETRIES[attempt]);
+    this.retry.unref?.();
   }
   save() {
     this.saves = this.saves.catch(() => {}).then(() => saveJson(this.file, this.state));
@@ -78,7 +92,7 @@ export class MobileGateway {
   status() {
     return {
       enabled: this.active, origin: this.active ? this.origin : '', error: this.error,
-      devices: this.state.devices.filter(device => this.validDevice(device)).map(({ hash: _hash, ...device }) => ({ ...device, connected: [...this.clients].some(ws => ws.deviceId === device.id && ws.readyState === WebSocket.OPEN) })),
+      devices: this.state.devices.filter(device => this.validDevice(device)).map(({ hash: _hash, push: _push, ...device }) => ({ ...device, connected: [...this.clients].some(ws => ws.deviceId === device.id && ws.readyState === WebSocket.OPEN) })),
       pending: [...this.pending.values()].filter(item => item.expires > Date.now() && !item.approved).map(({ id, name, code, expires }) => ({ id, name, code, expires })),
     };
   }
@@ -97,6 +111,7 @@ export class MobileGateway {
   }
   async disable() {
     if (this.enabling) await this.enabling.catch(() => {});
+    clearTimeout(this.retry);
     this.active = false; this.state.enabled = false; this.pairing = null; this.pending.clear(); this.uploads.clear();
     for (const ws of this.clients) ws.close(1008, 'Mobile access disabled');
     await this.save(); this.notify();
@@ -234,6 +249,9 @@ export class MobileGateway {
       return item.path;
     });
     if (!text.trim() && !paths.length) fail('Write a message or attach an image.');
+    // The same one-time hold the desktop gives a large chat whose prompt cache went cold.
+    await this.chatExtras?.coldCheck(session, text);
+    await this.chatExtras?.effortCheck?.(session, text);
     const receipt = { key, hash, requestId: data.requestId, sessionId: id, status: 'sending', at: new Date().toISOString() };
     const operation = (async () => {
       this.state.receipts.push(receipt);
@@ -292,10 +310,14 @@ export class MobileGateway {
         if (method === 'GET' && route === '/mobile/api/read-aloud') return json(response, 200, await this.readAloud.status());
         const media = /^\/mobile\/api\/sessions\/([a-f0-9-]{36})\/media\/([a-zA-Z0-9_-]{43})$/.exec(route);
         if (media && ['GET', 'HEAD'].includes(method)) { this.session(media[1]); return await this.conversationMedia.serve(request, response, media[1], media[2], device.id, url.searchParams.get('download') === '1'); }
+        if (method === 'GET' && route === '/mobile/api/push') return json(response, 200, await this.push.status(device));
+        if (method === 'POST' && route === '/mobile/api/push') return json(response, 200, await this.push.subscribe(device, data.subscription));
         if (method === 'GET' && route === '/mobile/api/dictation') return json(response, 200, await this.dictation.status());
         if (method === 'POST' && route === '/mobile/api/dictation') return json(response, 200, await this.chooseDictation(data.provider));
         if (method === 'POST' && route === '/mobile/api/transcribe') return json(response, 200, await this.dictation.transcribe(request, device.id, () => this.active && this.state.devices.some(item => item.id === device.id && this.validDevice(item))));
         if (method === 'GET' && route === '/mobile/api/reports') return json(response, 200, await this.reports.list());
+        const cover = /^\/mobile\/api\/reports\/([^/]+)\/cover$/.exec(route);
+        if (cover && ['GET', 'HEAD'].includes(method)) return await this.reports.serveCover(request, response, cover[1]);
         if (method === 'POST' && route === '/mobile/api/reports/open') return json(response, 200, await this.reports.open(device, data));
         if (method === 'GET' && route === '/mobile/api/bootstrap') return json(response, 200, { sessions: this.list(), agents: inventory().filter(item => item.id !== 'shell'), device: { id: device.id, name: device.name }, defaultAgent: this.settings().defaultAgent, defaultBypass: this.settings().defaultBypass, dictation: await this.dictation.status() });
         if (method === 'POST' && route === '/mobile/api/disconnect') { await this.revoke(device.id); response.setHeader('Set-Cookie', this.cookie('', true)); return json(response, 200, { disconnected: true }); }
@@ -315,10 +337,12 @@ export class MobileGateway {
           if (data.cwd !== undefined && !project) fail('Choose a project from the list.');
           return json(response, 201, await this.sessions.create({ agent: data.agent, name: data.name, cwd: project?.path || this.repo, bypass: this.settings().defaultBypass === true }));
         }
-        const match = /^\/mobile\/api\/sessions\/([a-f0-9-]{36})\/(messages|send|resume|close|key|read-aloud)$/.exec(route);
+        const match = /^\/mobile\/api\/sessions\/([a-f0-9-]{36})\/(messages|send|resume|close|key|prompt|read-aloud|details|rules|diff|open)$/.exec(route);
         if (match) {
           const session = this.session(match[1]);
-          if (method === 'GET' && match[2] === 'messages') return json(response, 200, await this.conversationMedia.present(await this.transcripts.read(session), session, device.id));
+          // The same terminal menu and one-use answer the desktop Conversation offers.
+          if (method === 'GET' && match[2] === 'messages') return json(response, 200, { ...(await this.conversationMedia.present(await this.transcripts.read(session), session, device.id)), prompt: session.process ? await readPrompt(this.sessions, session.id) : null });
+          if (method === 'POST' && match[2] === 'prompt') return json(response, 200, await answerPrompt(this.sessions, session.id, data.id, data.choice));
           if (method === 'POST' && match[2] === 'read-aloud') {
             const controller = new AbortController(); let complete = false;
             const abort = () => { if (!complete) controller.abort(); };
@@ -329,6 +353,10 @@ export class MobileGateway {
               complete = true; response.writeHead(200, { 'Content-Type': 'audio/wav', 'Content-Length': audio.length, 'Cache-Control': 'no-store' }); response.end(audio); return;
             } finally { response.off('close', abort); }
           }
+          if (this.chatExtras && method === 'GET' && match[2] === 'details') return json(response, 200, await this.chatExtras.details(session));
+          if (this.chatExtras && method === 'POST' && match[2] === 'rules') return json(response, 200, await this.chatExtras.resolveRule(session, data));
+          if (this.chatExtras && method === 'POST' && match[2] === 'diff') return json(response, 200, await this.chatExtras.diff(session, data.path));
+          if (method === 'POST' && match[2] === 'open') return json(response, 200, await this.reports.openLocal(device, session, data.path));
           if (method === 'POST' && match[2] === 'send') return json(response, 200, await this.submit(device, session.id, data));
           if (method === 'POST' && match[2] === 'resume') return json(response, 200, session.process ? this.list().find(item => item.id === session.id) : await this.sessions.resume(session.id));
           if (method === 'POST' && match[2] === 'close') return json(response, 200, await this.closeChat(session.id));
@@ -360,7 +388,7 @@ export class MobileGateway {
     } catch (error) { if (!response.headersSent) json(response, error.status || 400, { error: publicError(error) }); else response.destroy(); }
   }
   async close() {
-    if (this.closed) return; this.closed = true;
+    if (this.closed) return; this.closed = true; clearTimeout(this.retry);
     this.readAloud.close(); this.dictation.close();
     this.active = false; clearInterval(this.timer);
     for (const [event, handler] of Object.entries(this.handlers)) this.sessions.off(event, handler);

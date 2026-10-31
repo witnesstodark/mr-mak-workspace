@@ -390,6 +390,7 @@ button:focus-visible {
   gap: 8px;
   font-size: 0.82rem;
   min-width: 0;
+  flex: 1;
 }
 
 .crumb-link {
@@ -410,6 +411,48 @@ button:focus-visible {
 }
 
 .crumb-sep { color: var(--text-muted); font-size: 0.7rem; }
+
+.topbar-right-group {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.topbar-right-group .new-card-button {
+  margin-left: 0 !important;
+}
+
+.topbar-tool-btn {
+  font: inherit;
+  font-size: 12px;
+  border: 1px solid var(--hairline-strong, #ffffff20);
+  border-radius: 7px;
+  color: var(--text, #d3d0d9);
+  background: var(--surface-1, #18191f);
+  padding: 8px 13px;
+  cursor: pointer;
+  line-height: 1.4;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  transition: all var(--t-fast, 0.15s) var(--ease, ease);
+}
+
+.topbar-tool-btn:hover {
+  border-color: var(--pink, #efa2b4);
+  background: var(--pink-dim, #efa2b412);
+  color: var(--text-bright, #ffffff);
+}
+
+.topbar-tool-btn.active {
+  border-color: var(--pink, #efa2b4);
+  background: var(--pink, #efa2b4);
+  color: var(--on-accent, #101115);
+  font-weight: 600;
+  box-shadow: var(--glow-pink, 0 0 16px rgba(240, 160, 176, 0.3));
+}
 
 .crumb-current {
   color: var(--text);
@@ -630,8 +673,22 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 9px;
-  padding: 15px 16px 13px;
+  --card-pt: 15px;
+  --card-px: 16px;
+  padding: var(--card-pt) var(--card-px) 13px;
 }
+
+/* Optional cover: full-bleed band at the top, inside the card edge. */
+.card-cover {
+  flex: none;
+  height: 128px;
+  margin: calc(-1 * var(--card-pt)) calc(-1 * var(--card-px)) 0;
+  overflow: hidden;
+  border-radius: calc(var(--radius-lg) - 1px) calc(var(--radius-lg) - 1px) 0 0;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--surface-2, var(--surface-1));
+}
+.card-cover img { display: block; width: 100%; height: 100%; object-fit: cover; }
 
 .card-top {
   display: flex;
@@ -658,6 +715,16 @@ button:focus-visible {
   border-color: rgba(234, 181, 110, 0.35);
   background: var(--amber-dim);
 }
+.chip-phase {
+  align-self: flex-start;
+  max-width: 100%;
+  color: var(--pink);
+  background: var(--pink-dim);
+  border-color: color-mix(in srgb, var(--pink) 32%, transparent);
+  letter-spacing: 0.2px;
+  text-transform: none;
+}
+.chip-phase > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .card-title {
   font-family: var(--font-display);
@@ -684,6 +751,32 @@ button:focus-visible {
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+/* Optional phase chip and progress bar between the description and the footer. */
+.card-status { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.card-progress { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.card-progress-text {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+  font-size: 0.68rem;
+  color: var(--text-dim);
+}
+.card-progress-text b { font-weight: 600; color: var(--text-bright); font-variant-numeric: tabular-nums; }
+.card-progress-text span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-progress-bar {
+  height: 5px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--hairline-strong);
+}
+.card-progress-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--pink), var(--purple));
 }
 
 .card-foot {
