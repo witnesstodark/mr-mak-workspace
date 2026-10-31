@@ -108,6 +108,15 @@
 .mobile-tool-activity > div { display: flex; align-items: center; gap: 6px; padding: 4px 0; }
 .mobile-tool-activity > div > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .mobile-tool-activity small { font-size: 10px; }
+/* Terminal menus use the shared card, with thumb-sized options and actions. */
+.mobile-app .conversation-prompt { margin: 14px 0; }
+.mobile-app .conversation-prompt > header { font-size: 14px; align-items: flex-start; }
+.mobile-app .conversation-prompt pre { font-size: 12px; }
+.mobile-app .conversation-prompt .conversation-prompt-options { gap: 7px; }
+.mobile-app .conversation-prompt .conversation-prompt-options button { min-height: 46px; padding: 10px 12px; border-radius: 10px; font-size: 14px; }
+.mobile-app .conversation-prompt-options button > span { width: 24px; height: 24px; font-size: 12px; }
+.mobile-app .conversation-prompt > footer { gap: 8px; margin-top: 12px; }
+.mobile-app .conversation-prompt > footer button { min-height: 40px; padding: 8px 12px; font-size: 13px; }
 .mobile-read-aloud { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
 .mobile-read-aloud > button { display: grid; place-items: center; width: 44px; min-height: 44px; padding: 8px; font-size: 11px; border: 1px solid var(--m-line); border-radius: 8px; background: transparent; color: var(--m-muted); }
 .mobile-read-aloud > [role=status] { font-size: 12px; color: var(--m-muted); }

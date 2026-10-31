@@ -14,12 +14,13 @@ import { visibleUserMessage } from '../mobile/workspace-context'
 import { spokenText, useReadAloud } from '../mobile/useReadAloud'
 import { readingVoiceChanged, readingVoices, saveReadingVoice, savedReadingVoice } from '../mobile/readingVoices'
 import { commandToken, completeCommand, matchingCommands, terminalCommand, type ChatCommand } from './commandSuggestions'
+import TerminalPrompt, { type PromptChoice, type TerminalPromptData } from '../components/TerminalPrompt'
 import './conversation.css'
+import { keepUrl, linkTarget } from '../components/messageLinks'
 
 interface ToolActivity { id: string; name: string; status: 'running' | 'completed' | 'failed'; at: string }
 interface Message { id: string; role: 'user' | 'assistant' | 'system'; text: string; at: string; images?: ConversationImage[]; event?: SystemEventData }
-interface TerminalPrompt { id: string; question: string; detail: string[]; options: string[]; selected: number }
-interface Transcript { supported: boolean; messages: Message[]; activity?: ToolActivity[]; agents?: WorkingAgent[]; commands?: BackgroundCommand[]; truncated?: boolean; prompt?: TerminalPrompt | null }
+interface Transcript { supported: boolean; messages: Message[]; activity?: ToolActivity[]; agents?: WorkingAgent[]; commands?: BackgroundCommand[]; truncated?: boolean; prompt?: TerminalPromptData | null }
 interface Draft { text: string; paths: string[] }
 
 const time = (value: string) => new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -35,22 +36,6 @@ function saveDraft(id: string, draft: Draft) {
   try { localStorage.setItem(draftKey(id), JSON.stringify(draft)) } catch { /* The draft stays in memory. */ }
 }
 
-// Web and mail links open in the browser. A file: URL, a drive path or a scheme-less
-// link is a local path, possibly relative to the chat folder: files preview in
-// Workspace, folders open. Other schemes are shown as text, never followed.
-type LinkTarget = { kind: 'web' } | { kind: 'local'; path: string } | { kind: 'text' }
-function linkTarget(href = ''): LinkTarget {
-  if (/^(https?|mailto):/i.test(href)) return { kind: 'web' }
-  let target = href
-  if (/^file:/i.test(target)) target = target.replace(/^file:\/*/i, /^file:\/*[a-z]:/i.test(target) ? '' : '/')
-  else if (/^[a-z][a-z\d+.-]+:/i.test(target) || target.startsWith('#') || !target) return { kind: 'text' }
-  try { target = decodeURIComponent(target) } catch { /* Keep the original spelling. */ }
-  target = target.replace(/#.*$/, '').replace(/:\d+(?::\d+)?$/, '')
-  return target ? { kind: 'local', path: target } : { kind: 'text' }
-}
-// react-markdown drops unknown schemes, which includes drive paths such as E:/game.
-// Keep them for linkTarget; script and data URLs are still removed.
-const keepUrl = (url: string) => /^\s*(javascript|vbscript|data):/i.test(url) ? '' : url
 function MessageLink({ href, sessionId, children }: { href?: string; sessionId: string; children: React.ReactNode }) {
   const target = linkTarget(href)
   if (target.kind === 'web') return <a href={href} target="_blank" rel="noreferrer">{children}</a>
@@ -127,7 +112,7 @@ export default function Conversation({ session, connected, agentLabel, openTermi
     const parts = Array.from(scroller.current?.querySelectorAll<HTMLElement>('.conversation-message.assistant') || []).filter(node => Number(node.dataset.index) > readStart)
     speech.read(id, parts.map(node => spokenText(node.querySelector<HTMLElement>('.conversation-copy-text'))).filter(Boolean).join('\n\n'))
   }
-  async function answer(prompt: TerminalPrompt, choice: number | 'cancel') {
+  async function answer(prompt: TerminalPromptData, choice: PromptChoice) {
     if (answering) return
     setAnswering(true)
     try { await api(`/sessions/${session.id}/prompt`, { id: prompt.id, choice }); follow.current = true }
@@ -253,12 +238,7 @@ export default function Conversation({ session, connected, agentLabel, openTermi
           <button type="button" onClick={openTerminal}><Icon name="terminal" size={15} />Open terminal</button>
         </div>}
         {!!transcript?.activity?.length && <details className="conversation-activity"><summary>Recent tool activity</summary>{transcript.activity.map(item => <div key={item.id}><Icon name={item.status === 'running' ? 'terminal' : item.status === 'failed' ? 'bell' : 'history'} size={13} /><span>{item.name}</span><small>{item.status === 'running' && !running ? 'interrupted' : item.status}{item.at && ` · ${time(item.at)}`}</small></div>)}</details>}
-        {transcript?.prompt && <section className="conversation-prompt" aria-label="The agent is asking for a choice">
-          <header><Icon name="bell" size={14} /><strong>{transcript.prompt.question}</strong></header>
-          {!!transcript.prompt.detail.length && <pre>{transcript.prompt.detail.join('\n')}</pre>}
-          <div className="conversation-prompt-options">{transcript.prompt.options.map((option, index) => <button type="button" key={index} disabled={answering} className={index === transcript.prompt!.selected ? 'selected' : ''} onClick={() => void answer(transcript.prompt!, index)}><span>{index + 1}</span>{option}</button>)}</div>
-          <footer><button type="button" disabled={answering} onClick={() => void answer(transcript.prompt!, 'cancel')}>Esc · cancel</button><button type="button" onClick={openTerminal}><Icon name="terminal" size={13} />Open terminal</button></footer>
-        </section>}
+        {transcript?.prompt && <TerminalPrompt prompt={transcript.prompt} answering={answering} onAnswer={choice => void answer(transcript.prompt!, choice)} onOpenTerminal={openTerminal} />}
         {working && <p className="conversation-working"><i />{agentLabel} is working…</p>}
         {!transcript?.prompt && (session.activity === 'waiting' || stale || readError) && <div className="conversation-notice" role="status"><p>{readError || (session.activity === 'waiting' ? `${agentLabel} is waiting for you in the terminal.` : 'No new messages for a while. A permission prompt or question may be waiting in the terminal.')}</p><button type="button" onClick={openTerminal}><Icon name="terminal" size={14} />Open terminal</button></div>}
       </div>
@@ -288,7 +268,7 @@ export default function Conversation({ session, connected, agentLabel, openTermi
         onPaste={event => { const files = Array.from(event.clipboardData.files).filter(file => file.type.startsWith('image/')); if (files.length) { event.preventDefault(); void addImages(files) } }} />
       <div className="conversation-actions">
         <button type="button" className="desk-icon" title="Attach files or folders" aria-label="Attach files" onClick={() => window.dispatchEvent(new Event('mrmak-attach-file'))}><Icon name="attach" size={16} /></button>
-        <div className="terminal-dictation"><VoiceInput id={`desktop-conversation-${session.id}`} connected={connected} disabled={sending} config={dictation} transcriber={transcribeDesktopAudio} onBusy={setVoiceBusy} onText={text => setDraft(current => ({ ...current, text: current.text ? `${current.text}${/\s$/.test(current.text) ? '' : '\n'}${text}` : text }))} /></div>
+        <div className="terminal-dictation"><VoiceInput id={`desktop-conversation-${session.id}`} connected={connected} disabled={sending} config={dictation} hotkey transcriber={transcribeDesktopAudio} onBusy={setVoiceBusy} onText={text => setDraft(current => ({ ...current, text: current.text ? `${current.text}${/\s$/.test(current.text) ? '' : '\n'}${text}` : text }))} /></div>
         <span className="conversation-status" role="status">{status || (uploading ? 'Saving images…' : 'Enter to send · Shift+Enter for a new line')}</span>
         {working && <button type="button" className="conversation-stop" onClick={stop} title="Interrupt the agent (Esc)"><Icon name="stop" size={14} />Stop</button>}
         <button type="submit" className="conversation-send" aria-label={sending ? 'Sending…' : 'Send'} title="Send" disabled={!connected || !running || sending || uploading || voiceBusy || (!draft.text.trim() && !draft.paths.length)}><Icon name="send" size={16} /></button>

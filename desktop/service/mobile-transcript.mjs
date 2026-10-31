@@ -4,10 +4,12 @@ import path from 'node:path';
 import { imageReferences } from './conversation-media.mjs';
 import { claudeTranscript } from './native-events.mjs';
 import { codexSegments } from './codex-history.mjs';
+import { antigravityFullTranscript } from './antigravity.mjs';
+import { readOpencodeSession } from './opencode-history.mjs';
 
 export function transcriptActivity(records, agent) {
   const tools = new Map();
-  for (const record of records) {
+  for (const [index, record] of records.entries()) {
     if (record.isSidechain || record.isMeta) continue;
     if (agent === 'claude') for (const part of Array.isArray(record.message?.content) ? record.message.content : []) {
       if (part.type === 'tool_use' && typeof part.id === 'string') tools.set(part.id, { id: part.id, name: String(part.name || 'Tool').replace(/[^a-zA-Z0-9_.:-]/g, '').slice(0, 80), status: 'running', at: record.timestamp || '' });
@@ -19,6 +21,15 @@ export function transcriptActivity(records, agent) {
       if (['function_call', 'custom_tool_call'].includes(p?.type) && typeof p.call_id === 'string') tools.set(p.call_id, { id: p.call_id, name: String(p.name || 'Tool').replace(/[^a-zA-Z0-9_.:-]/g, '').slice(0, 80), status: 'running', at: record.timestamp || '' });
       if (['function_call_output', 'custom_tool_call_output'].includes(p?.type) && tools.has(p.call_id)) Object.assign(tools.get(p.call_id), { status: 'completed', at: record.timestamp || '' });
     }
+    if (agent === 'antigravity' && record.type === 'PLANNER_RESPONSE' && Array.isArray(record.tool_calls)) {
+      const running = record === records.at(-1) || records[index + 1]?.status === 'RUNNING';
+      for (const [i, tool] of record.tool_calls.entries()) {
+        const id = `${record.step_index}:${i}`;
+        tools.set(id, { id, name: String(tool.name || 'Tool').replace(/[^a-zA-Z0-9_.:-]/g, '').slice(0, 80), status: running ? 'running' : 'completed', at: record.created_at || '' });
+      }
+    }
+    // opencode-history.mjs has already read each call's state from OpenCode's store.
+    if (agent === 'opencode') for (const tool of record.tools || []) if (tool.id) tools.set(tool.id, { id: tool.id, name: String(tool.name || 'Tool').replace(/[^a-zA-Z0-9_.:-]/g, '').slice(0, 80), status: tool.status, at: tool.at || '' });
   }
   return [...tools.values()].slice(-8);
 }
@@ -58,7 +69,7 @@ function findings(result) {
 export function systemEvent(text, origin) {
   const value = text.trim();
   // Codex sends project instructions and its environment as user turns.
-  if (/^(?:<local-command-caveat>|# AGENTS\.md instructions for |<environment_context>|<user_instructions>|<external_codex_apps_open_page>)/.test(value)) return 'skip';
+  if (/^(?:<local-command-caveat>|# AGENTS\.md instructions for |<environment_context>|<user_instructions>|<external_codex_apps_open_page>|<ADDITIONAL_METADATA>|<USER_SETTINGS_CHANGE>)/.test(value)) return 'skip';
   if (/^<task-notification>/.test(value)) {
     // The result is the agent's Markdown and may contain code such as List<int>; only the event line is plain text.
     const result = tagValue(value, 'result'), parsed = findings(result), status = tagValue(value, 'status');
@@ -74,6 +85,11 @@ export function systemEvent(text, origin) {
     const output = plainText(value);
     return { kind: 'output', title: firstLine(output) || 'Command finished', ...(output.includes('\n') ? { detail: output.slice(0, 20000) } : {}) };
   }
+  if (/^(?:The following is a <SYSTEM_MESSAGE>|<SYSTEM_MESSAGE>)/.test(value)) {
+    const match = /content=([\s\S]*)/.exec(value);
+    const detail = match ? match[1].replace(/<\/SYSTEM_MESSAGE>[\s\S]*$/, '').trim() : value;
+    return { kind: 'notice', title: firstLine(detail) || 'Background task notification', detail: detail.slice(0, 20000) };
+  }
   if ((origin?.kind && origin.kind !== 'human') || /^<(?:system-reminder|relay|wake|project_claude_message)[\s>]/.test(value)) {
     const body = plainText(value);
     return { kind: 'notice', title: firstLine(body) || 'Message from the CLI', detail: body.slice(0, 20000) };
@@ -81,12 +97,21 @@ export function systemEvent(text, origin) {
   return null;
 }
 
+// Claude Code continues a compacted chat with its summary as a user turn.
+const compactSummary = text => ({ kind: 'notice', title: 'Conversation compacted · summary of earlier messages', detail: text.replace(/<tools-used-before-summary>[\s\S]*?<\/tools-used-before-summary>\s*/, '').trim().slice(0, 60000) });
+
 // The model the chat last used: Codex records it per turn; Claude Code on each reply
 // and when /model changes it.
 export function transcriptModel(records, agent) {
   for (let index = records.length - 1; index >= 0; index--) {
     const record = records[index];
     if (agent === 'codex' && record.type === 'turn_context' && typeof record.payload?.model === 'string') return record.payload.model;
+    if (agent === 'antigravity' && record.type === 'USER_INPUT' && typeof record.content === 'string') {
+      const match = /`Model Selection` from .+? to (.+?)(?:\.(?:\s+|$)|(?:\s*<\/USER_SETTINGS_CHANGE>|\r?\n|$))/.exec(record.content);
+      if (match) return match[1].trim();
+    }
+    // OpenCode records provider/model on each prompt, reply and model switch.
+    if (agent === 'opencode' && typeof record.model === 'string') return record.model;
     if (agent !== 'claude' || record.isSidechain) continue;
     if (record.type === 'assistant' && typeof record.message?.model === 'string' && !record.message.model.startsWith('<')) return record.message.model;
     const set = record.type === 'user' && typeof record.message?.content === 'string' && /<local-command-stdout>Set model to (?:\x1b\[[0-9;]*m)*`?([^`\s\x1b<]+)/.exec(record.message.content);
@@ -131,6 +156,28 @@ export function transcriptMessages(records, agent, limit = 100) {
     } else if (agent === 'claude' && !item.isSidechain && !item.isMeta && ['user', 'assistant'].includes(item.type)) {
       role = item.type; content = item.message?.content; text = textParts(content);
       if (Array.isArray(content) && content.some(part => part.type === 'tool_result')) role = 'assistant';
+    } else if (agent === 'antigravity') {
+      if (item.type === 'USER_INPUT') {
+        role = 'user';
+        const raw = item.content || '';
+        const match = /<USER_REQUEST>([\s\S]*?)<\/USER_REQUEST>/i.exec(raw);
+        text = match ? match[1].trim() : raw;
+        if (Array.isArray(item.media)) {
+          imageRefs = item.media.map(m => m.uri || m.path).filter(Boolean);
+        }
+      } else if (item.type === 'PLANNER_RESPONSE' && item.content) {
+        role = 'assistant';
+        text = item.content;
+        if (Array.isArray(item.media)) {
+          imageRefs = item.media.map(m => m.uri || m.path).filter(Boolean);
+        }
+      } else if (item.type === 'SYSTEM_MESSAGE') {
+        role = 'user';
+        text = item.content || '';
+      }
+    } else if (agent === 'opencode' && ['user', 'assistant'].includes(item.role)) {
+      // Records from opencode-history.mjs: text and images already taken from OpenCode's parts.
+      role = item.role; text = item.text; imageRefs = item.imageRefs || [];
     }
     if (agent === 'codex' && hasCodexEvents && item.type === 'response_item' && item.payload?.type === 'message' && item.payload.role === 'assistant') { role = 'assistant'; text = ''; content = item.payload.content; }
     if (agent === 'codex' && item.type === 'response_item' && item.payload?.type === 'function_call_output') {
@@ -142,13 +189,13 @@ export function transcriptMessages(records, agent, limit = 100) {
     text = typeof text === 'string' ? text : '';
     // Codex chats imported from Claude Code keep its paste tags too.
     if (role === 'user') text = unwrapPastes(text);
-    const event = role === 'user' ? systemEvent(text, item.origin) : null;
+    const event = role !== 'user' ? null : item.isCompactSummary ? compactSummary(text) : systemEvent(text, item.origin);
     if (event === 'skip') continue;
     if (event) { role = 'system'; text = event.title; content = undefined; imageRefs = []; }
     imageRefs = [...new Set([...imageRefs, ...imageReferences(content, text || '')])].slice(0, 12);
     if (!['user', 'assistant', 'system'].includes(role) || (!text?.trim() && !imageRefs.length)) continue;
-    const at = item.timestamp || '';
-    const id = item.uuid || codexItem(item)?.id || createHash('sha256').update(`${at}:${role}:${text}:${imageRefs.join(";")}`).digest('hex').slice(0, 24);
+    const at = item.timestamp || item.created_at || '';
+    const id = item.uuid || codexItem(item)?.id || (item.step_index != null ? `agy-${item.step_index}` : null) || createHash('sha256').update(`${at}:${role}:${text}:${imageRefs.join(";")}`).digest('hex').slice(0, 24);
     // Streaming revisions of a Claude message have the same message ID.
     const nativeId = item.message?.id;
     const previous = nativeId && messages.findIndex(message => message.nativeId === nativeId);
@@ -257,8 +304,11 @@ export class ConversationTranscripts {
   cache = new Map();
   subagents = new Map();
   async read(session) {
-    if (!['codex', 'claude'].includes(session.agent) || !session.nativeId) return { supported: false, messages: [] };
-    const files = session.agent === 'claude' ? [await claudeTranscript(session.cwd, session.nativeId)] : await codexSegments(session.nativeId);
+    if (session.agent === 'opencode' && session.nativeId) return this.readOpencode(session);
+    if (!['codex', 'claude', 'antigravity'].includes(session.agent) || !session.nativeId) return { supported: false, messages: [] };
+    const files = session.agent === 'claude' ? [await claudeTranscript(session.cwd, session.nativeId)]
+      : session.agent === 'antigravity' ? [await antigravityFullTranscript(session.nativeId)]
+      : await codexSegments(session.nativeId);
     if (!files.length) return { supported: false, messages: [] };
     try {
       const info = await stat(files.at(-1));
@@ -279,6 +329,22 @@ export class ConversationTranscripts {
       // Subagents write their own files, so the chat's transcript may be unchanged while they work.
       return session.agent === 'claude' ? { ...cached.value, ...await this.backgroundWork(files[0], session, cached).catch(() => ({ agents: [], commands: [] })) } : cached.value;
     } catch { return { supported: false, messages: [] }; }
+  }
+
+  // OpenCode keeps chats in its SQLite store rather than a transcript file. The
+  // store is only read again when this chat's rows or its /undo point changed.
+  async readOpencode(session) {
+    const cached = this.cache.get(session.id);
+    try {
+      const read = await readOpencodeSession(session.nativeId, cached?.key);
+      if (!read) return { supported: false, messages: [] };
+      if (read.key === cached?.key) return cached.value;
+      const messages = transcriptMessages(read.records, 'opencode', Infinity);
+      const value = { supported: true, messages: messages.slice(-100), userMessages: messages.filter(item => item.role === 'user').length, activity: transcriptActivity(read.records, 'opencode'), model: transcriptModel(read.records, 'opencode'), truncated: read.truncated };
+      this.cache.set(session.id, { key: read.key, value });
+      if (this.cache.size > 25) this.cache.delete(this.cache.keys().next().value);
+      return value;
+    } catch { return cached?.value || { supported: false, messages: [] }; }
   }
 
   // Subagents and background commands still working. Both end with their CLI, so

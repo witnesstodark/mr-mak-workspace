@@ -7,7 +7,7 @@ import BrowserSettings from '../components/BrowserSettings'
 import SessionLogo from './SessionLogo'
 import { chatActivityLabel } from './chatActivity'
 import ChatTabs from './ChatTabs'
-import { groupCounts, groupNames, orderedChats, projectKey, projectName, tabColors } from './chatOrder'
+import { groupCounts, groupNames, orderedChats, projectGrouped, projectKey, projectName, tabColors } from './chatOrder'
 import HandoffOffer from './HandoffOffer'
 import MobileAccess from './MobileAccess'
 import DictationComposer from './DictationComposer'
@@ -121,6 +121,7 @@ export default function Chats() {
   const choose = (id: string) => { selectChat(id); setSwitcher(false); setMenu(false); setHistory(false); setRenaming(false) }
   const closeChat = (id: string) => api(`/sessions/${id}`, {}, 'DELETE').catch(reportError)
   const groups = groupNames(state.sessions)
+  const byProject = projectGrouped(state.sessions)
   const historyCounts = Object.fromEntries(Object.entries(groupCounts(state.sessions)).map(([name, counts]) => [name, counts.history]))
   const collapsed = state.settings.collapsedGroups || []
   const setCollapsed = (names: string[]) => api('/settings', { collapsedGroups: names }).catch(reportError)
@@ -128,6 +129,12 @@ export default function Chats() {
   const collapseOthers = (name: string) => setCollapsed(groupNames(active).filter(item => item !== name))
   const groupColors = state.settings.groupColors || {}
   const setGroupColor = (name: string, value: string | null) => { const next = { ...groupColors }; if (value) next[name] = value; else delete next[name]; api('/settings', { groupColors: next }).catch(reportError) }
+  // The service accepts `seen` only for the chat this window subscribed to. TerminalPane subscribes
+  // itself, so the Conversation view does it here.
+  const shownId = session?.id
+  useEffect(() => {
+    if (state.connected && shownId && view === 'conversation') sendEvent({ type: 'subscribe', id: shownId })
+  }, [state.connected, shownId, view])
   useEffect(() => {
     if (!state.connected || !session?.unread || history || switcher || newChat) return
     let timer = 0
@@ -177,7 +184,7 @@ export default function Chats() {
 
   return <div className="chats-surface">
     <header className="chats-header"><div className="chats-brand"><Nose size={25} tone="black" /><span>Mr. Mak <b>Chats</b></span></div><div className="chats-header-actions"><BrowserSettings target="chat" /><MobileAccess /><button className={`desk-icon ${pinned ? 'active' : ''}`} title="Keep Chats above other windows" onClick={() => { setPinned(!pinned); windowAction('chats', 'pin', !pinned) }}><Icon name="pin" size={16} /></button><button className="desk-icon" title="Show Workspace" onClick={() => windowAction('workspace')}><Icon name="workspace" size={18} /></button></div></header>
-    <div className="chat-tabs-row"><ChatTabs items={active} selectedId={session?.id} agents={state.agents} groups={groups} collapsed={collapsed} groupColors={groupColors} historyCounts={historyCounts} choose={choose} close={closeChat} toggleGroup={toggleGroup} collapseOthers={collapseOthers} setGroupColor={setGroupColor} /><div className="chat-tab-actions"><button className="desk-icon new-chat-button" onClick={() => setNewChat(true)} title={`New chat · ${shortcutLabel('Shift+T')}`} aria-label="New chat"><Icon name="plus" /></button><button className={`desk-icon ${switcher ? 'active' : ''}`} onClick={() => { setSwitcher(value => !value); setHistory(false) }} title={`Find a chat · ${shortcutLabel('Shift+P')}`} aria-label="Find a chat"><Icon name="search" size={16} /></button><button className={`history-button ${history ? 'active' : ''}`} onClick={() => { setHistory(value => !value); setSwitcher(false); setMenu(false) }} title={`History · ${shortcutLabel('Shift+H')}`}><Icon name="history" size={15} /><span>History</span></button></div></div>
+    <div className="chat-tabs-row"><ChatTabs items={active} selectedId={session?.id} agents={state.agents} groups={groups} collapsed={collapsed} groupColors={groupColors} historyCounts={historyCounts} choose={choose} close={closeChat} toggleGroup={toggleGroup} collapseOthers={collapseOthers} setGroupColor={setGroupColor} /><div className="chat-tab-actions"><button className={`desk-icon ${byProject ? 'active' : ''}`} onClick={() => api('/groups/by-project', {}).catch(reportError)} title={byProject ? 'Ungroup tabs' : 'Group tabs by project'} aria-label="Group tabs by project" aria-pressed={byProject}><Icon name="folder" size={16} /></button><button className="desk-icon new-chat-button" onClick={() => setNewChat(true)} title={`New chat · ${shortcutLabel('Shift+T')}`} aria-label="New chat"><Icon name="plus" /></button><button className={`desk-icon ${switcher ? 'active' : ''}`} onClick={() => { setSwitcher(value => !value); setHistory(false) }} title={`Find a chat · ${shortcutLabel('Shift+P')}`} aria-label="Find a chat"><Icon name="search" size={16} /></button><button className={`history-button ${history ? 'active' : ''}`} onClick={() => { setHistory(value => !value); setSwitcher(false); setMenu(false) }} title={`History · ${shortcutLabel('Shift+H')}`}><Icon name="history" size={15} /><span>History</span></button></div></div>
     <div className="chat-body">
     {history && <History close={() => setHistory(false)} choose={choose} />}
     {switcher && <div className="chat-switcher"><div className="switcher-search"><Icon name="search" size={16} /><input autoFocus placeholder="Find any chat…" value={query} onChange={event => setQuery(event.target.value)} /></div><div className="switcher-list">{filtered.map(item => <button key={item.id} onClick={() => choose(item.id)} className={session?.id === item.id ? 'selected' : ''}><span className="agent-letter" style={{ color: state.agents.find(a => a.id === item.agent)?.color }}><SessionLogo session={item} size={19} /></span><span><strong>{item.name}</strong><small>{item.group ? `${item.group} · ` : ''}{item.cwd}</small></span><span className="switcher-state">{chatActivityLabel(item)}</span></button>)}{!filtered.length && <p className="desk-muted">No matching chats.</p>}</div></div>}
