@@ -6,6 +6,8 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { parse as parseEnv } from 'dotenv';
 import { Sessions } from './sessions.mjs';
 import { Coordinator, openChatArguments } from './coordinator.mjs';
+import { ClaudeCoordinator } from './coordinator-claude.mjs';
+import { Overseer } from './overseer.mjs';
 import { Files, serveFile } from './files.mjs';
 import { importFile, dragFiles, moveFile, recyclePath, MAX_FILE_BYTES } from './file-transfers.mjs';
 import { inventory } from './agents.mjs';
@@ -19,10 +21,12 @@ import { QuickActions } from './quick-actions.mjs';
 import { defaultVoiceStyle, voiceSession } from './voice-profile.mjs';
 import { NativeSettings } from './native-settings.mjs';
 import { McpInventory } from './mcp.mjs';
+import { engineStatus } from './engines.mjs';
 import { editGlobalRules, editRules, globalRulesFile, readRules, readRulesAt } from './project-rules.mjs';
 import { RuleSuggestions } from './rule-suggestions.mjs';
 import { createSkill, discoverSkills } from './skill-discovery.mjs';
 import { GameRunner, gameSetupPrompt, readGame, saveGame } from './game-run.mjs';
+import { CPU_PRIORITIES } from './platform.mjs';
 import { body, equalSecret, json, publicError, readJson, realFile, saveJson, secret } from './util.mjs';
 import { ProjectAdapterRegistry } from './project-adapters/registry.mjs';
 import { KnowledgeManager, MarkdownKnowledgeProvider } from './knowledge/providers.mjs';
@@ -79,7 +83,8 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
   const environment = parseEnv(await readFile(path.join(repo, '.env'), 'utf8').catch(() => ''));
   const settingsPath = path.join(stateDir, 'settings.json');
   const savedSettings = await readJson(settingsPath, null);
-  let settings = { defaultAgent: 'codex', defaultBypass: false, coordinatorModel: environment.MRMAK_COORDINATOR_MODEL?.trim() || null, terminalFontSize: 13, terminalAppearance: 'original', workspaceTheme: 'dark', coordinatorEffort: 'medium', voiceName: 'cedar', voiceStyle: defaultVoiceStyle, handoffAfter: 40, idleCacheMinutes: IDLE_CACHE_MINUTES, idleCacheMinTokens: IDLE_CACHE_MIN_TOKENS, groupTabsByProject: false, projectOrder: [], usageLimitMode: 'all', usageDirection: 'used', systemEvents: 'compact', ...savedSettings };
+  let settings = { defaultAgent: 'codex', defaultBypass: false, coordinatorModel: environment.MRMAK_COORDINATOR_MODEL?.trim() || null, terminalFontSize: 13, terminalAppearance: 'original', workspaceTheme: 'dark', coordinatorEffort: 'medium', voiceName: 'cedar', voiceStyle: defaultVoiceStyle, handoffAfter: 40, idleCacheMinutes: IDLE_CACHE_MINUTES, idleCacheMinTokens: IDLE_CACHE_MIN_TOKENS, groupTabsByProject: false, projectOrder: [], usageLimitMode: 'all', usageDirection: 'used', systemEvents: 'compact', agentPriority: 'below-normal', ...savedSettings };
+  sessions.priority = settings.agentPriority;
   const effortAdvisor = new EffortAdvisor({ sessions, stateDir, transcripts, mode: () => settings.effortAdvice || 'off' });
   if (settings.groupTabsByProject === true) {
     await sessions.groupByProject(settings.projectOrder);
@@ -135,9 +140,10 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
     sessions.input(id, attachmentText(verified, session.agent), { coordinator, submit: false });
     return { attached: verified, submitted: false };
   };
-  const coordinator = await new Coordinator({
-    repo, stateDir, orientation: () => library.orientation(), settings: () => settings,
-    context: () => ({ repo, localDate: localDay(), selectedId, workspaceRoute, chats: sessions.active(), recentNotices: notices.slice(-5), recentRequests: [...coordinator.operations.values(), ...quick.operations.values()].sort((a, b) => a.at.localeCompare(b.at)).slice(-6).map(({ text, result, status }) => ({ text, result, status })) }),
+  // Talk to Mr. Mak runs on the coordinator the owner chose in Settings.
+  const coordinatorOptions = {
+    repo, stateDir, toolUrl: () => `${origin}/coordinator/tool`, orientation: () => library.orientation(), settings: () => settings,
+    context: () => ({ repo, localDate: localDay(), overseerMode: !!settings.overseer, selectedId, workspaceRoute, chats: sessions.active(), recentNotices: notices.slice(-5), recentRequests: [...coordinator.operations.values(), ...quick.operations.values()].sort((a, b) => a.at.localeCompare(b.at)).slice(-6).map(({ text, result, status }) => ({ text, result, status })) }),
     execute: async (name, args, operationId, requestText) => {
       const latestRequest = requestText || coordinator.operations.get(operationId)?.text || '';
       if (['reopen_chat', 'send_to_chat', 'attach_files'].includes(name)) {
@@ -180,7 +186,7 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
         case 'read_context': return knowledge.read(args.path, args.offset);
         case 'list_skills': return knowledge.skills(args.query || '');
         case 'list_mcp': return mcp.list();
-        case 'get_app_settings': return { voice: settings.voiceName, style: settings.voiceStyle, model: coordinator.model || 'Codex default', effort: settings.coordinatorEffort, billing: 'Codex subscription for the coordinator; OpenAI API for voice' };
+        case 'get_app_settings': return { voice: settings.voiceName, style: settings.voiceStyle, coordinator: coordinator.provider === 'claude' ? 'Claude Code' : 'Codex', model: coordinator.model || 'default', effort: settings.coordinatorEffort, billing: `${coordinator.provider === 'claude' ? 'Claude' : 'Codex'} subscription for the coordinator; OpenAI API for voice` };
         case 'update_voice': {
           if (typeof args.style === 'string' && args.style.trim()) settings.voiceStyle = args.style.trim().slice(0, 1800);
           if (['cedar', 'marin'].includes(args.voice)) settings.voiceName = args.voice;
@@ -190,7 +196,19 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
         default: throw new Error('Unknown coordinator tool');
       }
     },
-  }).init();
+  };
+  const coordinatorProviders = { codex: Coordinator, claude: ClaudeCoordinator };
+  const makeCoordinator = async (provider, previous) => {
+    const next = new (coordinatorProviders[provider] || Coordinator)(coordinatorOptions);
+    if (previous) { next.operations = previous.operations; previous.removeAllListeners(); previous.close(); } else await next.init();
+    next.on('state', state => broadcast('coordinator-state', { state }));
+    next.on('result', operation => broadcast('coordinator-result', { operation }));
+    next.on('error-detail', error => broadcast('service-error', { error }));
+    return next;
+  };
+  let coordinator = await makeCoordinator(settings.coordinatorAgent);
+  const overseer = new Overseer({ chats: () => sessions.active(), ask: request => coordinator.ask(request), enabled: () => !!settings.overseer });
+  overseer.update();
   const quick = await new QuickActions({ stateDir, workspace, context: () => ({ chats: sessions.active(), route: workspaceRoute }), execute: (...args) => coordinator.execute(...args), completed: operation => broadcast('coordinator-result', { operation }) }).init();
   const askMak = async data => {
     if (coordinator.operationPromises.has(data.id) || coordinator.operations.has(data.id)) return coordinator.ask(data);
@@ -198,9 +216,6 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
     if (images.length) return coordinator.ask({ ...data, images });
     return await quick.ask(data) || coordinator.ask({ ...data, images });
   };
-  coordinator.on('state', state => broadcast('coordinator-state', { state }));
-  coordinator.on('result', operation => broadcast('coordinator-result', { operation }));
-  coordinator.on('error-detail', error => broadcast('service-error', { error }));
   sessions.on('session', session => { broadcast('session', { session }); integrations.publish('session', { event: session.status, session }).catch(() => {}); });
   sessions.on('screen-cleared', ({ id }) => broadcast('screen-cleared', { id }));
   sessions.on('service-error', error => broadcast('service-error', { error: publicError(error) }));
@@ -241,6 +256,7 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
         if (!session || !validPlanKey(planSecret, call.chat, request.headers['x-mrmak-plan'])) return json(response, 403, { error: 'Not allowed' });
         return json(response, 200, { text: await savePlan(session.cwd, session.id, call.plan) });
       }
+      if (url.pathname === '/coordinator/tool' && request.method === 'POST' && coordinator.callTool) { const call = await body(request); return json(response, 200, await coordinator.callTool(request.headers['x-mrmak-coordinator'], call.name, call.arguments)); }
       if (url.pathname.startsWith('/api/')) {
         authorize(request);
         const method = request.method;
@@ -295,7 +311,7 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
         if (method === 'GET' && url.pathname === '/api/integrations') return json(response, 200, { providers: integrations.list(), bindings: integrations.bindings.map(({ providerId, externalId, workspaceId, boundAt }) => ({ providerId, externalId, workspaceId, boundAt })) });
         if (method === 'POST' && url.pathname === '/api/integrations/bind') return json(response, 200, await integrations.bind(data));
         if (method === 'GET' && url.pathname === '/api/native/settings') return json(response, 200, nativeSettings.value);
-        if (method === 'GET' && url.pathname === '/api/mcp') return json(response, 200, await mcp.list());
+        if (method === 'GET' && url.pathname === '/api/mcp') { const value = await mcp.list(); return json(response, 200, { ...value, engines: await engineStatus(value.servers) }); }
         if (method === 'POST' && url.pathname === '/api/skills/discover') return json(response, 200, await discoverSkills(await projectFolder(data.path)));
         if (method === 'POST' && url.pathname === '/api/skills/create') return json(response, 200, await createSkill(await projectFolder(data.path), data.candidate));
         // Rules for one project, or the global rules every chat gets.
@@ -373,9 +389,15 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
           if (['all', 'general'].includes(data.usageLimitMode)) settings.usageLimitMode = data.usageLimitMode;
           if (['used', 'remaining'].includes(data.usageDirection)) settings.usageDirection = data.usageDirection;
           if (['full', 'compact', 'hidden'].includes(data.systemEvents)) settings.systemEvents = data.systemEvents;
+          if (data.agentPriority in CPU_PRIORITIES && data.agentPriority !== settings.agentPriority) { settings.agentPriority = data.agentPriority; await sessions.setPriority(data.agentPriority); }
           if (isThemePreference(data.workspaceTheme)) settings.workspaceTheme = data.workspaceTheme;
           if (isThemePreference(data.chatTheme)) settings.chatTheme = data.chatTheme;
           if (['medium', 'high'].includes(data.coordinatorEffort)) settings.coordinatorEffort = data.coordinatorEffort;
+          if (['codex', 'claude'].includes(data.coordinatorAgent) && data.coordinatorAgent !== (settings.coordinatorAgent || 'codex')) {
+            if (coordinator.state === 'working') throw Object.assign(new Error('Mr. Mak is answering a request. Change the coordinator when it finishes.'), { status: 409 });
+            settings.coordinatorAgent = data.coordinatorAgent; coordinator = await makeCoordinator(settings.coordinatorAgent, coordinator); broadcast('coordinator-state', { state: coordinator.state });
+          } else if (data.coordinatorEffort && coordinator.provider === 'claude' && coordinator.state !== 'working') coordinator.close(); // Claude takes its effort when it starts.
+          if (typeof data.overseer === 'boolean') { settings.overseer = data.overseer; overseer.update(); }
           if (typeof data.planTool === 'boolean') settings.planTool = data.planTool;
           if (EFFORT_ADVICE.includes(data.effortAdvice)) settings.effortAdvice = data.effortAdvice;
           if (['cedar', 'marin'].includes(data.voiceName)) settings.voiceName = data.voiceName;
@@ -576,12 +598,12 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
   try { watcher = watch(path.join(repo, 'workspace', 'workspace.json'), () => broadcast('workspace-changed', {})); watcher.on('error', () => {}); } catch { /* Registry may be created after first setup. */ }
   const restoreTimer = restoreSessions ? setTimeout(() => sessions.restore().catch(error => sessions.emit('service-error', error)), 100) : null;
   return {
-    origin, contentOrigin: files.origin, token, sessions, handoffs, coordinator, quick, workspace, cards, files, projects, knowledge, integrations, mobile,
+    origin, contentOrigin: files.origin, token, sessions, handoffs, get coordinator() { return coordinator; }, quick, workspace, cards, files, projects, knowledge, integrations, mobile,
     urls: { workspace: `${origin}/?desktop=1&surface=workspace&token=${token}`, chats: `${origin}/?desktop=1&surface=chats&token=${token}` },
       nativeMessage: event => nativeSettings.receive(event),
       async close() {
         if (closing) return; closing = true; mcp.close(); nativeSettings.close(); await files.writes.catch(() => {});
-      watcher?.close(); clearTimeout(restoreTimer); coordinator.close(); clearTimeout(settingsTimer); await saveSettings(); await transcriptSave; await quick.saves; await workspace.writes;
+      watcher?.close(); clearTimeout(restoreTimer); overseer.close(); coordinator.close(); clearTimeout(settingsTimer); await saveSettings(); await transcriptSave; await quick.saves; await workspace.writes;
       dictation.close(); await mobile.close(); await games.close();
       for (const ws of wss.clients) ws.terminate();
       wss.close(); await sessions.close();

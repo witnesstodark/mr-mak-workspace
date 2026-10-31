@@ -26,8 +26,10 @@ follow their launch options and native account settings. Permission bypass is
 off by default. Do not expose the local service as a public web server.
 
 The optional voice frontend uses OpenAI Live. Routine actions call local tools;
-the Codex app-server coordinator handles broader orchestration with the user's
-configured model. Larger execution tasks go to visible worker terminals. The
+the coordinator handles broader orchestration with the user's configured model:
+the Codex app-server, or Claude Code when Settings → Mr. Mak → Coordinator says so
+(stream JSON, no built-in tools, the coordinator tools through the
+`coordinator-mcp.mjs` bridge and a per-process secret). Larger execution tasks go to visible worker terminals. The
 provider's native conversation ID is recorded when available for later resume.
 Codex discovery checks both local and UTC date folders, keeps waiting through
 delayed first prompts, and reads bounded metadata records larger than one small
@@ -163,6 +165,17 @@ used verbatim, so it needs no quoting) and OpenCode lists it in its
 corrects it. Antigravity and Kimi are not given the rules. A chat already open keeps
 what it started with.
 
+Agent terminals start at the CPU priority chosen in Settings (below normal by
+default). Windows hands a below-normal or idle class down to processes started
+afterwards, and nice values are inherited elsewhere, so the CLI's tools and MCP
+servers follow. Changing it re-applies to every running agent tree; outside
+Windows a raised priority reaches new chats only. Shell tabs stay at normal.
+
+The MCP panel opens with Unity, Godot, Blender and Unreal: whether the editor is
+running (process list), which configured servers belong to it (by server or
+plugin name) and whether a check reached one. Connect and Reconnect run the same
+temporary check as each server's Check button; the agents keep their own sessions.
+
 Each chat's plan sits beside it: the header's Plan button shows its progress and
 opens the panel (the Session Rail for Claude chats, where Plan is the first tab).
 New Claude Code, Codex and OpenCode chats start with instructions written to
@@ -240,6 +253,13 @@ game** starts the command through the system shell in the project folder with no
 agent turn, keeps its last output lines and stops its process tree on **Stop
 game**. A `url` is previewed in the panel while the game runs (`GET`/`POST
 /api/game`, `/api/game/run`, `/api/game/stop`, `/api/game/setup`).
+
+Overseer mode (Settings → Mr. Mak) checks open chats every 3 minutes. A chat
+working with no output for 12 minutes, or waiting for an answer for 5, is handed
+to the coordinator once per stall: it reads the screen, tells a chat stopped by a
+limit or error to continue, and only focuses a chat that asks the owner a
+question or a permission. With the mode on the coordinator also splits large
+requests across chats.
 
 ## Local microphone dictation
 

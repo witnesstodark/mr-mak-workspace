@@ -12,7 +12,7 @@ import { findCodexChat, newerCodexRollout } from './codex-history.mjs';
 import { englishTitle, groupLabel, restoredTitle } from './titles.mjs';
 import { defaultWorkerEffort, workerEfforts } from './effort.mjs';
 import { projectKey } from './recent-projects.mjs';
-import { ptyOptions } from './platform.mjs';
+import { processTrees, ptyOptions, setCpuPriority } from './platform.mjs';
 import { activeRules } from './project-rules.mjs';
 import { planServer as startPlanServer, writeChatInstructions } from './chat-plan.mjs';
 import { rememberedChoice } from './chat-models.mjs';
@@ -62,6 +62,8 @@ export class Sessions extends EventEmitter {
     this.saveChain = Promise.resolve();
     this.dirty = false;
     this.closed = false;
+    // CPU priority of agent terminals, from Settings.
+    this.priority = 'below-normal';
   }
 
   async init() {
@@ -206,6 +208,7 @@ export class Sessions extends EventEmitter {
     if (session.terminal) this.resetTerminal(session);
     const proc = pty.spawn(command.file, command.args, ptyOptions({ cwd: session.cwd, env, cols: session.cols, rows: session.rows }));
     session.process = proc;
+    if (session.agent !== 'shell') setCpuPriority(proc.pid, this.priority);
     session.deviceReplies?.dispose();
     // Inactive tabs still have a terminal: answer device queries without needing
     // a visible renderer. The UI suppresses its duplicate protocol replies.
@@ -737,6 +740,16 @@ export class Sessions extends EventEmitter {
     });
     return this.saveChain;
   }
+  // A new priority also reaches the agents already running and what they started.
+  async setPriority(level) {
+    this.priority = level;
+    const running = [...this.items.values()].filter(item => item.agent !== 'shell' && item.process?.pid);
+    if (!running.length) return 0;
+    const roots = running.map(item => item.process.pid);
+    const trees = await processTrees(roots).catch(() => roots.map(() => []));
+    return [...roots, ...trees.flat()].filter(pid => setCpuPriority(pid, level)).length;
+  }
+
   async close() {
     this.closed = true; clearInterval(this.timer);
     // Preserve the open-tab flags on app quit while giving OpenCode time to
