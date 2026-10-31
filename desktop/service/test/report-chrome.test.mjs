@@ -49,13 +49,14 @@ test('HTML GET and HEAD agree on byte length while ranges remain full transforme
 });
 
 
-test('mobile state bridge preserves report bytes and is absent from desktop defaults', async () => {
+test('mobile reports keep the reader theme, preserve report bytes and the state bridge is absent from desktop defaults', async () => {
   const source = '<!doctype html><html><head></head><body>Mobile reader</body></html>', result = [];
   for await (const chunk of Readable.from([Buffer.from(source)]).pipe(reportChromeStream({ mobileState: true, parentOrigin: 'https://phone.example' }))) result.push(chunk);
   const html = Buffer.concat(result).toString();
-  assert.equal(html.replace(/<script data-mrmak-mobile-state>[\s\S]*?<\/script>/, ''), source);
+  assert.equal(original(html.replace(/<script data-mrmak-mobile-state>[\s\S]*?<\/script>/, '')), source);
   assert.match(html, /event.source !== parent \|\| event.origin !== target/);
-  assert.doesNotMatch(html, /data-mrmak-chrome|allow-same-origin/);
+  assert.equal(html.split('data-mrmak-chrome').length, 2);
+  assert.doesNotMatch(html, /allow-same-origin/);
   const desktop = [];
   for await (const chunk of Readable.from([Buffer.from(source)]).pipe(reportChromeStream())) desktop.push(chunk);
   assert.doesNotMatch(Buffer.concat(desktop).toString(), /mrmak:report-state/);

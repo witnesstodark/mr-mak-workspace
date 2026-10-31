@@ -5,15 +5,32 @@ import CardContent from '../components/CardContent'
 import { validateCard, type CardDocument } from '../../desktop/service/card-schema.mjs'
 import remarkGfm from 'remark-gfm'
 import { Icon } from '../desktop/Icons'
+import ReportFrame from '../components/ReportFrame'
 import { mobileApi, onMobileEvent, reconnectMobile, useMobile } from './client'
 import { mobileBack, reportPosition, saveReportPosition, selectMobileWorkspace, useMobileWorkspace, validReportPosition } from './app-state'
 import { rememberMobileReport, rememberMobileReports } from './workspace-context'
 import { PULL_REFRESH_DISTANCE, pullOffset, usePullRefresh } from './usePullRefresh'
+import './workspace-cards.css'
 
-interface Report { id: string; title: string; category: string; updated: string; steps: { name: string; index: number }[] }
+// `cover`, `progress` and `phase` are optional and already validated by the service.
+interface Report { id: string; title: string; category: string; updated: string; steps: { name: string; index: number }[]; cover?: string; progress?: { done: number; total: number; label?: string }; phase?: string }
+function ResultCard({ item, onOpen }: { item: Report; onOpen: () => void }) {
+  // A cover that fails to load is dropped, so the card falls back to its plain layout.
+  const [failedCover, setFailedCover] = useState<string | null>(null)
+  const cover = item.cover && item.cover !== failedCover ? item.cover : null
+  const { progress, phase } = item
+  return <button className={`mobile-result-card${cover ? ' has-cover' : ''}`} onClick={onOpen}>
+    {cover && <img className="mobile-result-cover" src={cover} alt="" loading="lazy" decoding="async" onError={() => setFailedCover(cover)} />}
+    <span><strong>{item.title}</strong><small>{item.category} · {item.steps.length} {item.steps.length === 1 ? 'tab' : 'tabs'}</small>
+      {phase && <span className="mobile-result-phase">{phase}</span>}
+      {progress && <span className="mobile-result-progress"><span className="mobile-result-progress-text"><b>{progress.done}/{progress.total}</b>{progress.label && <span>{progress.label}</span>}</span><span className="mobile-result-progress-bar" aria-hidden="true"><span style={{ width: `${(progress.done / progress.total) * 100}%` }} /></span></span>}
+    </span>
+    <Icon name="arrow" size={16} />
+  </button>
+}
 interface Preview { title: string; step: string; kind: 'markdown' | 'html' | 'card'; document?: CardDocument; url: string; text?: string; statePersistence?: boolean }
 function restoredReportUrl(preview: Preview, id: string, step: number) {
-  const saved = reportPosition(id, step), url = new URL(preview.url, location.origin)
+  const saved = reportPosition(id, step, preview.url), url = new URL(preview.url, location.origin)
   const prefix = /^\/mobile\/view\/[^/]+\//.exec(url.pathname)?.[0]
   if (prefix && saved.path) url.pathname = prefix + saved.path
   url.hash = saved.hash || ''; return url.href
@@ -71,7 +88,7 @@ export default function Results({ header, active }: { header: HTMLElement | null
     void refresh(); const timer = window.setTimeout(() => void refresh(), Math.max(1000, 25 * 60 * 1000 - (Date.now() - opened.at))); const off = onMobileEvent(event => { if (event.type === 'connected') void refresh() })
     return () => { current = false; clearTimeout(timer); off() }
   }, [active, selectedId, step, opened])
-  useLayoutEffect(() => { if (preview?.kind === 'markdown' && selectedId && markdown.current) { const saved = reportPosition(selectedId, step); markdown.current.scrollTop = saved.top; markdown.current.scrollLeft = saved.left } }, [preview, selectedId, step])
+  useLayoutEffect(() => { if (preview?.kind === 'markdown' && selectedId && markdown.current) { const saved = reportPosition(selectedId, step, preview.url); markdown.current.scrollTop = saved.top; markdown.current.scrollLeft = saved.left } }, [preview, selectedId, step])
   // Restore only on the report's ready handshake. WebKit also fires the iframe's
   // load event on fragment navigation, which would replay a stale position.
   useEffect(() => {
@@ -81,10 +98,10 @@ export default function Results({ header, active }: { header: HTMLElement | null
       if (event.source !== frame.current?.contentWindow || event.origin !== 'null' || !prefix) return
       if (event.data?.type === 'mrmak:report-back') { if (active) mobileBack(); return }
       if (event.data?.type === 'mrmak:report-pull') { const { distance, done } = event.data.state || {}; if (typeof distance === 'number' && Number.isFinite(distance) && typeof done === 'boolean') framePull(Math.max(0, distance), done); return }
-      if (event.data?.type === 'mrmak:report-ready') { frame.current?.contentWindow?.postMessage({ type: 'mrmak:report-restore', state: reportPosition(id, step) }, '*'); return }
+      if (event.data?.type === 'mrmak:report-ready') { frame.current?.contentWindow?.postMessage({ type: 'mrmak:report-restore', state: reportPosition(id, step, preview.url) }, '*'); return }
       if (event.data?.type !== 'mrmak:report-state') return
       const state = validReportPosition(event.data.state)
-      if (state && state.path && state.path.startsWith(prefix.slice(1))) saveReportPosition(id, step, { ...state, path: state.path.slice(prefix.length - 1) })
+      if (state && state.path && state.path.startsWith(prefix.slice(1))) saveReportPosition(id, step, { ...state, path: state.path.slice(prefix.length - 1) }, preview.url)
     }
     window.addEventListener('message', message)
     frame.current?.contentWindow?.postMessage({ type: 'mrmak:report-active', active }, '*')
@@ -95,5 +112,5 @@ export default function Results({ header, active }: { header: HTMLElement | null
   function open(report: Report) { selectMobileWorkspace(report.id); setError('') }
   const relativeUrl = (url: string) => { const safe = defaultUrlTransform(url); return safe && preview ? new URL(safe, new URL(preview.url, location.origin)).href : safe }
   const indicator = (distance > 0 || refreshing) && <div className={`mobile-pull-refresh ${refreshing ? 'refreshing' : distance >= PULL_REFRESH_DISTANCE ? 'ready' : ''}`} style={{ '--pull': `${refreshing ? 48 : pullOffset(distance)}px`, '--turn': `${refreshing ? 0 : distance * 3}deg` } as React.CSSProperties} role={refreshing ? 'status' : undefined} aria-label={refreshing ? 'Refreshing Workspace' : undefined}><Icon name="refresh" size={18} /></div>
-  return <section className="mobile-results" {...touch}>{indicator}{header && createPortal(<><h1 title={selected?.title}>{selected?.title || 'Workspace'}</h1>{selected && <details ref={menu} className="mobile-page-picker"><summary className="mobile-icon" aria-label="Select report page" title="Select report page"><Icon name="menu" size={19} /></summary><div className="mobile-page-menu" aria-label="Report pages">{selected.steps.map(item => <button key={item.index} aria-pressed={step === item.index} className={step === item.index ? 'active' : ''} onClick={() => { if (menu.current) menu.current.open = false; selectMobileWorkspace(selected.id, item.index); setError('') }}><span>{item.name}</span>{step === item.index && <span aria-hidden="true">✓</span>}</button>)}<button aria-label="Close report" onClick={close}><Icon name="back" size={16} /><span>All workspaces</span></button></div></details>}</>, header)}{selected ? <>{loading && <p className="mobile-report-note">Opening report…</p>}{preview?.kind === 'html' && <iframe key={opened?.revision} ref={frame} title={`${preview.title} · ${preview.step}`} src={opened?.url} sandbox="allow-scripts allow-downloads allow-popups allow-popups-to-escape-sandbox" referrerPolicy="no-referrer" />}{preview?.kind === 'card' && preview.document && <div className="mobile-report-card"><CardContent document={validateCard(preview.document)} baseUrl={preview.url} /></div>}{preview?.kind === 'markdown' && <article ref={markdown} className="mobile-message mobile-report-markdown" onScroll={() => { const node = markdown.current; if (active && node) saveReportPosition(selected.id, step, { top: node.scrollTop, left: node.scrollLeft }) }}><ReactMarkdown remarkPlugins={[remarkGfm]} urlTransform={relativeUrl} components={{ a: ({ href, children }) => <a href={href} target="_blank" rel="noreferrer">{children}</a>, img: ({ src, alt }) => <a href={src} target="_blank" rel="noreferrer"><img src={src} alt={alt || ''} loading="lazy" /></a> }}>{preview.text || ''}</ReactMarkdown></article>}</> : <div className="mobile-results-list"><label className="mobile-search"><Icon name="search" size={17} /><input aria-label="Find a report" value={query} onChange={event => setQuery(event.target.value)} placeholder="Find a report…" /></label>{reports.filter(item => `${item.title} ${item.category}`.toLowerCase().includes(query.toLowerCase())).map(item => <button className="mobile-result-card" key={item.id} onClick={() => open(item)}><span><strong>{item.title}</strong><small>{item.category} · {item.steps.length} {item.steps.length === 1 ? 'tab' : 'tabs'}</small></span><Icon name="arrow" size={16} /></button>)}</div>}{error && <p className="mobile-error" role="alert">{error}</p>}</section>
+  return <section className="mobile-results" {...touch}>{indicator}{header && createPortal(<><h1 title={selected?.title}>{selected?.title || 'Workspace'}</h1>{selected && <details ref={menu} className="mobile-page-picker"><summary className="mobile-icon" aria-label="Select report page" title="Select report page"><Icon name="menu" size={19} /></summary><div className="mobile-page-menu" aria-label="Report pages">{selected.steps.map(item => <button key={item.index} aria-pressed={step === item.index} className={step === item.index ? 'active' : ''} onClick={() => { if (menu.current) menu.current.open = false; selectMobileWorkspace(selected.id, item.index); setError('') }}><span>{item.name}</span>{step === item.index && <span aria-hidden="true">✓</span>}</button>)}<button aria-label="Close report" onClick={close}><Icon name="back" size={16} /><span>All workspaces</span></button></div></details>}</>, header)}{selected ? <>{loading && <p className="mobile-report-note">Opening report…</p>}{preview?.kind === 'html' && <ReportFrame key={opened?.revision} ref={frame} title={`${preview.title} · ${preview.step}`} url={opened!.url} sandbox="allow-scripts allow-downloads allow-popups allow-popups-to-escape-sandbox" referrerPolicy="no-referrer" />}{preview?.kind === 'card' && preview.document && <div className="mobile-report-card"><CardContent document={validateCard(preview.document)} baseUrl={preview.url} /></div>}{preview?.kind === 'markdown' && <article ref={markdown} className="mobile-message mobile-report-markdown" onScroll={() => { const node = markdown.current; if (active && node) saveReportPosition(selected.id, step, { top: node.scrollTop, left: node.scrollLeft }, preview.url) }}><ReactMarkdown remarkPlugins={[remarkGfm]} urlTransform={relativeUrl} components={{ a: ({ href, children }) => <a href={href} target="_blank" rel="noreferrer">{children}</a>, img: ({ src, alt }) => <a href={src} target="_blank" rel="noreferrer"><img src={src} alt={alt || ''} loading="lazy" /></a> }}>{preview.text || ''}</ReactMarkdown></article>}</> : <div className="mobile-results-list"><label className="mobile-search"><Icon name="search" size={17} /><input aria-label="Find a report" value={query} onChange={event => setQuery(event.target.value)} placeholder="Find a report…" /></label>{reports.filter(item => `${item.title} ${item.category}`.toLowerCase().includes(query.toLowerCase())).map(item => <ResultCard key={item.id} item={item} onOpen={() => open(item)} />)}</div>}{error && <p className="mobile-error" role="alert">{error}</p>}</section>
 }

@@ -1,0 +1,403 @@
+<!doctype html>
+<!-- A full-frame editor with its own theme engine (theme.mjs), not a report document. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>Game UI Studio · Mr. Mak</title>
+  <link rel="stylesheet" href="editor.css">
+  <script type="module" src="editor.mjs"></script>
+</head>
+<body>
+
+  <!-- Icon set: one stroke weight, currentColor -->
+  <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+    <symbol id="i-cursor" viewBox="0 0 24 24"><path d="M5 3l14 7-6.2 1.8L11 18z"/></symbol>
+    <symbol id="i-panel" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></symbol>
+    <symbol id="i-button" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="10" rx="3"/><path d="M8.5 12h7"/></symbol>
+    <symbol id="i-label" viewBox="0 0 24 24"><path d="M5 7V5h14v2M12 5v14M9 19h6"/></symbol>
+    <symbol id="i-slider" viewBox="0 0 24 24"><path d="M3 12h18"/><circle cx="9" cy="12" r="3"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-9 9"/></symbol>
+    <symbol id="i-input" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 9.5v5"/></symbol>
+    <symbol id="i-checkbox" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 12l3 3 5-6"/></symbol>
+    <symbol id="i-group" viewBox="0 0 24 24"><path d="M8 4H5a1 1 0 0 0-1 1v3M16 4h3a1 1 0 0 1 1 1v3M8 20H5a1 1 0 0 1-1-1v-3M16 20h3a1 1 0 0 0 1-1v-3"/></symbol>
+    <symbol id="i-template" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="6" rx="1.5"/><rect x="4" y="14" width="7" height="6" rx="1.5"/><rect x="13" y="14" width="7" height="6" rx="1.5"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6 0 10 7 10 7a17 17 0 0 1-3.2 3.9M6.6 6.6C3.9 8.4 2 12 2 12s4 7 10 7a9.8 9.8 0 0 0 4.4-1"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+    <symbol id="i-unlock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 7.7-1.5"/></symbol>
+    <symbol id="i-note" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 4l2.4 5 5.4.7-4 3.7 1 5.4L12 16.2 7.2 18.8l1-5.4-4-3.7 5.4-.7z"/></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14L4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3"/></symbol>
+    <symbol id="i-redo" viewBox="0 0 24 24"><path d="M15 14l5-5-5-5M20 9H9a5 5 0 0 0 0 10h3"/></symbol>
+    <symbol id="i-chev-d" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+    <symbol id="i-chev-r" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+    <symbol id="i-chev-u" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></symbol>
+    <symbol id="i-safe" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" stroke-dasharray="3 3"/><rect x="8" y="8" width="8" height="8" rx="1"/></symbol>
+    <symbol id="i-overlay" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 15l5-5 4 4 3-3 6 6"/></symbol>
+    <symbol id="i-aspect" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10v4M18 10v4"/></symbol>
+    <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="M4 12l16-8-6 16-2.5-5.5z"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7"/></symbol>
+    <symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.8 2.8L16 9.5"/></symbol>
+    <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17v.5"/></symbol>
+    <symbol id="i-error" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></symbol>
+    <symbol id="i-code" viewBox="0 0 24 24"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2h8.5A1.5 1.5 0 0 1 21 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6zM14 3v4h4"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15V4M7 9l5-5 5 5M5 20h14"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></symbol>
+    <symbol id="i-layout" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 9v12"/></symbol>
+    <symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18c1 0 1.5-.7 1.5-1.4 0-1.2-1-1.6-1-2.6s.8-2 2-2H17a4 4 0 0 0 4-4c0-4.4-4-8-9-8z"/><circle cx="7.5" cy="11" r="1"/><circle cx="11" cy="7.5" r="1"/><circle cx="15.5" cy="8.5" r="1"/></symbol>
+    <symbol id="i-handoff" viewBox="0 0 24 24"><path d="M14 3h7v7M21 3l-9 9M19 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5"/></symbol>
+    <symbol id="i-screen" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></symbol>
+    <symbol id="i-flow" viewBox="0 0 24 24"><rect x="2" y="4" width="7" height="6" rx="1.5"/><rect x="15" y="4" width="7" height="6" rx="1.5"/><rect x="15" y="14" width="7" height="6" rx="1.5"/><path d="M9 7h6M12 7v10h3"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+    <symbol id="i-locate" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></symbol>
+    <symbol id="i-wand" viewBox="0 0 24 24"><path d="M4 20L15 9M14 4v3M19 9h-3M17.5 5.5l-2 2M18 14v2M20 15h-4M8 3v2M9 4H7"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M9 7l-5 5 5 5M4 12h11a5 5 0 0 1 0 10"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1"/></symbol>
+  </svg>
+
+  <div id="studio" class="studio mode-screen">
+
+    <!-- Top Bar -->
+    <header class="topbar">
+      <div class="brand" title="Game UI Studio">
+        <span class="brand-mark"><svg class="ic sm"><use href="#i-layout"/></svg></span>
+        <span class="brand-name">UI Studio</span>
+      </div>
+
+      <label class="project-picker" title="Connected game project (the Copilot agent runs in this folder)">
+        <svg class="ic sm"><use href="#i-folder"/></svg>
+        <select id="project-select" aria-label="Project">
+          <option value="">(Standalone / No Project)</option>
+        </select>
+      </label>
+      <button id="btn-remove-project" class="btn icon sm" title="Choose a project to remove it from the list" aria-label="Remove the project from the list" disabled><svg class="ic sm"><use href="#i-x"/></svg></button>
+
+      <div class="menu-wrap">
+        <button id="btn-file-menu" class="btn" aria-haspopup="menu" aria-expanded="false" title="Import, export and project folders">
+          <svg class="ic sm"><use href="#i-file"/></svg><span class="lbl">File</span><svg class="ic xs"><use href="#i-chev-d"/></svg>
+        </button>
+        <div id="file-menu" class="menu" role="menu" hidden>
+          <button role="menuitem" id="btn-import-json"><svg class="ic sm"><use href="#i-upload"/></svg>Open .gameui.json…</button>
+          <button role="menuitem" id="btn-export-json"><svg class="ic sm"><use href="#i-download"/></svg>Export .gameui.json</button>
+          <button role="menuitem" id="btn-export-png"><svg class="ic sm"><use href="#i-image"/></svg>Export screen as PNG</button>
+          <hr>
+          <button role="menuitem" id="btn-manage-folders"><svg class="ic sm"><use href="#i-folder"/></svg>Project folders…</button>
+        </div>
+        <input type="file" id="import-file" accept=".json,application/json" hidden>
+      </div>
+
+      <div class="topbar-group">
+        <button id="btn-undo" class="btn icon" title="Undo (Ctrl+Z)" aria-label="Undo" disabled><svg class="ic"><use href="#i-undo"/></svg></button>
+        <button id="btn-redo" class="btn icon" title="Redo (Ctrl+Shift+Z)" aria-label="Redo" disabled><svg class="ic"><use href="#i-redo"/></svg></button>
+      </div>
+
+      <div class="mode-switch seg" role="tablist" aria-label="View">
+        <button id="mode-screen" class="on" role="tab" aria-selected="true" title="Edit one screen on the canvas"><svg class="ic sm"><use href="#i-screen"/></svg><span class="lbl">Screen</span></button>
+        <button id="mode-flow" role="tab" aria-selected="false" title="See every screen and the links between them"><svg class="ic sm"><use href="#i-flow"/></svg><span class="lbl">Flow</span></button>
+      </div>
+
+      <div class="topbar-right">
+        <button id="btn-checks" class="checks-badge ok" aria-haspopup="dialog" aria-expanded="false" title="Game UI Guidelines checks, run locally on every change">
+          <svg class="ic sm" id="checks-icon"><use href="#i-check-circle"/></svg><span id="checks-label">Checks pass</span>
+        </button>
+        <button id="btn-handoff" class="btn box" title="Agent-ready Markdown specification of this screen">
+          <svg class="ic sm"><use href="#i-handoff"/></svg><span class="lbl">Handoff</span>
+        </button>
+        <button id="btn-toggle-chat" class="btn box copilot-btn" title="Copilot (Ctrl+K)" aria-expanded="false">
+          <svg class="ic sm"><use href="#i-sparkle"/></svg><span class="lbl">Copilot</span><span class="dot" id="copilot-dot" hidden></span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Layout -->
+    <div class="main" id="main">
+
+      <!-- Tool strip: one key per widget -->
+      <nav class="tools" id="tools" aria-label="Tools"></nav>
+
+      <!-- Layers -->
+      <aside class="layers" aria-label="Layers and game kit">
+        <div class="panel-head">
+          <div class="side-tabs" role="tablist" aria-label="Left panel">
+            <button id="side-tab-layers" role="tab" class="on" aria-selected="true">Layers</button>
+            <button id="side-tab-kit" role="tab" aria-selected="false" title="The game's art, colours, fonts, components and screens">Kit<span class="kit-count" id="kit-count"></span></button>
+          </div>
+          <span class="ctx" id="layers-ctx"></span>
+          <div class="sp">
+            <button id="btn-collapse-tree" class="btn icon sm" title="Collapse or expand all"><svg class="ic sm"><use href="#i-chev-u"/></svg></button>
+          </div>
+        </div>
+        <div class="side-pane" id="layers-pane">
+          <label class="search">
+            <svg class="ic sm"><use href="#i-search"/></svg>
+            <input type="search" id="layer-filter" placeholder="Filter layers" aria-label="Filter layers">
+          </label>
+          <div id="tree-container" class="tree" role="tree" aria-label="UI Hierarchy"></div>
+          <div class="panel-foot"><span id="layers-count"></span><span>Drag to nest</span></div>
+        </div>
+        <div class="side-pane" id="kit-pane" hidden>
+          <label class="search">
+            <svg class="ic sm"><use href="#i-search"/></svg>
+            <input type="search" id="kit-filter" placeholder="Filter the kit" aria-label="Filter the kit">
+          </label>
+          <div id="kit-cats" class="kit-cats" role="group" aria-label="Kit sections"></div>
+          <div id="kit-body" class="kit-body"></div>
+          <div class="panel-foot"><span id="kit-hint">Click to use</span><button class="link" id="btn-kit-reload" title="Read the kit again after Copilot updates it">Reload</button></div>
+        </div>
+        <datalist id="kit-colors"></datalist>
+      </aside>
+
+      <!-- Stage: Screen canvas or Flow board -->
+      <section class="stage" id="stage">
+        <div class="stage-head" id="screen-head">
+          <div id="screen-tabs" class="tabs" role="tablist" aria-label="Screens"></div>
+          <button id="btn-add-screen" class="btn icon sm" title="New screen from a template" aria-haspopup="menu"><svg class="ic sm"><use href="#i-plus"/></svg></button>
+          <div class="stage-head-right">
+            <label class="res-picker" title="Design resolution of this screen">
+              <select id="resolution-select" aria-label="Design resolution"></select>
+            </label>
+          </div>
+        </div>
+
+        <div class="stage-head" id="flow-head" hidden>
+          <h2 class="flow-title">Flow</h2><span class="ctx" id="flow-summary"></span>
+          <div class="flow-legend">
+            <span><i class="ln"></i>Confirm</span>
+            <span><i class="ln dash"></i>Esc / Back</span>
+            <span><i class="ln miss"></i>Missing target</span>
+          </div>
+          <div class="stage-head-right">
+            <button id="btn-flow-open" class="btn box sm" title="Edit the selected screen on the canvas">Open screen</button>
+          </div>
+        </div>
+
+        <div id="canvas-viewport" class="canvas-viewport">
+          <div class="canvas-frame" id="canvas-frame">
+            <canvas id="ruler-x" class="ruler ruler-x" aria-hidden="true"></canvas>
+            <canvas id="ruler-y" class="ruler ruler-y" aria-hidden="true"></canvas>
+            <canvas id="canvas" width="1920" height="1080" tabindex="0" aria-label="Screen canvas"></canvas>
+          </div>
+        </div>
+        <div id="preview-tag" class="preview-tag" hidden></div>
+        <div id="proposal-tag" class="proposal-tag" hidden></div>
+        <input type="file" id="bg-file" accept="image/*" hidden>
+
+        <div id="flow-board" class="flow-board" hidden></div>
+
+        <!-- Floating view toolbar -->
+        <div class="vtool" id="view-toolbar">
+          <button id="btn-zoom-out" class="btn icon" title="Zoom out (Ctrl+−)"><svg class="ic sm"><use href="#i-minus"/></svg></button>
+          <button id="zoom-label" class="btn num" title="Zoom to fit (Shift+1)">Fit</button>
+          <button id="btn-zoom-in" class="btn icon" title="Zoom in (Ctrl+=)"><svg class="ic sm"><use href="#i-plus"/></svg></button>
+          <span class="vsep"></span>
+          <button id="btn-grid" class="btn on" title="Grid and snapping (click to change)"><svg class="ic sm"><use href="#i-grid"/></svg><span id="grid-label">16</span></button>
+          <button id="btn-safe" class="btn icon on" title="Action-safe frame"><svg class="ic sm"><use href="#i-safe"/></svg></button>
+          <button id="btn-overlay" class="btn icon" title="Reference screenshot overlay"><svg class="ic sm"><use href="#i-overlay"/></svg></button>
+          <button id="btn-pins" class="btn icon" title="Intent pins" aria-pressed="false"><svg class="ic sm"><use href="#i-note"/></svg></button>
+          <span class="vsep"></span>
+          <label class="vt-select" title="Preview anchoring at another aspect ratio (pixel sizes stay the same)">
+            <svg class="ic sm"><use href="#i-aspect"/></svg>
+            <select id="aspect-select" aria-label="Preview aspect ratio"></select>
+          </label>
+          <span class="vsep"></span>
+          <span class="vt-lbl">State</span>
+          <div class="seg state-seg" id="state-seg" role="radiogroup" aria-label="Preview state">
+            <button data-state="normal" class="on">Normal</button>
+            <button data-state="hover">Hover</button>
+            <button data-state="pressed">Pressed</button>
+            <button data-state="focused" title="Keyboard / gamepad focus, with the focus order">Focused</button>
+            <button data-state="disabled">Disabled</button>
+          </div>
+          <label class="vt-select state-select" title="Preview state">
+            <select id="mock-state-select" aria-label="Preview state">
+              <option value="normal" selected>Normal</option>
+              <option value="hover">Hover</option>
+              <option value="pressed">Pressed</option>
+              <option value="focused">Focused</option>
+              <option value="disabled">Disabled</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <!-- Properties -->
+      <aside class="inspector" id="inspector" aria-label="Properties">
+        <div id="inspector-content"></div>
+      </aside>
+
+      <!-- Copilot drawer (collapsible; docks as a column on wide windows) -->
+      <aside id="chat-panel" class="chat-drawer collapsed" aria-label="Copilot">
+        <div id="rail-resizer" class="drawer-resizer" title="Drag to resize"></div>
+        <div class="chat-header">
+          <div class="chat-header-row">
+            <div class="chat-title">
+              <svg class="ic sm"><use href="#i-sparkle"/></svg>
+              <span>Copilot</span>
+              <span id="chat-project-badge" class="chat-badge">Bleeding Stars</span>
+            </div>
+            <button id="btn-close-chat" class="btn icon sm" title="Close Copilot"><svg class="ic sm"><use href="#i-x"/></svg></button>
+          </div>
+
+          <div class="chat-controls-row">
+            <select id="agent-select" title="Connected AI Engine">
+              <option value="antigravity" selected>Antigravity (Gemini)</option>
+              <option value="claude">Claude</option>
+              <option value="codex">Codex</option>
+              <option value="opencode">OpenCode</option>
+            </select>
+
+            <select id="effort-select" title="Reasoning / Effort Level">
+              <option value="medium">Effort: Medium</option>
+              <option value="high" selected>Effort: High</option>
+              <option value="xhigh">Effort: Extra High</option>
+              <option value="max">Effort: Max</option>
+            </select>
+          </div>
+
+          <div class="session-line" id="session-line" data-state="idle">
+            <i class="sdot" aria-hidden="true"></i><span id="session-text">Starts with your first message</span>
+            <button id="btn-session-open" class="link" title="Show this chat in Mr. Mak Chats (answer permission prompts there)" hidden>Open chat</button>
+          </div>
+        </div>
+
+        <!-- What every message carries -->
+        <div class="ctx-bar">
+          <span class="ctx-cap">Sends</span>
+          <button class="cchip on" id="ctx-screen" aria-pressed="true"><svg class="ic xs"><use href="#i-check"/></svg><span>Screen</span></button>
+          <button class="cchip on" id="ctx-selection" aria-pressed="true" hidden><svg class="ic xs"><use href="#i-check"/></svg><span>Selection</span></button>
+          <span class="ctx-size" id="ctx-size"></span>
+          <button class="btn icon sm" id="btn-ctx-peek" aria-expanded="false" aria-controls="ctx-peek" aria-label="What the agent sees" title="See what the agent receives, copy it or the handoff, or paste a reply"><svg class="ic sm"><use href="#i-eye"/></svg></button>
+        </div>
+        <div class="ctx-peek" id="ctx-peek" hidden>
+          <div class="peek-head">
+            <div class="seg sm" id="peek-tabs" role="tablist" aria-label="Agent text">
+              <button data-tab="context" class="on">Context</button>
+              <button data-tab="handoff">Handoff</button>
+            </div>
+            <button class="btn box sm" id="btn-peek-copy"><svg class="ic sm"><use href="#i-copy"/></svg>Copy</button>
+          </div>
+          <div class="hint" id="peek-hint"></div>
+          <pre id="peek-body" class="peek-body"></pre>
+          <div class="paste-row">
+            <textarea id="paste-reply" rows="2" placeholder="Paste a reply with a gameui-edit block" aria-label="Paste an agent reply"></textarea>
+            <button class="btn box sm" id="btn-paste-reply">Read</button>
+          </div>
+        </div>
+
+        <!-- Message Stream -->
+        <div id="chat-messages" class="chat-messages">
+          <div class="chat-msg system" id="chat-connected">Connecting…</div>
+          <div class="chat-msg agent">
+            <div class="chat-msg-author">Copilot</div>
+            <div>Ask for a change to this screen. Proposed edits arrive as cards you can preview on the canvas, then apply or discard.</div>
+          </div>
+        </div>
+
+        <!-- Quick Action Chips -->
+        <div class="chat-quick-actions">
+          <button class="chip-btn" id="chip-send-layout" title="Send the handoff Markdown of this screen"><svg class="ic sm"><use href="#i-handoff"/></svg>Handoff</button>
+          <button class="chip-btn" id="chip-gen-code"><svg class="ic sm"><use href="#i-code"/></svg>Engine code</button>
+          <button class="chip-btn" id="chip-import-art"><svg class="ic sm"><use href="#i-palette"/></svg>Game kit</button>
+          <button class="chip-btn" id="chip-validate-v2"><svg class="ic sm"><use href="#i-check"/></svg>Review</button>
+        </div>
+
+        <!-- Chat Input -->
+        <div class="chat-input-area">
+          <div class="chat-input-row">
+            <textarea id="chat-input" class="chat-textarea" rows="2" placeholder="Ask about this screen…" aria-label="Message the agent"></textarea>
+            <button id="btn-chat-send" class="btn primary icon-text" title="Send (Enter; Shift+Enter for a new line)"><svg class="ic sm"><use href="#i-send"/></svg>Send</button>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <!-- Status Bar -->
+    <footer class="statusbar">
+      <span id="status-screen"></span>
+      <span id="canvas-sel-info"></span>
+      <span id="status-snap"></span>
+      <div class="r">
+        <span id="status-history"></span>
+        <span id="status-bar" class="status-text">Ready.</span>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Template menu (new screen or insert into the current screen) -->
+  <div id="template-menu" class="menu" role="menu" hidden></div>
+
+  <!-- Guideline checks list -->
+  <div id="checks-popover" class="popover checks-pop" role="dialog" aria-label="Guideline checks" hidden>
+    <div class="pop-head">
+      <b>Game UI Guidelines</b>
+      <div class="seg sm" id="checks-scope">
+        <button data-scope="screen" class="on">This screen</button>
+        <button data-scope="all">All screens</button>
+      </div>
+      <button class="btn icon sm" id="btn-close-checks" title="Close"><svg class="ic sm"><use href="#i-x"/></svg></button>
+    </div>
+    <div id="checks-list" class="checks-list"></div>
+    <div class="pop-foot">
+      <span>Checked locally on every change</span>
+      <button class="btn sm ask" id="btn-checks-ask"><svg class="ic sm"><use href="#i-sparkle"/></svg>Ask Copilot to review</button>
+    </div>
+  </div>
+
+  <!-- Agent Handoff Dialog -->
+  <dialog id="handoff-dialog">
+    <div class="dialog-header">
+      <h3>Agent handoff</h3>
+      <button id="btn-close-handoff" class="btn icon sm" title="Close"><svg class="ic sm"><use href="#i-x"/></svg></button>
+    </div>
+    <p class="dialog-lead">
+      Markdown for the agent that implements this screen: the layout tree, anchors, navigation and focus, states and your intent notes.
+    </p>
+    <textarea id="handoff-markdown" class="code-output" readonly></textarea>
+    <div class="dialog-actions">
+      <button id="btn-copy-handoff" class="btn box"><svg class="ic sm"><use href="#i-copy"/></svg>Copy Markdown</button>
+      <button id="btn-send-handoff-to-chat" class="btn primary"><svg class="ic sm"><use href="#i-sparkle"/></svg>Send to Copilot</button>
+    </div>
+  </dialog>
+
+  <!-- Project Folders Manager Dialog -->
+  <dialog id="folders-dialog">
+    <div class="dialog-header">
+      <h3>Project folders</h3>
+      <button id="btn-close-folders" class="btn icon sm" title="Close"><svg class="ic sm"><use href="#i-x"/></svg></button>
+    </div>
+    <p class="dialog-lead">
+      Game UI Studio lists the subfolders of these directories as projects in the project picker. Mr. Mak remembers these folders and the projects you remove.
+    </p>
+
+    <div class="dialog-cap">Search directories</div>
+    <div id="folders-list" class="folders-list"></div>
+
+    <div class="dialog-cap" id="hidden-projects-cap" hidden>Removed projects</div>
+    <div id="hidden-projects-list" class="folders-list"></div>
+
+    <div class="dialog-cap">Add a directory</div>
+    <div class="folders-add">
+      <input type="text" id="new-folder-path" placeholder="e.g. D:/MyGames, C:/Dev/GodotProjects, or projects/...">
+      <button id="btn-add-folder-path" class="btn box">Add</button>
+    </div>
+
+    <div class="dialog-actions">
+      <button id="btn-scan-folders" class="btn primary">Scan now</button>
+    </div>
+  </dialog>
+
+</body>
+</html>

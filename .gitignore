@@ -41,3 +41,6 @@ Thumbs.db
 
 # graft's local graph cache — regenerable, not committed (run `graft build`).
 /graft/
+
+# Game UI Studio: copies of connected projects' UI art, kept only on disk
+workspace/2026-10-27_game-ui-studio/assets/

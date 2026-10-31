@@ -1,16 +1,17 @@
-import { useCallback, useEffect, useRef, useState, type IframeHTMLAttributes } from 'react'
+import { useCallback, useEffect, useImperativeHandle, useRef, useState, type IframeHTMLAttributes, type Ref } from 'react'
 import { useWorkspaceTheme } from '../lib/workspace-theme'
 import { reportThemeCSS } from '../../desktop/service/report-theme.mjs'
 
-type Props = Omit<IframeHTMLAttributes<HTMLIFrameElement>, 'src' | 'onLoad'> & { url: string; onLoad?: () => void }
+type Props = Omit<IframeHTMLAttributes<HTMLIFrameElement>, 'src' | 'onLoad'> & { url: string; onLoad?: () => void; ref?: Ref<HTMLIFrameElement> }
 
 // Desktop reports run on their folder's own port, never on the UI's origin, so a same-origin
 // report can frame and read its own pages but cannot reach the app or another report.
 export const REPORT_SANDBOX = 'allow-scripts allow-same-origin allow-forms allow-popups allow-downloads'
 
-function ThemedFrame({ url, onLoad, ...props }: Props) {
+function ThemedFrame({ url, onLoad, ref, ...props }: Props) {
   const { resolved } = useWorkspaceTheme()
   const frame = useRef<HTMLIFrameElement>(null)
+  useImperativeHandle(ref, () => frame.current!)
   // Set the initial colour before a desktop report paints. Later theme changes
   // use a message, preserving scroll position and the report's interactive state.
   const [src] = useState(() => {
@@ -25,7 +26,8 @@ function ThemedFrame({ url, onLoad, ...props }: Props) {
     // second origin, whose prelude accepts theme messages only from its UI.
     // Only touch the document when same-origin: WebKit reports every blocked
     // cross-origin access as an error, even inside try/catch.
-    const sameOrigin = new URL(url, location.href).origin === location.origin
+    const opaque = props.sandbox !== undefined && !props.sandbox.split(/\s+/).includes('allow-same-origin')
+    const sameOrigin = !opaque && new URL(url, location.href).origin === location.origin
     if (sameOrigin) try {
       const doc = element.contentDocument
       if (doc?.documentElement) {
@@ -41,7 +43,7 @@ function ThemedFrame({ url, onLoad, ...props }: Props) {
     // A desktop report runs on its folder's own port, which the UI does not track.
     // The message only carries the theme name.
     element.contentWindow?.postMessage({ type: 'mrmak:theme', theme: resolved }, '*')
-  }, [resolved, url])
+  }, [resolved, url, props.sandbox])
   useEffect(applyTheme, [applyTheme])
   return <iframe {...props} ref={frame} src={src} onLoad={() => { applyTheme(); onLoad?.() }} />
 }

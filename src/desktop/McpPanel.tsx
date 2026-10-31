@@ -11,10 +11,23 @@ type Server = {
   readiness: string; transport: string; endpoint: string; executable: string | null; plugin: string | null; synced?: boolean
   sources: { scope: string; path: string; effective: boolean }[]; missingEnv: string[]; credentialNames: string[]; canCheck: boolean; connection: Check | null
 }
-type Inventory = { scannedAt: string; servers: Server[]; sources: { client: string; scope: string; path: string }[]; problems: { path: string; message: string }[] }
+type Engine = { id: string; name: string; running: boolean; servers: string[] }
+type Inventory = { scannedAt: string; servers: Server[]; engines?: Engine[]; sources: { client: string; scope: string; path: string }[]; problems: { path: string; message: string }[] }
 const clients = { codex: 'Codex', claude: 'Claude', antigravity: 'Antigravity', kimi: 'Kimi', cursor: 'Cursor' }
 const scopes: Record<string, string> = { project: 'Project', local: 'Project · this PC', global: 'Global', plugin: 'Plugin', managed: 'Managed' }
 const stateLabel: Record<string, string> = { configured: 'Enabled', disabled: 'Disabled', managed: 'Host managed', 'missing-env': 'Needs setup', 'missing-command': 'Not installed', approval: 'Needs approval' }
+// One engine's state across every agent that can reach it.
+function engineState(engine: Engine, servers: Server[]) {
+  const own = servers.filter(server => engine.servers.includes(server.id))
+  const enabled = own.filter(server => server.enabled)
+  const fresh = enabled.filter(server => server.connection && !server.connection.stale)
+  if (!own.length) return { tone: 'none', label: 'No MCP server', note: 'Add its MCP server to an agent to work in it from chat.' }
+  if (!enabled.length) return { tone: 'none', label: 'Disabled', note: 'Its MCP servers are turned off.' }
+  if (fresh.some(server => server.connection?.status === 'available')) return { tone: 'available', label: 'Connected', note: '' }
+  if (!engine.running) return { tone: 'idle', label: 'Editor closed', note: 'Open the editor with its MCP plugin, then connect.' }
+  if (fresh.length) return { tone: 'failed', label: 'Not reachable', note: 'The editor is open but its MCP plugin did not answer. Start the plugin’s server, then reconnect.' }
+  return { tone: 'idle', label: 'Not checked', note: '' }
+}
 const checkLabel: Record<string, string> = { available: 'Available', 'agent-auth': 'Check login in agent', timeout: 'Timed out', unavailable: 'Not reachable' }
 
 export default function McpPanel({ onClose }: { onClose: () => void }) {
@@ -43,6 +56,10 @@ export default function McpPanel({ onClose }: { onClose: () => void }) {
     catch (error) { setError(error instanceof Error ? error.message : String(error)) }
     finally { setBusy(value => { const next = new Set(value); next.delete(server.id); return next }) }
   }
+  const connect = async (engine: Engine) => {
+    const own = (inventory?.servers || []).filter(server => engine.servers.includes(server.id) && server.enabled && server.canCheck)
+    for (const server of own) await check(server)
+  }
   const visible = (inventory?.servers || []).filter(server => (client === 'all' || server.client === client)
     && (scope === 'all' || (scope === 'project' ? ['project', 'local'].includes(server.scope) : server.scope === scope))
     && `${server.name} ${server.endpoint} ${server.plugin || ''}`.toLowerCase().includes(query.toLowerCase()))
@@ -50,6 +67,16 @@ export default function McpPanel({ onClose }: { onClose: () => void }) {
     <button className="desk-icon" onClick={() => void refresh()} title="Refresh MCP configurations" aria-label="Refresh MCP configurations"><Icon name="refresh" size={15} /></button>
     <button className="desk-icon" onClick={onClose} aria-label="Close MCP"><Icon name="close" size={17} /></button>
   </div></header>
+    {inventory?.engines && <section className="mcp-engines" aria-label="Game engines"><h3>Engines</h3><div>{inventory.engines.map(engine => {
+      const state = engineState(engine, inventory.servers), checking = inventory.servers.some(server => engine.servers.includes(server.id) && busy.has(server.id))
+      const checkable = inventory.servers.some(server => engine.servers.includes(server.id) && server.enabled && server.canCheck)
+      return <article key={engine.id} className={`mcp-engine ${state.tone}`} data-engine={engine.id}>
+        <header><strong>{engine.name}</strong><span>{checking ? 'Connecting…' : state.label}</span></header>
+        <p>{engine.running ? 'Editor open' : 'Editor not running'}{engine.servers.length > 0 && <> · <button className="mcp-engine-link" onClick={() => setQuery(engine.name.toLowerCase())}>{engine.servers.length} {engine.servers.length === 1 ? 'server' : 'servers'}</button></>}</p>
+        {state.note && <small>{state.note}</small>}
+        {checkable && <button onClick={() => void connect(engine)} disabled={checking || busy.size > 0}>{state.label === 'Not checked' ? 'Connect' : 'Reconnect'}</button>}
+      </article>
+    })}</div></section>}
     <div className="mcp-summary"><strong>{inventory ? `${inventory.servers.filter(server => server.enabled).length} enabled connections` : 'Reading configurations…'}</strong><p>Tools available to your agents. Check a server to see whether it responds now.</p></div>
     <div className="mcp-filters"><label>Agent<select aria-label="Filter MCP by agent" value={client} onChange={event => setClient(event.target.value)}><option value="all">All agents</option>{Object.entries(clients).map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></label><label>Stored in<select aria-label="Filter MCP by scope" value={scope} onChange={event => setScope(event.target.value)}><option value="all">All locations</option><option value="project">This project</option><option value="global">Global</option><option value="plugin">Plugins</option></select></label></div>
     <div className="file-filter"><Icon name="search" size={14} /><input aria-label="Find MCP" placeholder="Find a server…" value={query} onChange={event => setQuery(event.target.value)} /></div>

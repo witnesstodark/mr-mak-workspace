@@ -20,6 +20,7 @@ async function fixture(t) {
   const writes = [];
   sessions.get = value => { assert.equal(value, id); return session; };
   sessions.list = () => [session]; sessions.input = (_id, value) => writes.push(value);
+  sessions.read = async () => ({ screen: session.screen || '' }); sessions.keys = (_id, value) => writes.push(value);
   sessions.snapshot = async () => ({ session, sequence: 1, data: 'hello' });
   sessions.seen = () => {};
   const transport = { probe: async () => ({ installed: true, ready: true }), enable: async origin => ({ origin }), disable: async () => {} };
@@ -86,6 +87,24 @@ test('terminal navigation sends all four arrows only from a paired same-origin p
   session.agent = 'codex'; await gateway.revoke(device.pending.id);
   assert.equal((await request(route, { key: 'right' }, device.cookie)).status, 401);
   assert.equal(writes.length, 4);
+});
+
+test('a paired phone reads the terminal menu with its conversation and answers it once', async t => {
+  const { request, pair, id, writes, session, gateway } = await fixture(t), device = await pair();
+  gateway.transcripts.read = async () => ({ supported: true, messages: [] });
+  session.screen = ['Allow command?', '$ echo phone', '', '> 1. Yes, proceed', '  2. No', 'Press enter to confirm'].join('\n');
+  const { data } = await request(`/sessions/${id}/messages`, undefined, device.cookie);
+  assert.deepEqual([data.prompt.question, data.prompt.detail, data.prompt.options], ['Allow command?', ['$ echo phone'], ['Yes, proceed', 'No']]);
+  const route = `/sessions/${id}/prompt`, answer = { id: data.prompt.id, choice: 0 };
+  assert.equal((await request(route, answer)).status, 401);
+  assert.equal((await request(route, answer, device.cookie, { Origin: 'https://unrelated.example' })).status, 403);
+  assert.equal((await request(route, { ...answer, id: 'stale' }, device.cookie)).status, 409);
+  assert.deepEqual(writes, []);
+  assert.equal((await request(route, answer, device.cookie)).status, 200);
+  assert.deepEqual(writes, ['\r']);
+  assert.equal((await request(route, answer, device.cookie)).status, 409);
+  session.process = null;
+  assert.equal((await request(`/sessions/${id}/messages`, undefined, device.cookie)).data.prompt, null);
 });
 
 test('mobile close uses the shared close action, retains history and rejects untrusted requests', async t => {
@@ -215,6 +234,8 @@ test('report grants are limited to the selected folder, sandboxed and revoked wi
   const { gateway, pair, request, repo } = await fixture(t), device = await pair();
   await mkdir(path.join(repo, 'workspace/example'), { recursive: true });
   await mkdir(path.join(repo, 'workspace/other'));
+  await mkdir(path.join(repo, 'workspace/_shared/engine'), { recursive: true });
+  await writeFile(path.join(repo, 'workspace/_shared/engine/tema-base.css'), '/* shared engine */');
   await writeFile(path.join(repo, 'workspace/example/report.html'), '<h1>Example</h1>');
   await writeFile(path.join(repo, 'workspace/example/picture.svg'), '<svg xmlns="http://www.w3.org/2000/svg"/>');
   await writeFile(path.join(repo, 'workspace/other/private.html'), 'Unrelated document');
@@ -232,6 +253,7 @@ test('report grants are limited to the selected folder, sandboxed and revoked wi
   assert.match(policy, /sandbox allow-scripts/); assert.ok(!policy.includes('allow-same-origin'));
   assert.equal((await fetch(url.replace('/example/report.html', '/other/private.html'))).status, 403);
   assert.equal((await fetch(url.replace('report.html', '%2eenv'))).status, 403);
+  assert.equal((await fetch(url.replace('example/report.html', '_shared/engine/tema-base.css'))).status, 200);
   const download = await fetch(url.replace('report.html', 'picture.svg?download=1'));
   assert.equal(download.status, 200); assert.match(download.headers.get('content-disposition'), /^attachment;/);
   await gateway.revoke(device.pending.id); assert.equal((await fetch(url)).status, 401);
@@ -267,6 +289,26 @@ test('delivery receipts and device pairing survive a service restart', async t =
   t.after(() => next.close());
   const result = await fetch(`${next.origin}/mobile/api/sessions/${id}/send`, { method: 'POST', headers: { Origin: next.origin, Cookie: device.cookie, 'Content-Type': 'application/json' }, body: JSON.stringify(message) });
   assert.equal((await result.json()).status, 'delivered'); assert.equal(writes.length, 2);
+});
+
+test('mobile access retries its route when Tailscale fails while the service starts', async t => {
+  const { gateway, repo } = await fixture(t);
+  await gateway.close();
+  let failures = 2;
+  const transport = { probe: async () => ({ installed: true, ready: true }), enable: async origin => { if (failures-- > 0) throw new Error('Tailscale Serve could not start.'); return { origin }; }, disable: async () => {} };
+  // Node 22 also logs an ExperimentalWarning for the mock timers.
+  const logged = []; t.mock.method(console, 'error', message => { if (/Mobile access/.test(message)) logged.push(message); });
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const next = await new MobileGateway({ repo, stateDir: repo, uiDir: gateway.uiDir, sessions: gateway.sessions, attachments: gateway.attachments, settings: gateway.settings, transport }).init();
+  t.after(() => next.close());
+  assert.deepEqual([next.status().enabled, next.status().error], [false, 'Tailscale Serve could not start.']);
+  assert.match(logged[0], /Mobile access could not start: Tailscale Serve could not start/);
+  // Waits in real time (setImmediate is not mocked) for the retry to finish, however loaded the machine is.
+  const settle = async done => { const end = Date.now() + 10000; while (!done() && Date.now() < end) await new Promise(resolve => setImmediate(resolve)); };
+  t.mock.timers.tick(10000); await settle(() => logged.length >= 2);
+  assert.deepEqual([logged.length, next.status().enabled], [2, false]);
+  t.mock.timers.tick(30000); await settle(() => next.active);
+  assert.deepEqual([next.status().enabled, next.status().error], [true, '']);
 });
 
 test('conversation adapters omit tool results and prefer Codex native user/answer events', () => {
@@ -368,4 +410,38 @@ test('a phone starts chats only in a listed project folder', async t => {
   const outside = await request('/sessions', { agent: agent.id, name: 'Elsewhere', cwd: os.tmpdir() }, device.cookie);
   assert.equal(outside.status, 400); assert.match(outside.data.error, /project from the list/);
   assert.deepEqual(created, [project, repo]);
+});
+
+test('report list carries a valid cover, phase and progress, and drops anything that cannot be drawn', async t => {
+  const { gateway, pair, request, repo } = await fixture(t), device = await pair();
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jvWQAAAAASUVORK5CYII=', 'base64');
+  const outside = await mkdtemp(path.join(os.tmpdir(), 'mrmak-mobile-cover-outside-'));
+  await writeFile(path.join(outside, 'secret.png'), png);
+  await mkdir(path.join(repo, 'workspace/example/media'), { recursive: true });
+  await writeFile(path.join(repo, 'workspace/example/media/cover.png'), png);
+  await writeFile(path.join(repo, 'workspace/example/notes.html'), '<h1>Not an image</h1>');
+  await symlink(outside, path.join(repo, 'workspace/example/out'), process.platform === 'win32' ? 'junction' : 'dir');
+  const steps = [{ name: 'Report', path: 'notes.html' }], base = { folder: 'example', category: 'game', created: '2026-10-17', steps };
+  await writeFile(path.join(repo, 'workspace/workspace.json'), JSON.stringify({ entities: [
+    { ...base, id: 'good', title: 'Good', cover: 'media/cover.png', progress: { done: 3, total: 8, label: ' M1 ' }, phase: '  Alpha  ' },
+    { ...base, id: 'escape', title: 'Escape', cover: '../../../secret.png', progress: { done: 9, total: 8 }, phase: 7 },
+    { ...base, id: 'html', title: 'Html', cover: 'notes.html', progress: { done: 0, total: 0 } },
+    { ...base, id: 'missing', title: 'Missing', cover: 'media/missing.png', progress: { done: '3', total: 8 }, phase: '   ' },
+    { ...base, id: 'linked', title: 'Linked', cover: 'out/secret.png', progress: { done: -1, total: 5 } },
+    { ...base, id: 'bare', title: 'Bare' },
+    { ...base, id: 'full', title: 'Full', progress: { done: 8, total: 8 }, cover: 7 },
+  ] }));
+  const list = (await request('/reports', undefined, device.cookie)).data, byId = id => list.find(item => item.id === id);
+  assert.match(byId('good').cover, /^\/mobile\/api\/reports\/good\/cover\?v=\d+$/);
+  assert.deepEqual(byId('good').progress, { done: 3, total: 8, label: 'M1' }); assert.equal(byId('good').phase, 'Alpha');
+  assert.deepEqual(byId('full').progress, { done: 8, total: 8 });
+  for (const id of ['escape', 'html', 'missing', 'linked', 'bare']) for (const key of ['cover', 'progress', 'phase']) assert.ok(!(key in byId(id)), `${id} must not carry ${key}`);
+  assert.ok(!('cover' in byId('full')) && !('phase' in byId('full')));
+  const cover = id => fetch(`${gateway.origin}/mobile/api/reports/${id}/cover`, { headers: device.cookie ? { Cookie: device.cookie } : {} });
+  const served = await fetch(`${gateway.origin}${byId('good').cover}`, { headers: { Cookie: device.cookie } });
+  assert.equal(served.status, 200); assert.equal(served.headers.get('content-type'), 'image/png'); assert.deepEqual(Buffer.from(await served.arrayBuffer()), png);
+  for (const id of ['escape', 'html', 'missing', 'linked', 'bare', 'unknown', '%E0%A4%A']) assert.equal((await cover(id)).status, 404, id);
+  assert.equal((await fetch(`${gateway.origin}${byId('good').cover}`)).status, 401);
+  await gateway.revoke(device.pending.id);
+  assert.equal((await fetch(`${gateway.origin}${byId('good').cover}`, { headers: { Cookie: device.cookie } })).status, 401);
 });

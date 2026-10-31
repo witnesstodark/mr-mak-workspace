@@ -11,7 +11,7 @@ export function equalSecret(a, b) {
   return left.length === right.length && timingSafeEqual(left, right);
 }
 export async function readJson(file, fallback) {
-  try { return JSON.parse(await readFile(file, 'utf8')); } catch { return fallback; }
+  try { return JSON.parse((await readFile(file, 'utf8')).replace(/^\uFEFF/, '')); } catch { return fallback; }
 }
 const jsonSaves = new Map();
 export async function saveJson(file, value, { beforeReplace } = {}) {

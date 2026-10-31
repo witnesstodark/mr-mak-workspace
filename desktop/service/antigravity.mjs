@@ -1,8 +1,9 @@
 import { mkdir, open, stat, writeFile } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 
 const uuid = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
-const nativeLine = new RegExp(`^[IWEF]\\d{4} \\d{2}:\\d{2}:\\d{2}\\.\\d+\\s+\\d+ [^\\]\\r\\n]+:\\d+\\] (?:Created|Resuming) conversation (${uuid})\\s*$`, 'i');
+const nativeLine = new RegExp(`^[IWEF]\\d{4} \\d{2}:\\d{2}:\\d{2}\\.\\d+\\s+\\d+ [^\\]\\r\\n]+:\\d+\\] (?:Print mode:\\s+)?(?:Created|Resuming|Streaming) conversation (${uuid})(?:[^\\w-]|$)`, 'i');
 export const validAntigravityId = value => typeof value === 'string' && new RegExp(`^${uuid}$`, 'i').test(value);
 
 export function antigravityLogPath(stateDir, chatId) {
@@ -63,4 +64,35 @@ export function watchAntigravity(stateDir, chatId, onConversation) {
   };
   const timer = setInterval(tick, 400); timer.unref(); void tick();
   return () => { closed = true; clearInterval(timer); };
+}
+
+async function transcriptFile(nativeId, names, env, home) {
+  if (!validAntigravityId(nativeId)) throw new Error('Invalid Antigravity conversation ID.');
+  const roots = [
+    env.ANTIGRAVITY_BRAIN_DIR,
+    env.ANTIGRAVITY_HOME && path.join(env.ANTIGRAVITY_HOME, 'brain'),
+    path.join(home, '.gemini', 'antigravity-cli', 'brain'),
+    path.join(home, '.gemini', 'antigravity', 'brain'),
+  ].filter(Boolean);
+  for (const root of roots) for (const name of names) {
+    const file = path.join(root, nativeId, '.system_generated', 'logs', name);
+    if (await stat(file).then(s => s.isFile(), () => false)) return file;
+  }
+  const fallback = (env.ANTIGRAVITY_BRAIN_DIR && roots.find(r => r === env.ANTIGRAVITY_BRAIN_DIR)) || roots[0] || path.join(home, '.gemini', 'antigravity-cli', 'brain');
+  return path.join(fallback, nativeId, '.system_generated', 'logs', 'transcript.jsonl');
+}
+
+// The transcript whose appended records signal turns; its fields may be shortened.
+export function antigravityTranscript(nativeId, env = process.env, home = os.homedir()) {
+  return transcriptFile(nativeId, ['transcript.jsonl'], env, home);
+}
+
+// agy writes each conversation twice, in step. transcript.jsonl keeps only the
+// first and last 2048 bytes of a field over 4 KB, joined by "\n<truncated N bytes>\n",
+// and names it in truncated_fields. A cut inside a Markdown list also drops the
+// parent items, so the nested items left after it render glued to the line before.
+// transcript_full.jsonl, next to it, keeps every field whole: read text from it, and
+// from the shortened copy only when no full copy exists.
+export function antigravityFullTranscript(nativeId, env = process.env, home = os.homedir()) {
+  return transcriptFile(nativeId, ['transcript_full.jsonl', 'transcript.jsonl'], env, home);
 }
