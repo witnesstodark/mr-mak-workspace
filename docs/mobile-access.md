@@ -64,8 +64,10 @@ between 8443 and 8446. It preserves existing routes and never enables Funnel.
   fullscreen CLI, such as Claude's fullscreen view, keeps its history itself
   and the terminal holds only its current screen: use **Page up** and
   **Page down** to scroll it. This also scrolls the desktop view of that chat.
-  The Terminal view uses the colours set on the computer in **Settings →
-  Change terminal colors** and follows changes live.
+  The Terminal view uses the background, text, cursor, selection and CLI
+  colours set on the computer in **Settings → Change terminal colors** and
+  follows changes live. Role colours, including the amber of flagged blocks,
+  are shown on the desktop only.
 - **Rename chat:** tap the chat's name in its header, write an English name
   and choose **Save name**. The desktop tab and other phones show it at once;
   a name the desktop would refuse is explained in the dialog.

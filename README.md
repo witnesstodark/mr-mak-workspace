@@ -197,11 +197,13 @@ visual approval and engine readiness remain separate decisions.
 
 ## Skills you can keep
 
-Twenty project skills cover planning, handoffs, Workspace reports, image
+Twenty-nine project skills cover planning, handoffs, Workspace reports, image
 references, fal.ai generation, Higgsfield workflows, character sheets, procedural
 Three.js modeling, materials, motion references, Blender game animation, video
 inspection and dictation setup. Game workflows cover **VFX, UI, animation
-integration, level design, audio and native visual review**. Read the
+integration, level design, audio and native visual review**. 2D workflows cover
+**pixel art (including text-grid authoring), sprite animation, tilesets, asset preparation, SVG graphics and
+Godot 2D integration**, and sound effects preparation. Read the
 [skill index](docs/skills.md), or take the separate skills ZIP from the release
 into another project.
 

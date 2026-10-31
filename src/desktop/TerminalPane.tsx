@@ -202,9 +202,10 @@ export default function TerminalPane({ id, agent, fontSize, appearance, colors =
   useEffect(() => {
     const terminal = terminalRef.current
     if (!terminal) return
-    const saved = JSON.parse(colorKey) as TerminalColors
+    const saved = JSON.parse(colorKey) as TerminalColors, roles = terminalRoleColors(saved)
     terminal.options.theme = terminalTheme(appearance, saved)
-    if (appearance === 'focus') return decorateTerminal(terminal, agent, terminalRoleColors(saved))
+    // Focus paints every role; Original paints only attention blocks.
+    return appearance === 'focus' ? decorateTerminal(terminal, agent, undefined, roles) : decorateTerminal(terminal, agent, 'attention', roles)
   }, [id, agent, appearance, colorKey])
   useEffect(() => {
     if (terminalRef.current) { terminalRef.current.options.fontSize = fontSize; fitRef.current?.fit(); sendEvent({ type: 'resize', id, cols: terminalRef.current.cols, rows: terminalRef.current.rows }) }

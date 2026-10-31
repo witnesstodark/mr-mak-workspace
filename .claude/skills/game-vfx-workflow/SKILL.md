@@ -43,6 +43,7 @@ visibility/storage transitions. Reset trail history on teleport or reuse.
 For surface effects, use reviewed anchors or validated surface sampling. A
 bounding box alone does not establish a valid wall, roof or ground contact.
 
+For 2D flipbook effects, frame timing and sheets, see `sprite-animation-workflow`.
 Use shared materials and bounded pools where appropriate. Restore only this
 effect's material contribution; preserve team tint, hit flashes and other active
 states. Measure transparent overlap and crowd cost on the actual target. Do not

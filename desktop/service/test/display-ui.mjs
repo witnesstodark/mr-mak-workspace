@@ -22,7 +22,7 @@ const dictation = { status: async () => ({ available: false, provider: null, max
 const service = await createService({ repo, uiDir: path.join(repo, 'ui'), mobileOptions: { transport, dictation }, mcpOptions: { home: repo, env: {} } });
 service.sessions.beginDiscovery = () => {};
 const ids = [randomUUID(), randomUUID()], writes = [];
-const screen = ['\x1b[2J\x1b[H', '\x1b[1m ✻ Claude Code\x1b[0m', '', '❯ Make the release banner warmer', '', '● I will update the banner colours.', '', '\x1b[90m  ⎿  Read src/styles/banner.css (42 lines)\x1b[0m', '',
+const screen = ['\x1b[2J\x1b[H', '\x1b[1m ✻ Claude Code\x1b[0m', '', '❯ Make the release banner warmer', '', '● I will update the banner colours.', '', '\x1b[90m  ⎿  Read src/styles/banner.css (42 lines)\x1b[0m', '', '● The warm banner is ready.', '  Needs your decision: keep the cold one for dark mode?', '',
   '\x1b[32m+ .banner { background: var(--warm); }\x1b[0m', '\x1b[31m- .banner { background: var(--cold); }\x1b[0m', '', '\x1b[33m  Do you want to make this edit to banner.css?\x1b[0m', '\x1b[36m  ❯ 1. Yes\x1b[0m', '    2. No, and tell Claude what to do differently', ''].join('\r\n');
 for (const [index, id] of ids.entries()) {
   const session = service.sessions.make({ id, name: index ? 'Research notes' : 'Conversation 5', agent: index ? 'codex' : 'claude', status: 'running', open: true, cols: 96, rows: 24, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), cwd: repo });
@@ -95,7 +95,7 @@ try {
   // Light Workspace: the full ANSI list and a low-contrast warning.
   await desktopApi({ workspaceTheme: 'light' });
   await expect(workspace.locator('html')).toHaveAttribute('data-workspace-theme', 'light');
-  await dialog.getByText('All CLI colours').click();
+  await dialog.locator('summary', { hasText: 'All CLI colours' }).click();
   await hexField('Bright magenta').fill('#ff79c6'); await hexField('Bright magenta').blur();
   await hexField('Text').fill('#3a3448'); await hexField('Text').blur();
   await expect(dialog.getByRole('status')).toContainText('contrast of');

@@ -33,6 +33,8 @@ source paths/hashes. Export icons at their intended display scale. Check alpha
 edges on light/dark backgrounds, shared optical weight and silhouette readability.
 For stretchable panels, identify border regions explicitly; verify corners at
 several sizes before choosing nine-slicing or another rendering approach.
+For pixel-art interfaces, follow `pixel-art-workflow`; for vector icon masters
+and logos, `vector-graphics-workflow`.
 
 Static and animated portraits need the same crop and a reliable still fallback.
 Budget concurrent video decoders/render targets, share identical playback when

@@ -23,8 +23,10 @@ Inspect the supplied assets and the target engine before selecting a route.
 | Plan and implement event-driven visual effects | `game-vfx-workflow` |
 | Develop a HUD or menu from concept through live game state | `game-ui-workflow` |
 | Design and validate a playable level | `game-level-design` |
+| Source, generate and prepare sound effects | `sound-effects-workflow` |
 | Select and integrate game sounds | `game-audio-workflow` |
 | Verify the result in the actual game | `gameplay-visual-review` |
+| 2D sprites, pixel art, tilesets, cutouts, SVG or Godot 2D import | `2d-production-routing` |
 
 Read the selected skill before execution. Its presence does not mean its MCP,
 CLI, account or editor is connected. Inspect live capabilities and exact model

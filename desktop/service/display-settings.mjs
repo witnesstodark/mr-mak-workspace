@@ -2,7 +2,8 @@
 const fail = message => { throw Object.assign(new Error(message), { status: 400 }); };
 
 // Terminal colour overrides laid over the Original and Iaar Focus palettes.
-// `attention` is the CLI's yellow, which agents use for warnings and prompts.
+// `user`, `agent`, `detail` and `attention` are role colours; `attention` is the
+// amber of blocks an agent starts with a label such as "Needs your decision:".
 export const ANSI_COLOR_KEYS = ['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white', 'brightBlack', 'brightRed', 'brightGreen', 'brightYellow', 'brightBlue', 'brightMagenta', 'brightCyan', 'brightWhite'];
 export const TERMINAL_COLOR_KEYS = ['background', 'foreground', 'cursor', 'selection', 'user', 'agent', 'detail', 'attention', ...ANSI_COLOR_KEYS];
 

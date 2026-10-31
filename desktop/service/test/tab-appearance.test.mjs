@@ -7,7 +7,7 @@ import headless from '@xterm/headless';
 import serialize from '@xterm/addon-serialize';
 import { Sessions } from '../sessions.mjs';
 import { createService } from '../server.mjs';
-import { terminalRoles, decorateTerminal, roleColors } from '../../../src/desktop/terminalAppearance.ts';
+import { terminalRoles, decorateTerminal, roleColors, terminalRoleColors } from '../../../src/desktop/terminalAppearance.ts';
 import { orderedChats } from '../../../src/desktop/chatOrder.ts';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -93,6 +93,49 @@ test('Focus separates user text, agent prose and tool details across wrapped nat
   assert.deepEqual(terminalRoles(codex, 'codex'), ['user', 'user', 'agent', 'detail', 'detail', 'detail', 'detail', 'agent', 'agent', 'agent']);
   const claude = ['❯ Review this.', '⏺ Bash(npm test)', '  ⎿ All passed.', '⏺ Ready to review.', '  Here is the answer.'].map(text => ({ text }));
   assert.deepEqual(terminalRoles(claude, 'claude'), ['user', 'detail', 'detail', 'agent', 'agent']);
+});
+
+test('Flags, decisions and review requests stand out as attention blocks', () => {
+  const claude = [
+    '⏺ The work is done.', '  Needs your decision:', '  - Should food stack?', '    It takes a slot per loaf.',
+    '  - Shrink the zones?', '', '  Done since then:', '  - Tests pass.', '  - For your review: the red bedroll.',
+    '    Easy to make grey.', '  - Weaker: nothing else.', '⏺ Bash(npm test)', '⏺ Flag: the bot stalls in zone 1.',
+    '  Every run.', '', '  Questions for you:', '', '  - Keep the hammer?', '', '  The rest is fine.',
+    '⏺ The flags are set.', '❯ For your review: my own words.',
+  ].map(text => ({ text }));
+  assert.deepEqual(terminalRoles(claude, 'claude'), [
+    'agent', 'attention', 'attention', 'attention', 'attention', 'agent', 'agent', 'agent', 'attention',
+    'attention', 'agent', 'detail', 'attention', 'attention', 'agent', 'attention', 'agent', 'attention', 'agent', 'agent',
+    'agent', 'user',
+  ]);
+  const wrapped = [{ text: '• To decide: the colour of the very long' }, { text: 'label here', wrapped: true }, { text: '  Next line.' }];
+  assert.deepEqual(terminalRoles(wrapped, 'codex'), ['attention', 'attention', 'attention']);
+});
+
+test('Original colors leave everything but attention blocks to the CLI', async () => {
+  const terminal = new headless.Terminal({ cols: 40, rows: 4, allowProposedApi: true });
+  await new Promise(resolve => terminal.write('⏺ All done.\r\n  For your review: one thing.\r\n\r\n  Back to normal.', resolve));
+  const decorations = new Set();
+  terminal.onWriteParsed = () => ({ dispose() {} });
+  terminal.registerDecoration = options => {
+    const decoration = { options, dispose() { decorations.delete(decoration); } };
+    decorations.add(decoration); options.marker.onDispose(() => decoration.dispose()); return decoration;
+  };
+  const previousWindow = globalThis.window;
+  globalThis.window = { setTimeout };
+  let dispose;
+  try {
+    dispose = decorateTerminal(terminal, 'claude', 'attention');
+    await new Promise(resolve => setTimeout(resolve, 100));
+    const painted = [...decorations].map(x => x.options);
+    assert.ok(painted.length > 0 && painted.every(x => x.foregroundColor === roleColors.attention && x.marker.line === 1));
+    // A custom Attention colour (Settings → Change terminal colors) recolours the same blocks.
+    dispose();
+    dispose = decorateTerminal(terminal, 'claude', 'attention', terminalRoleColors({ attention: '#e0a030' }));
+    await new Promise(resolve => setTimeout(resolve, 100));
+    const custom = [...decorations].map(x => x.options);
+    assert.ok(custom.length > 0 && custom.every(x => x.foregroundColor === '#e0a030' && x.marker.line === 1));
+  } finally { dispose?.(); globalThis.window = previousWindow; terminal.dispose(); }
 });
 
 test('Focus decorations preserve terminal contents and native inverse/background selections', async () => {

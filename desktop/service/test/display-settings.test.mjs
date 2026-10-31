@@ -25,7 +25,9 @@ test('overrides lie over both appearances; the desktop and the service know the 
     const theme = terminalTheme(appearance, colors), base = appearance === 'focus' ? focusTheme : originalTheme;
     assert.equal(theme.background, '#101820'); assert.equal(theme.foreground, '#f0e6d2'); assert.equal(theme.cursor, '#ffb86c');
     assert.equal(theme.selectionBackground, '#33557755', 'Selection stays translucent');
-    assert.equal(theme.yellow, '#e0a030'); assert.equal(theme.brightYellow, '#e0a030'); assert.equal(theme.red, '#ff5555');
+    assert.equal(theme.red, '#ff5555');
+    // Attention is a role colour (flagged blocks), not the CLI's yellow.
+    assert.equal(theme.yellow, base.yellow); assert.equal(theme.brightYellow, base.brightYellow);
     assert.equal(theme.green, base.green, 'Unset colours keep the appearance');
     assert.deepEqual(terminalTheme(appearance, {}), base);
   }
@@ -33,9 +35,12 @@ test('overrides lie over both appearances; the desktop and the service know the 
   assert.equal(terminalTheme('focus', { agent: '#ddeeff' }).foreground, '#ddeeff');
   assert.equal(terminalTheme('original', { agent: '#ddeeff' }).foreground, originalTheme.foreground);
   assert.deepEqual(terminalRoleColors({ user: '#112233' }), { ...roleColors, user: '#112233' });
+  assert.deepEqual(terminalRoleColors({ attention: '#e0a030' }), { ...roleColors, attention: '#e0a030' });
+  assert.equal(effectiveTerminalColor('attention', 'original', {}), roleColors.attention);
+  assert.equal(effectiveTerminalColor('attention', 'focus', { attention: '#e0a030' }), '#e0a030');
   assert.equal(effectiveTerminalColor('selection', 'original', {}), '#f0a0b0');
   assert.equal(effectiveTerminalColor('brightRed', 'original', {}), '#ef2929', 'xterm fills colours Original leaves unset');
-  assert.equal(effectiveTerminalColor('yellow', 'original', { yellow: '#123456', attention: '#e0a030' }), '#123456', 'An ANSI override wins over Attention');
+  assert.equal(effectiveTerminalColor('yellow', 'original', { yellow: '#123456', attention: '#e0a030' }), '#123456');
   assert.equal(Math.round(contrastRatio('#ffffff', '#000000')), 21); assert.ok(contrastRatio('#555566', '#0c0d10') < 4.5); assert.ok(contrastRatio(originalTheme.foreground, originalTheme.background) >= 4.5);
 });
 

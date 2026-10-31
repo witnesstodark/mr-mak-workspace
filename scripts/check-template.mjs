@@ -41,7 +41,7 @@ for (const entity of entities) {
 assert.equal(arachneImages.size, 158, 'All Arachne images must be reachable from the tabs.');
 assert.equal(videos.size, 8, 'Keep all eight motion studies.');
 const skillNames = (await readdir(path.join(root, '.agents/skills'), { withFileTypes: true })).filter(e => e.isDirectory()).map(e => e.name);
-assert.equal(skillNames.length, 20);
+assert.equal(skillNames.length, 29);
 for (const name of ['game-vfx-workflow', 'game-ui-workflow', 'game-animation-integration', 'game-level-design', 'game-audio-workflow', 'gameplay-visual-review']) {
   assert.ok(skillNames.includes(name), `Missing game production workflow: ${name}`);
 }

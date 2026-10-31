@@ -69,6 +69,7 @@ export default function TerminalColors({ onClose }: { onClose: () => void }) {
             <div style={{ color: focus ? role.user : theme.foreground }}>❯ Make the banner warmer</div>
             <div style={{ color: focus ? role.agent : theme.foreground }}>● I'll update the banner colours.</div>
             <div style={{ color: focus ? role.detail : theme.brightBlack }}>  ⎿ Read src/styles/banner.css</div>
+            <div style={{ color: role.attention }}>  Needs your decision: warm or cold?</div>
             <div style={{ color: theme.yellow }}>  Do you want to make this edit?</div>
             <div><span style={{ background: theme.selectionBackground }}>selected text</span> <span style={{ color: theme.green }}>+ added</span> <span style={{ color: theme.red }}>- removed</span> <span className="terminal-color-cursor" style={{ background: theme.cursor }} /></div>
             <div className="terminal-color-ansi" aria-hidden="true">{ansi.map(([key]) => <i key={key} style={{ background: effective(key) }} />)}</div>
@@ -77,7 +78,7 @@ export default function TerminalColors({ onClose }: { onClose: () => void }) {
         </div>
         <div className="terminal-color-groups">
           <h3>Terminal</h3>{base.map(row)}
-          <h3>Roles</h3><p className="terminal-color-note">You, Agent and Details colour lines in Iaar Focus. Attention is the CLI's yellow for warnings and prompts, in both appearances.</p>{roles.map(row)}
+          <h3>Roles</h3><p className="terminal-color-note">You, Agent and Details colour lines in Iaar Focus. Attention colours the blocks an agent starts with "Needs your decision:", "For your review:", "Questions for you:" or "Flag:", in both appearances. The CLI's own yellow prompts use Yellow under All CLI colours.</p>{roles.map(row)}
           <details className="terminal-color-ansi-list"><summary>All CLI colours <small>16 ANSI colours</small></summary>{ansi.map(row)}</details>
         </div>
       </div>

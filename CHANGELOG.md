@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Show blocks that flag a problem, ask for a decision or ask for review in amber in agent chats, in both terminal appearances. Agents start them with a label such as `Needs your decision:` (see AGENTS.md).
+- Darken the chat background slightly.
+
 ## 0.5.1 - 2026-10-14
 
 - Add Antigravity CLI chats with Google sign-in, reasoning effort, per-chat native history recovery and MCP inventory. Install `agy` separately, then choose it in New chat. Model access remains controlled by Google.

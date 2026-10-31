@@ -77,14 +77,16 @@ are retained. The same choice is available in each chat’s options menu.
 
 **Change terminal colors** below it opens a dialog for background, text, cursor
 and selection, the role colours (You, Agent and Details colour lines in Iaar
-Focus; Attention is the CLI's yellow for warnings and prompts) and, under **All
-CLI colours**, the 16 ANSI colours. Each has a colour picker, a hex field and a
+Focus; Attention colours the amber blocks an agent starts with a label such as
+`Needs your decision:`, in both appearances) and, under **All CLI colours**, the
+16 ANSI colours. The CLI's own yellow prompts keep its ANSI yellow in Focus too. Each has a colour picker, a hex field and a
 reset; **Reset all** returns to the appearance's palette. A live preview shows
 either appearance, and a note appears when text contrast falls below 4.5:1.
 The overrides are saved as `terminalColors` (`#rrggbb` values for known keys
 only, checked by the service), laid over both appearances, and applied at once
-to every open desktop terminal and to the phone's Terminal view. Selection is
-drawn translucent so selected text stays readable.
+to every open desktop terminal. The phone's Terminal view uses the background,
+text, cursor, selection and ANSI colours; role colours are desktop-only.
+Selection is drawn translucent so selected text stays readable.
 
 ## Chat names
 
