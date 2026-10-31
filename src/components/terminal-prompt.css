@@ -1,0 +1,21 @@
+/* A terminal menu answered from a conversation, on the desktop and the phone.
+   Button rules start at the card so a surface's own button styles cannot win by load order. */
+.conversation-prompt{margin:0 0 18px;padding:12px 14px;border:1px solid color-mix(in srgb,var(--pink) 24%,transparent);border-radius:11px;background:var(--surface-solid)}
+.conversation-prompt>header{display:flex;align-items:center;gap:8px;color:var(--amber);font-size:12.5px}
+.conversation-prompt pre{margin:9px 0 0;padding:8px 10px;border-radius:7px;background:var(--bg);color:var(--text);font-family:var(--font-mono);font-size:11px;white-space:pre-wrap;overflow-wrap:anywhere}
+.conversation-prompt-options{display:grid;gap:5px;margin-top:10px}
+.conversation-prompt .conversation-prompt-options button{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border:1px solid var(--hairline-strong);border-radius:8px;background:color-mix(in srgb,var(--text) 2%,transparent);color:var(--text-bright);font-size:12px;text-align:left}
+.conversation-prompt .conversation-prompt-options button:hover{border-color:color-mix(in srgb,var(--pink) 29%,transparent);background:var(--pink-dim)}
+.conversation-prompt .conversation-prompt-options button.selected{border-color:color-mix(in srgb,var(--pink) 22%,transparent)}
+.conversation-prompt .conversation-prompt-options button.checked{border-color:color-mix(in srgb,var(--pink) 45%,transparent);background:var(--pink-dim)}
+.conversation-prompt .conversation-prompt-options button:disabled{cursor:default;opacity:.6}
+.conversation-prompt-options button>span{display:grid;place-items:center;flex-shrink:0;width:20px;height:20px;border-radius:6px;background:color-mix(in srgb,var(--text) 5%,transparent);font-size:10px;color:var(--pink)}
+.conversation-prompt-options button.checked>span{background:var(--pink);color:var(--on-accent)}
+.conversation-prompt>footer{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+.conversation-prompt>footer button{display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border:1px solid color-mix(in srgb,var(--text) 12%,transparent);border-radius:7px;background:transparent;color:var(--text-dim);font-size:10px}
+.conversation-prompt>footer .conversation-prompt-submit{border-color:color-mix(in srgb,var(--pink) 45%,transparent);background:var(--pink-dim);color:var(--pink);font-weight:600}
+.conversation-prompt-own{display:flex;align-items:center;gap:10px;padding:5px 6px 5px 10px;border:1px solid color-mix(in srgb,var(--pink) 45%,transparent);border-radius:8px;background:var(--pink-dim)}
+.conversation-prompt-own>span{display:grid;place-items:center;flex-shrink:0;width:20px;height:20px;border-radius:6px;background:var(--pink);color:var(--on-accent);font-size:10px}
+.conversation-prompt-own input{flex:1;min-width:0;padding:4px 2px;border:0;background:transparent;color:var(--text-bright);font-size:12px;outline:none}
+.conversation-prompt .conversation-prompt-own button{flex-shrink:0;padding:5px 11px;border:1px solid color-mix(in srgb,var(--pink) 45%,transparent);border-radius:7px;background:var(--surface-solid);color:var(--pink);font-size:11px;font-weight:600}
+.conversation-prompt .conversation-prompt-own button:disabled{opacity:.5;cursor:default}

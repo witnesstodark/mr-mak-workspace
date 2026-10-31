@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { api, pickFiles, reportError, speakDesktopText, transcribeDesktopAudio, uploadImage } from './client'
+import { api, pickFiles, reportError, speakDesktopText, transcribeDesktopAudio, uploadImage, useDesktop } from './client'
 import type { ChatSession, SystemEventsMode } from './types'
 import SystemEvent, { type SystemEventData } from '../mobile/SystemEvent'
 import BackgroundWork, { type BackgroundCommand, type WorkingAgent } from '../mobile/BackgroundWork'
@@ -14,12 +14,27 @@ import { visibleUserMessage } from '../mobile/workspace-context'
 import { spokenText, useReadAloud } from '../mobile/useReadAloud'
 import { readingVoiceChanged, readingVoices, saveReadingVoice, savedReadingVoice } from '../mobile/readingVoices'
 import { commandToken, completeCommand, matchingCommands, terminalCommand, type ChatCommand } from './commandSuggestions'
+import TerminalPrompt, { type PromptChoice, type TerminalPromptData } from '../components/TerminalPrompt'
+import SideQuestions, { type SideQuestion } from './SideQuestions'
+import { isMac } from './platform'
 import './conversation.css'
+import { keepUrl, linkTarget } from '../components/messageLinks'
+
+type Effort = NonNullable<ChatSession['effort']>
+// A message held by effort advice: the level it needs and the chat's current one.
+type EffortAdvice = { level: Effort; why: string; from: Effort | null; message: string }
+type EffortChoice = { action: 'switch' | 'auto'; level: Effort } | { action: 'keep'; level?: Effort }
+// A message held because the chat's prompt cache went cold (chat-cache.mjs ColdGuard).
+type ColdOffer = { message: string; tokens: number; writeUsd: number | null }
+const effortLabel = (effort: Effort) => effort === 'xhigh' ? 'Extra high' : effort[0].toUpperCase() + effort.slice(1)
 
 interface ToolActivity { id: string; name: string; status: 'running' | 'completed' | 'failed'; at: string }
 interface Message { id: string; role: 'user' | 'assistant' | 'system'; text: string; at: string; images?: ConversationImage[]; event?: SystemEventData }
-interface TerminalPrompt { id: string; question: string; detail: string[]; options: string[]; selected: number }
-interface Transcript { supported: boolean; messages: Message[]; activity?: ToolActivity[]; agents?: WorkingAgent[]; commands?: BackgroundCommand[]; truncated?: boolean; prompt?: TerminalPrompt | null }
+interface Transcript { supported: boolean; messages: Message[]; activity?: ToolActivity[]; agents?: WorkingAgent[]; commands?: BackgroundCommand[]; truncated?: boolean; prompt?: TerminalPromptData | null; btw?: SideQuestion[] }
+// A /btw that reached the transcript as an ordinary prompt, as with a CLI without side questions.
+const isBtw = (message: Message) => message.role === 'user' && /^\s*\/btw\s/.test(message.text)
+const btwKey = isMac ? '⌥Enter' : 'Alt+Enter'
+const skipKey = isMac ? '⌘Enter' : 'Ctrl+Enter'
 interface Draft { text: string; paths: string[] }
 
 const time = (value: string) => new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -35,22 +50,6 @@ function saveDraft(id: string, draft: Draft) {
   try { localStorage.setItem(draftKey(id), JSON.stringify(draft)) } catch { /* The draft stays in memory. */ }
 }
 
-// Web and mail links open in the browser. A file: URL, a drive path or a scheme-less
-// link is a local path, possibly relative to the chat folder: files preview in
-// Workspace, folders open. Other schemes are shown as text, never followed.
-type LinkTarget = { kind: 'web' } | { kind: 'local'; path: string } | { kind: 'text' }
-function linkTarget(href = ''): LinkTarget {
-  if (/^(https?|mailto):/i.test(href)) return { kind: 'web' }
-  let target = href
-  if (/^file:/i.test(target)) target = target.replace(/^file:\/*/i, /^file:\/*[a-z]:/i.test(target) ? '' : '/')
-  else if (/^[a-z][a-z\d+.-]+:/i.test(target) || target.startsWith('#') || !target) return { kind: 'text' }
-  try { target = decodeURIComponent(target) } catch { /* Keep the original spelling. */ }
-  target = target.replace(/#.*$/, '').replace(/:\d+(?::\d+)?$/, '')
-  return target ? { kind: 'local', path: target } : { kind: 'text' }
-}
-// react-markdown drops unknown schemes, which includes drive paths such as E:/game.
-// Keep them for linkTarget; script and data URLs are still removed.
-const keepUrl = (url: string) => /^\s*(javascript|vbscript|data):/i.test(url) ? '' : url
 function MessageLink({ href, sessionId, children }: { href?: string; sessionId: string; children: React.ReactNode }) {
   const target = linkTarget(href)
   if (target.kind === 'web') return <a href={href} target="_blank" rel="noreferrer">{children}</a>
@@ -71,7 +70,11 @@ export default function Conversation({ session, connected, agentLabel, openTermi
   const scroller = useRef<HTMLDivElement>(null), area = useRef<HTMLDivElement>(null), input = useRef<HTMLTextAreaElement>(null)
   const follow = useRef(true), [showJump, setShowJump] = useState(false)
   const [draft, setDraft] = useState(() => savedDraft(session.id))
+  const [pending, setPending] = useState<{ text: string, paths: string[], stage: 'checking' | 'held' | 'sent', after?: string | null } | null>(null)
   const [sending, setSending] = useState(false), [uploading, setUploading] = useState(false), [voiceBusy, setVoiceBusy] = useState(false), [status, setStatus] = useState('')
+  const { settings } = useDesktop()
+  const [advice, setAdvice] = useState<EffortAdvice | null>(null)
+  const [coldOffer, setColdOffer] = useState<ColdOffer | null>(null), [coldBusy, setColdBusy] = useState(false)
   const [dragging, setDragging] = useState(false)
   const { info: dictation } = useDictation()
   const running = session.status === 'running', working = running && session.activity === 'working'
@@ -120,6 +123,8 @@ export default function Conversation({ session, connected, agentLabel, openTermi
   for (let index = 0; index < messages.length; index++) if (messages[index].role === 'user') readStart = index
   const latestUserId = messages[readStart]?.role === 'user' ? messages[readStart].id : null
   useEffect(() => () => stopReading(), [latestUserId, session.id, stopReading])
+  // A message sent through the effort check stays in the chat body until the transcript shows it.
+  const held = pending && !(pending.stage === 'sent' && latestUserId !== pending.after) ? pending : null
   // A message rewound from the terminal no longer has an open editor.
   const openEdit = editing && (rewinding || messages.some(message => message.id === editing.id)) ? editing : null
   function readAloud(id: string) {
@@ -127,14 +132,14 @@ export default function Conversation({ session, connected, agentLabel, openTermi
     const parts = Array.from(scroller.current?.querySelectorAll<HTMLElement>('.conversation-message.assistant') || []).filter(node => Number(node.dataset.index) > readStart)
     speech.read(id, parts.map(node => spokenText(node.querySelector<HTMLElement>('.conversation-copy-text'))).filter(Boolean).join('\n\n'))
   }
-  async function answer(prompt: TerminalPrompt, choice: number | 'cancel') {
+  async function answer(prompt: TerminalPromptData, choice: PromptChoice) {
     if (answering) return
     setAnswering(true)
     try { await api(`/sessions/${session.id}/prompt`, { id: prompt.id, choice }); follow.current = true }
     catch (error) { reportError(error) }
     finally { setAnswering(false); void reload.current() }
   }
-  useLayoutEffect(() => { const box = scroller.current; if (box && follow.current) box.scrollTop = box.scrollHeight }, [messages.length, transcript, working])
+  useLayoutEffect(() => { const box = scroller.current; if (box && follow.current) box.scrollTop = box.scrollHeight }, [messages.length, transcript, working, held?.stage, coldOffer, advice])
   useEffect(() => { input.current?.focus() }, [session.id])
   useLayoutEffect(() => {
     const box = input.current
@@ -179,20 +184,76 @@ export default function Conversation({ session, connected, agentLabel, openTermi
     return () => { window.removeEventListener('mrmak-attach-file', pick); window.removeEventListener('mrmak-file-drop', nativeDrop) }
   }, [])
 
-  async function send() {
-    const text = draft.text.trimEnd()
-    if (sending || uploading || voiceBusy || !connected || !running || (!text.trim() && !draft.paths.length)) return
-    setSending(true); setStatus('')
+  const advising = session.agent === 'claude' && !!settings.effortAdvice && settings.effortAdvice !== 'off'
+  async function send(effort?: EffortChoice, resend = false) {
+    // An answer to the effort or cold-cache offer sends the message held in the chat body.
+    const source = (effort || resend) && held ? held : draft
+    const text = source.text.trimEnd(), paths = source.paths
+    // A typed /btw takes the btw button's path, so its answer is shown beside the conversation.
+    if (session.agent === 'claude' && !paths.length && /^\s*\/btw\s+\S/.test(text)) { void askBtw(text.replace(/^\s*\/btw\s+/, '')); return }
+    if (sending || uploading || voiceBusy || !connected || !running || (!text.trim() && !paths.length)) return
+    setSending(true); setAdvice(null); setColdOffer(null); setStatus('')
+    const advised = advising && !effort && !text.trimStart().startsWith('/')
+    // While the effort is checked the message leaves the composer, so the send does not look stuck.
+    const shown = advised || !!held
+    if (shown) { setPending({ text, paths, stage: advised ? 'checking' : 'sent' }); setDraft({ text: '', paths: [] }); follow.current = true }
     try {
-      await api(`/sessions/${session.id}/send`, { text, paths: draft.paths })
+      await api(`/sessions/${session.id}/send`, { text, paths, ...(effort && { effort }) })
       // A picker command unmounts this view immediately, before its draft effect
       // can run. Clear the saved draft now so returning cannot resend it.
       saveDraft(session.id, { text: '', paths: [] })
       setDraft({ text: '', paths: [] }); setCaret(0); follow.current = true; setShowJump(false)
       if (terminalCommand(commands, text)) openTerminal()
+      if (shown) setPending({ text, paths, stage: 'sent', after: latestUserId })
+      void reload.current()
+    } catch (error) {
+      const data = (error as { data?: { effortAdvice?: EffortAdvice; coldCache?: { tokens: number; writeUsd: number | null } } }).data
+      const offer = data?.effortAdvice
+      if (offer) { setAdvice(offer); setPending({ text, paths, stage: 'held' }); return }
+      if (data?.coldCache) { setColdOffer({ message: error instanceof Error ? error.message : String(error), tokens: data.coldCache.tokens, writeUsd: data.coldCache.writeUsd }); setPending({ text, paths, stage: 'held' }); setDraft({ text: '', paths: [] }); follow.current = true; return }
+      setPending(null); setDraft({ text, paths })
+      setStatus(`${error instanceof Error ? error.message : String(error)} Your draft is kept.`)
+    } finally { setSending(false); input.current?.focus() }
+  }
+  // Compact first or Summarize and continue: the held message returns to the composer,
+  // to send once the compacted chat (or the new one) is ready.
+  async function coldInstead(action: 'compact' | 'handoff') {
+    if (coldBusy) return
+    setColdBusy(true)
+    try {
+      await api(`/sessions/${session.id}/${action}`, {})
+      const back = held
+      setColdOffer(null); setPending(null)
+      if (back) setDraft(current => ({ text: current.text ? `${back.text}
+
+${current.text}` : back.text, paths: [...back.paths, ...current.paths.filter(item => !back.paths.includes(item))] }))
+      setStatus(action === 'compact' ? 'Compacting this chat. Your message is back in the composer; send it when the compact finishes.' : `${agentLabel} is writing a handoff for a new chat. Your message is back in the composer to copy there.`)
+    } catch (error) { setStatus(error instanceof Error ? error.message : String(error)) }
+    finally { setColdBusy(false) }
+  }
+  // /btw: a side question Claude Code answers without adding it to the conversation.
+  // Attachments stay in the draft for the next message: a side question cannot read files.
+  const canAsk = session.agent === 'claude' && connected && running
+  async function askBtw(question = draft.text) {
+    const text = question.replace(/\s+/g, ' ').trim()
+    if (sending || uploading || voiceBusy || !canAsk || !text) return
+    if (transcript?.prompt) { setStatus('Answer the question above before asking a side question.'); return }
+    setSending(true); setStatus('')
+    try {
+      await api(`/sessions/${session.id}/btw`, { text })
+      saveDraft(session.id, { text: '', paths: draft.paths })
+      setDraft(current => ({ ...current, text: '' })); setCaret(0)
       void reload.current()
     } catch (error) { setStatus(`${error instanceof Error ? error.message : String(error)} Your draft is kept.`) }
     finally { setSending(false); input.current?.focus() }
+  }
+  // Pause with a summary: a handoff written before a break; HandoffOffer shows it on return.
+  const canPause = (session.agent === 'claude' || session.agent === 'codex') && connected && running
+  const [pausing, setPausing] = useState(false)
+  async function pauseWithSummary() {
+    if (pausing) return
+    setPausing(true)
+    try { await api(`/sessions/${session.id}/pause`, {}) } catch (error) { reportError(error) } finally { setPausing(false) }
   }
   const stop = () => api(`/sessions/${session.id}/input`, { text: '\x1b', paste: false, submit: false }).catch(reportError)
   // Claude Code rewinds to before the message (files stay as they are), then the edited text is sent.
@@ -204,7 +265,8 @@ export default function Conversation({ session, connected, agentLabel, openTermi
     try { await api(`/sessions/${session.id}/rewind`, { messageId: target.id }) }
     catch (error) { setEditError(error instanceof Error ? error.message : String(error)); setRewinding(false); return }
     try {
-      await api(`/sessions/${session.id}/send`, { text, paths: [] })
+      // The rewind already happened, so an effort offer here would leave the conversation cut short.
+      await api(`/sessions/${session.id}/send`, { text, paths: [], effort: { action: 'keep' } })
       follow.current = true; setShowJump(false)
     } catch (error) {
       // The conversation is already rewound, so keep the edited text in the composer.
@@ -221,8 +283,8 @@ export default function Conversation({ session, connected, agentLabel, openTermi
         {transcript?.truncated && <p className="conversation-note">Showing the latest part of a long conversation. The terminal keeps the full history.</p>}
         {messages.map((message, index) => message.role === 'system' ? systemEvents !== 'hidden' && message.event && <SystemEvent key={`${message.id}:${systemEvents}`} event={message.event} time={message.at ? time(message.at) : undefined} expanded={systemEvents === 'full'}
           components={{ a: ({ href, children }) => <MessageLink href={href} sessionId={session.id}>{children}</MessageLink> }} fileLink={(file, label) => <MessageLink href={file} sessionId={session.id}>{label}</MessageLink>} />
-        : <article key={message.id} data-index={index} className={`conversation-message ${message.role}`}>
-          <header>{message.role === 'user' ? <span>You</span> : <span className="conversation-agent"><AgentLogo agent={session.agent} size={15} />{agentLabel}</span>}{message.at && <time>{time(message.at)}</time>}{message.role === 'assistant' && message.text.trim() && <CopyButton text={message.text} />}
+        : <article key={message.id} data-index={index} className={`conversation-message ${message.role}${isBtw(message) ? ' btw' : ''}`}>
+          <header>{message.role === 'user' ? <span>{isBtw(message) ? 'You · /btw side question' : 'You'}</span> : <span className="conversation-agent"><AgentLogo agent={session.agent} size={15} />{agentLabel}</span>}{message.at && <time>{time(message.at)}</time>}{message.role === 'assistant' && message.text.trim() && <CopyButton text={message.text} />}
             {message.role === 'user' && canEdit && !openEdit && message.text.trim() && <button type="button" className="conversation-copy" title="Edit and send again" aria-label="Edit message" onClick={() => { setEditError(''); setEditing({ id: message.id, text: visibleUserMessage(message.text) }) }}><Icon name="edit" size={14} /></button>}</header>
           {openEdit?.id === message.id ? <form className="conversation-edit" onSubmit={event => { event.preventDefault(); void sendEdit() }}>
             <textarea autoFocus aria-label="Edit message" value={openEdit.text} disabled={rewinding} rows={Math.min(12, openEdit.text.split('\n').length + 1)} onChange={event => setEditing({ id: message.id, text: event.target.value })}
@@ -253,12 +315,12 @@ export default function Conversation({ session, connected, agentLabel, openTermi
           <button type="button" onClick={openTerminal}><Icon name="terminal" size={15} />Open terminal</button>
         </div>}
         {!!transcript?.activity?.length && <details className="conversation-activity"><summary>Recent tool activity</summary>{transcript.activity.map(item => <div key={item.id}><Icon name={item.status === 'running' ? 'terminal' : item.status === 'failed' ? 'bell' : 'history'} size={13} /><span>{item.name}</span><small>{item.status === 'running' && !running ? 'interrupted' : item.status}{item.at && ` · ${time(item.at)}`}</small></div>)}</details>}
-        {transcript?.prompt && <section className="conversation-prompt" aria-label="The agent is asking for a choice">
-          <header><Icon name="bell" size={14} /><strong>{transcript.prompt.question}</strong></header>
-          {!!transcript.prompt.detail.length && <pre>{transcript.prompt.detail.join('\n')}</pre>}
-          <div className="conversation-prompt-options">{transcript.prompt.options.map((option, index) => <button type="button" key={index} disabled={answering} className={index === transcript.prompt!.selected ? 'selected' : ''} onClick={() => void answer(transcript.prompt!, index)}><span>{index + 1}</span>{option}</button>)}</div>
-          <footer><button type="button" disabled={answering} onClick={() => void answer(transcript.prompt!, 'cancel')}>Esc · cancel</button><button type="button" onClick={openTerminal}><Icon name="terminal" size={13} />Open terminal</button></footer>
-        </section>}
+        {transcript?.prompt && <TerminalPrompt prompt={transcript.prompt} answering={answering} onAnswer={choice => void answer(transcript.prompt!, choice)} onOpenTerminal={openTerminal} />}
+        {held && <article className="conversation-message user pending">
+          <header><span>You</span></header>
+          {held.text.trim() && <div className="conversation-copy-text">{held.text}</div>}
+          {held.stage !== 'held' && <p className="conversation-checking" role="status">{held.stage === 'checking' ? 'Checking the effort level' : `Waiting for ${agentLabel}`}<span className="conversation-dots" aria-hidden="true"><i /><i /><i /></span></p>}
+        </article>}
         {working && <p className="conversation-working"><i />{agentLabel} is working…</p>}
         {!transcript?.prompt && (session.activity === 'waiting' || stale || readError) && <div className="conversation-notice" role="status"><p>{readError || (session.activity === 'waiting' ? `${agentLabel} is waiting for you in the terminal.` : 'No new messages for a while. A permission prompt or question may be waiting in the terminal.')}</p><button type="button" onClick={openTerminal}><Icon name="terminal" size={14} />Open terminal</button></div>}
       </div>
@@ -266,6 +328,17 @@ export default function Conversation({ session, connected, agentLabel, openTermi
     {showJump && <button type="button" className="conversation-jump" onClick={() => { follow.current = true; setShowJump(false); const box = scroller.current; if (box) box.scrollTop = box.scrollHeight }}><Icon name="down" size={15} />Latest</button>}
     {dragging && <div className="terminal-drop"><Icon name="attach" size={30} /><strong>Drop to attach</strong><span>Files, folders and images</span></div>}
     <BackgroundWork agents={transcript?.agents} commands={transcript?.commands} now={now} />
+    <SideQuestions key={session.id} items={transcript?.btw} openTerminal={openTerminal} />
+    {advice && <div className="conversation-notice conversation-effort" role="alert"><p>{advice.message}{advice.from && ` This chat is on ${effortLabel(advice.from)}.`}</p>
+      <button type="button" disabled={sending} onClick={() => void send({ action: 'switch', level: advice.level })}>Switch to {effortLabel(advice.level)}</button>
+      <button type="button" disabled={sending} onClick={() => void send({ action: 'keep', level: advice.level })}>{advice.from ? `Keep ${effortLabel(advice.from)}` : 'Keep it as it is'}</button>
+      <button type="button" disabled={sending} onClick={() => void send({ action: 'auto', level: advice.level })}>Switch, and auto-adjust from now</button>
+      <button type="button" className="desk-icon" aria-label="Close the effort offer" onClick={() => { setAdvice(null); if (held) setDraft({ text: held.text, paths: held.paths }); setPending(null) }}><Icon name="close" size={13} /></button></div>}
+    {coldOffer && <div className="conversation-notice conversation-effort conversation-cold" role="alert"><p>{coldOffer.message.replace(/ Send again to go ahead, or start a new chat from a summary\.$/, '')} Compacting or summarizing also reads the whole conversation once, but later turns then carry a short summary instead.</p>
+      <button type="button" disabled={sending || coldBusy} onClick={() => void send(undefined, true)}>Send anyway</button>
+      <button type="button" disabled={sending || coldBusy || working} title="Sends /compact first; your message comes back to the composer" onClick={() => void coldInstead('compact')}>Compact first</button>
+      <button type="button" disabled={sending || coldBusy || working} title="Opens a new chat from a handoff summary" onClick={() => void coldInstead('handoff')}>Summarize and continue</button>
+      <button type="button" className="desk-icon" aria-label="Close the cold cache offer" onClick={() => { setColdOffer(null); if (held) setDraft({ text: held.text, paths: held.paths }); setPending(null) }}><Icon name="close" size={13} /></button></div>}
     <form className="conversation-composer" onSubmit={event => { event.preventDefault(); void send() }}>
       {!!suggestions.length && <ul className="conversation-commands" id="conversation-commands" role="listbox" aria-label="Commands">{suggestions.map((command, index) => <li key={`${command.trigger}${command.name}`} id={`conversation-command-${index}`} role="option" aria-selected={command === highlighted}
         onMouseDown={event => { event.preventDefault(); complete(command) }} onMouseEnter={() => setPicked(index)}>
@@ -277,6 +350,9 @@ export default function Conversation({ session, connected, agentLabel, openTermi
         role="combobox" aria-autocomplete="list" aria-expanded={!!suggestions.length} aria-controls="conversation-commands" aria-activedescendant={highlighted ? `conversation-command-${suggestions.indexOf(highlighted)}` : undefined}
         onKeyDown={event => {
           if (event.nativeEvent.isComposing) return
+          if (event.key === 'Enter' && event.altKey && session.agent === 'claude') { event.preventDefault(); void askBtw(); return }
+          // Ctrl/⌘+Enter sends at the chat's current effort, skipping effort advice once.
+          if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !event.shiftKey) { event.preventDefault(); void send({ action: 'keep' }); return }
           if (suggestions.length && highlighted) {
             if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); setPicked((suggestions.indexOf(highlighted) + (event.key === 'ArrowDown' ? 1 : suggestions.length - 1)) % suggestions.length); return }
             if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setDismissed(tokenKey); return }
@@ -288,9 +364,11 @@ export default function Conversation({ session, connected, agentLabel, openTermi
         onPaste={event => { const files = Array.from(event.clipboardData.files).filter(file => file.type.startsWith('image/')); if (files.length) { event.preventDefault(); void addImages(files) } }} />
       <div className="conversation-actions">
         <button type="button" className="desk-icon" title="Attach files or folders" aria-label="Attach files" onClick={() => window.dispatchEvent(new Event('mrmak-attach-file'))}><Icon name="attach" size={16} /></button>
-        <div className="terminal-dictation"><VoiceInput id={`desktop-conversation-${session.id}`} connected={connected} disabled={sending} config={dictation} transcriber={transcribeDesktopAudio} onBusy={setVoiceBusy} onText={text => setDraft(current => ({ ...current, text: current.text ? `${current.text}${/\s$/.test(current.text) ? '' : '\n'}${text}` : text }))} /></div>
-        <span className="conversation-status" role="status">{status || (uploading ? 'Saving images…' : 'Enter to send · Shift+Enter for a new line')}</span>
+        <div className="terminal-dictation"><VoiceInput id={`desktop-conversation-${session.id}`} connected={connected} disabled={sending} config={dictation} hotkey transcriber={transcribeDesktopAudio} onBusy={setVoiceBusy} onText={text => setDraft(current => ({ ...current, text: current.text ? `${current.text}${/\s$/.test(current.text) ? '' : '\n'}${text}` : text }))} /></div>
+        {canPause && <button type="button" className="desk-icon" disabled={pausing || working} onClick={() => void pauseWithSummary()} aria-label="Pause with a summary" title="Taking a break? The agent writes a handoff now, while the prompt cache is warm, and nothing else opens. When you are back, continue here or start a new chat from it."><Icon name="coffee" size={16} /></button>}
+        <span className={`conversation-status ${status.length > 90 ? 'long' : ''}`} role="status">{status || (uploading ? 'Saving images…' : `Enter to send · Shift+Enter for a new line${session.agent === 'claude' ? ` · ${btwKey} for /btw` : ''}${advising ? ` · ${skipKey} skips the effort check` : ''}`)}</span>
         {working && <button type="button" className="conversation-stop" onClick={stop} title="Interrupt the agent (Esc)"><Icon name="stop" size={14} />Stop</button>}
+        {session.agent === 'claude' && <button type="button" className="conversation-btw" title={`Ask a side question without adding it to the conversation (/btw · ${btwKey})`} aria-label="Ask as a /btw side question" disabled={!canAsk || sending || uploading || voiceBusy || !draft.text.trim()} onClick={() => void askBtw()}>btw</button>}
         <button type="submit" className="conversation-send" aria-label={sending ? 'Sending…' : 'Send'} title="Send" disabled={!connected || !running || sending || uploading || voiceBusy || (!draft.text.trim() && !draft.paths.length)}><Icon name="send" size={16} /></button>
       </div>
     </form>

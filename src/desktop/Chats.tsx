@@ -7,13 +7,16 @@ import BrowserSettings from '../components/BrowserSettings'
 import SessionLogo from './SessionLogo'
 import { chatActivityLabel } from './chatActivity'
 import ChatTabs from './ChatTabs'
-import { groupCounts, groupNames, orderedChats, projectKey, projectName, tabColors } from './chatOrder'
+import { groupCounts, groupNames, orderedChats, projectGrouped, projectKey, projectName, tabColors } from './chatOrder'
 import HandoffOffer from './HandoffOffer'
 import MobileAccess from './MobileAccess'
 import DictationComposer from './DictationComposer'
 import ProjectPicker from './ProjectPicker'
 import Conversation from './Conversation'
-import { modelLabel, useChatModel } from './chatModel'
+import { modelLabel, useChatStats } from './chatModel'
+import ModelUsageFooter from './ModelUsageFooter'
+import CacheChip from './CacheChip'
+import ModelMenu from './ModelMenu'
 import { chatView, hasConversationView, saveChatView, type ChatView } from './chatView'
 import { isMac, isWindows, modKey, modLabel, shortcutLabel } from './platform'
 
@@ -111,7 +114,8 @@ export default function Chats() {
   const attachmentStatus = useCallback((id: string, text: string) => setAttachmentNotice(current => text || current.id === id ? { id, text } : current), [])
   const active = orderedChats(state.sessions)
   const session = active.find(item => item.id === state.selectedId) || active[0]
-  const model = useChatModel(session)
+  const { model, modelName, effort: usedEffort, usage, cache, cacheStats } = useChatStats(session)
+  const effort = usedEffort || session?.effort
   const agent = state.agents.find(item => item.id === session?.agent)
   const running = session?.status === 'running' || session?.status === 'starting'
   const [, setViewVersion] = useState(0)
@@ -121,6 +125,7 @@ export default function Chats() {
   const choose = (id: string) => { selectChat(id); setSwitcher(false); setMenu(false); setHistory(false); setRenaming(false) }
   const closeChat = (id: string) => api(`/sessions/${id}`, {}, 'DELETE').catch(reportError)
   const groups = groupNames(state.sessions)
+  const byProject = projectGrouped(state.sessions)
   const historyCounts = Object.fromEntries(Object.entries(groupCounts(state.sessions)).map(([name, counts]) => [name, counts.history]))
   const collapsed = state.settings.collapsedGroups || []
   const setCollapsed = (names: string[]) => api('/settings', { collapsedGroups: names }).catch(reportError)
@@ -128,6 +133,12 @@ export default function Chats() {
   const collapseOthers = (name: string) => setCollapsed(groupNames(active).filter(item => item !== name))
   const groupColors = state.settings.groupColors || {}
   const setGroupColor = (name: string, value: string | null) => { const next = { ...groupColors }; if (value) next[name] = value; else delete next[name]; api('/settings', { groupColors: next }).catch(reportError) }
+  // The service accepts `seen` only for the chat this window subscribed to. TerminalPane subscribes
+  // itself, so the Conversation view does it here.
+  const shownId = session?.id
+  useEffect(() => {
+    if (state.connected && shownId && view === 'conversation') sendEvent({ type: 'subscribe', id: shownId })
+  }, [state.connected, shownId, view])
   useEffect(() => {
     if (!state.connected || !session?.unread || history || switcher || newChat) return
     let timer = 0
@@ -177,7 +188,7 @@ export default function Chats() {
 
   return <div className="chats-surface">
     <header className="chats-header"><div className="chats-brand"><Nose size={25} tone="black" /><span>Mr. Mak <b>Chats</b></span></div><div className="chats-header-actions"><BrowserSettings target="chat" /><MobileAccess /><button className={`desk-icon ${pinned ? 'active' : ''}`} title="Keep Chats above other windows" onClick={() => { setPinned(!pinned); windowAction('chats', 'pin', !pinned) }}><Icon name="pin" size={16} /></button><button className="desk-icon" title="Show Workspace" onClick={() => windowAction('workspace')}><Icon name="workspace" size={18} /></button></div></header>
-    <div className="chat-tabs-row"><ChatTabs items={active} selectedId={session?.id} agents={state.agents} groups={groups} collapsed={collapsed} groupColors={groupColors} historyCounts={historyCounts} choose={choose} close={closeChat} toggleGroup={toggleGroup} collapseOthers={collapseOthers} setGroupColor={setGroupColor} /><div className="chat-tab-actions"><button className="desk-icon new-chat-button" onClick={() => setNewChat(true)} title={`New chat · ${shortcutLabel('Shift+T')}`} aria-label="New chat"><Icon name="plus" /></button><button className={`desk-icon ${switcher ? 'active' : ''}`} onClick={() => { setSwitcher(value => !value); setHistory(false) }} title={`Find a chat · ${shortcutLabel('Shift+P')}`} aria-label="Find a chat"><Icon name="search" size={16} /></button><button className={`history-button ${history ? 'active' : ''}`} onClick={() => { setHistory(value => !value); setSwitcher(false); setMenu(false) }} title={`History · ${shortcutLabel('Shift+H')}`}><Icon name="history" size={15} /><span>History</span></button></div></div>
+    <div className="chat-tabs-row"><ChatTabs items={active} selectedId={session?.id} agents={state.agents} groups={groups} collapsed={collapsed} groupColors={groupColors} historyCounts={historyCounts} choose={choose} close={closeChat} toggleGroup={toggleGroup} collapseOthers={collapseOthers} setGroupColor={setGroupColor} /><div className="chat-tab-actions"><button className={`desk-icon ${byProject ? 'active' : ''}`} onClick={() => api('/groups/by-project', {}).catch(reportError)} title={byProject ? 'Ungroup tabs' : 'Group tabs by project'} aria-label="Group tabs by project" aria-pressed={byProject}><Icon name="folder" size={16} /></button><button className="desk-icon new-chat-button" onClick={() => setNewChat(true)} title={`New chat · ${shortcutLabel('Shift+T')}`} aria-label="New chat"><Icon name="plus" /></button><button className={`desk-icon ${switcher ? 'active' : ''}`} onClick={() => { setSwitcher(value => !value); setHistory(false) }} title={`Find a chat · ${shortcutLabel('Shift+P')}`} aria-label="Find a chat"><Icon name="search" size={16} /></button><button className={`history-button ${history ? 'active' : ''}`} onClick={() => { setHistory(value => !value); setSwitcher(false); setMenu(false) }} title={`History · ${shortcutLabel('Shift+H')}`}><Icon name="history" size={15} /><span>History</span></button></div></div>
     <div className="chat-body">
     {history && <History close={() => setHistory(false)} choose={choose} />}
     {switcher && <div className="chat-switcher"><div className="switcher-search"><Icon name="search" size={16} /><input autoFocus placeholder="Find any chat…" value={query} onChange={event => setQuery(event.target.value)} /></div><div className="switcher-list">{filtered.map(item => <button key={item.id} onClick={() => choose(item.id)} className={session?.id === item.id ? 'selected' : ''}><span className="agent-letter" style={{ color: state.agents.find(a => a.id === item.agent)?.color }}><SessionLogo session={item} size={19} /></span><span><strong>{item.name}</strong><small>{item.group ? `${item.group} · ` : ''}{item.cwd}</small></span><span className="switcher-state">{chatActivityLabel(item)}</span></button>)}{!filtered.length && <p className="desk-muted">No matching chats.</p>}</div></div>}
@@ -187,7 +198,7 @@ export default function Chats() {
       {hasConversationView(session) && <HandoffOffer key={`handoff-${session.id}`} session={session} threshold={state.settings.handoffAfter ?? 40} agentLabel={agent?.label || session.agent} />}
       {view === 'conversation' ? <Conversation key={session.id} session={session} connected={state.connected} agentLabel={agent?.label || session.agent} openTerminal={() => showView('terminal', false)} systemEvents={state.settings.systemEvents} /> : <TerminalPane key={session.id} id={session.id} agent={session.agent} fontSize={fontSize} appearance={state.settings.terminalAppearance || 'original'} optionMeta={!!state.settings.terminalOptionMeta} onAttachmentStatus={attachmentStatus} />}
       {!running && <div className="terminal-reconnect"><span>{session.restoreError || 'Reconnecting to your conversation…'}</span><button onClick={() => api(`/sessions/${session.id}/resume`, {}).catch(reportError)}>Reconnect</button></div>}
-      <footer className="chat-status">{attachmentNotice.id === session.id && attachmentNotice.text ? <span className="attachment-status" role="status"><Icon name="attach" size={12} /><span>{attachmentNotice.text}</span></span> : <><span><i className={state.connected ? 'connected-dot' : 'disconnected-dot'} />{state.connected ? running ? 'Connected · autosaved' : 'Reconnecting…' : 'Reconnecting…'}</span><span title={[model && `Model: ${model}`, session.effort && 'Reasoning effort', 'Terminal permissions'].filter(Boolean).join(' · ')}>{model && <span className="chat-status-model">{modelLabel(model)} · </span>}{session.effort && `${session.effort} · `}{session.agent === 'shell' ? (isMac ? 'macOS' : isWindows ? 'Windows' : 'Local') : session.bypass ? 'Bypass' : 'CLI permissions'}</span><span className="status-shortcut">{modLabel}V · image</span></>}</footer>
+      <footer className="chat-status">{attachmentNotice.id === session.id && attachmentNotice.text ? <span className="attachment-status" role="status"><Icon name="attach" size={12} /><span>{attachmentNotice.text}</span></span> : <><span><i className={state.connected ? 'connected-dot' : 'disconnected-dot'} />{state.connected ? running ? 'Connected · autosaved' : 'Reconnecting…' : 'Reconnecting…'}</span><span>{hasConversationView(session) && <><ModelMenu key={session.id} session={session} model={model} modelName={modelName} effort={effort || null} running={running} onOpenTerminal={() => showView('terminal', false)} /> · </>}<span title="Terminal permissions">{session.agent === 'shell' ? (isMac ? 'macOS' : isWindows ? 'Windows' : 'Local') : session.bypass ? 'Bypass' : 'CLI permissions'}</span></span>{session.agent === 'claude' && <CacheChip cache={cache} stats={cacheStats} />}<ModelUsageFooter agent={session.agent} usage={usage} model={modelName || (model ? modelLabel(model) : null)} /><span className="status-shortcut">{modLabel}V · image</span></>}</footer>
     </> : <div className="chats-empty"><div className="empty-orbit"><Nose size={64} tone="black" /></div><span className="desk-eyebrow">ROOM TO THINK</span><h1>Your agents,<br />close at hand.</h1><p>A chat for each task.<br />Keep this window beside whatever<br />you are working on.</p><button className="desk-primary" onClick={() => setNewChat(true)}><Icon name="plus" size={17} />Open your first chat</button><div className="empty-agent-names"><span>Claude</span><span>Codex</span><span>OpenCode</span><span>Kimi</span></div><small>Your CLI accounts. Your local files.</small></div>}
     </div>
     {newChat && <NewChat close={() => setNewChat(false)} />}

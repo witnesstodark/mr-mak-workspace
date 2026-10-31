@@ -77,13 +77,89 @@ Git). The new chat uses the same agent, folder, permission and effort settings a
 receives one first-message argument naming that file. Claude also receives
 `--add-dir` for the handoff folder. Nothing changes in the original chat.
 
-`settings.groupTabsByProject` groups open tabs by working folder. A group keeps
-the position of its first tab; tabs reorder only within their project.
+**Pause with a summary** is an icon beside the dictation button in a Claude or
+Codex chat's composer. `POST /api/sessions/:id/pause` sends the same request worded for a
+break and saves the handoff while the prompt cache is still warm, but opens
+nothing, since a new chat opened then would start a cache that also expires. The
+chat then shows "Paused at … with a handoff" with **Continue in a new chat**
+(`{ then: "new-chat" }`, the new chat opens only now) and **Keep this chat**
+(`{ then: "keep" }`); the primary one follows whether this chat's cache is still
+warm. The paused state is saved in `.mrmak/paused-handoffs.json`, so it
+survives a service restart; a pause whose chat was closed or whose handoff file
+was deleted is dropped on the next start. The file stays in `inbox/handoffs/`
+either way.
+
+The offer's first, primary choice is **Compact**: `POST /api/sessions/:id/compact`
+(`Handoffs.compact`) pastes the CLI's own `/compact` through the PTY, like a
+Conversation message. `context-alerts.mjs` lists the CLIs that have one (Claude,
+Codex, Antigravity, OpenCode); for others the button is hidden. The service
+refuses while the agent works or waits for an answer, while a handoff is being
+written, or while the terminal shows a menu that would take the command as its
+answer. After a compaction the offer returns only after another `handoffAfter`
+messages.
+
+The idle-cache alert uses the same bar. Claude Code's prompt cache on a
+subscription expires about an hour after the chat's last model request (the
+transcript usage's `at`, or the latest `compact_boundary`). When an idle, running
+Claude chat has been quiet for `settings.idleCacheMinutes` (default 55, 0 turns it
+off, below 60) and its context is at least `settings.idleCacheMinTokens` (default
+100000), the bar offers **Compact now** and **Dismiss** until the cache would have
+expired. Dismissing or compacting hides it for that idle period only (window local
+storage). Nothing is compacted automatically. Both thresholds and `handoffAfter`
+are in Settings › Long chats.
+
+**Group tabs by project** in the Chat header organises open tabs into named
+groups by working folder. Existing project grouping and its saved order migrate
+automatically to the 0.5.2 group model. Drag a group or use Alt+Left/Right on its
+header to reorder it; right-click offers the native group controls.
 
 Fullscreen Claude scrolls its own conversation. Terminal snapshots preserve
 both mouse tracking and the requested SGR encoding, including saved screens,
 so switching tabs or reconnecting does not disable its mouse wheel. Classic
 Claude and Codex continue using local terminal scrollback.
+
+## Plan usage and the model menu
+
+The chat footer shows only how much of the plan's 5-hour and weekly limits is
+used; tokens, context, reset times and cost are in its tooltip. A value no CLI
+reported reads "—". Codex reports its limits in each `token_count` event. Claude
+Code reports them only to a status line command, so each Claude chat starts with
+`--settings <state>/claude-status/<chat>.settings.json`, whose status line runs
+`claude-statusline.mjs`. It saves the plan windows (account-wide, also as
+`account.json`), context window, model, effort and cost, and prints nothing. A
+status line in the person's user or project settings is left in place, and the
+limits then stay unknown. A window whose reset time has passed shows "—".
+
+The "Opus · high" chip opens a menu with Claude Code's models (from its model
+catalog cache) and effort levels. `POST /api/sessions/:id/model` pastes
+`/model <id>` or `/effort <level>`: with an argument the CLI opens no picker.
+Mid-conversation Claude Code may ask "Switch model?" or "Change effort level?"
+because the prompt cache is lost; the service confirms that warning itself and
+hides it from Conversation meanwhile. A confirmation a PreModelSwitch hook asks
+for is left to the person. The choice is kept on the chat (`--model`/`--effort` on
+resume) and per project in `<state>/chat-models.json` for new chats there. Other
+CLIs change models only in their own picker, which the menu opens in Terminal.
+
+Effort advice (Settings → Chats, off by default; `effort-advice.mjs`) reads each
+message sent to a Claude chat from Conversation before it goes in: one
+`claude -p --model sonnet --effort low` call names the level it needs, adding a
+few seconds. `Ask` holds the message once with a 409 carrying `effortAdvice`; the
+resend carries `effort: { action: switch | auto | keep, level }`. `Auto` switches
+by itself. Either way the switch is the same `/effort <level>` as the menu, so the
+footer shows the level at once. A failed or slow check sends the message as it is;
+the phone gets no offer, so there `Ask` sends unchanged and `Auto` still switches.
+Ctrl+Enter (⌘Enter on macOS) sends once at the current effort with no check. The
+UI Studio Copilot and edited messages always send that way.
+
+Claude chats show their prompt cache in the footer: warm with the minutes left,
+counted from the last reply (one hour on a subscription), or cold. The first
+message sent from Mr. Mak to a cold chat with 50k tokens or more of context is
+held once with the estimated rewrite cost (`chat-cache.mjs`, list prices from the
+cache-tax mod's table). On the desktop the held message waits in the chat with
+**Send anyway**, **Compact first** and **Summarize and continue**; the last two
+put it back in the composer. Sending it again also goes through, and slash
+commands are never held. Messages sent from the phone are held the same way;
+messages typed straight into the terminal are not.
 
 ## Local microphone dictation
 
