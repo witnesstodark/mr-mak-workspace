@@ -10,7 +10,7 @@ const CLAUDE_BUILTINS = [
   ['cost', 'Show session cost and plan usage', true], ['doctor', 'Check the Claude Code installation', true], ['export', 'Export the conversation', true],
   ['help', 'Show help', true], ['hooks', 'Manage hooks', true], ['init', 'Create a CLAUDE.md for this project'],
   ['login', 'Sign in', true], ['logout', 'Sign out', true], ['mcp', 'Manage MCP servers', true], ['memory', 'Edit memory files', true],
-  ['model', 'Choose the model', true], ['output-style', 'Choose the output style', true], ['permissions', 'Manage tool permissions', true],
+  ['model', 'Choose the model'], ['effort', 'Set reasoning effort'], ['output-style', 'Choose the output style', true], ['permissions', 'Manage tool permissions', true],
   ['plugin', 'Manage plugins', true], ['release-notes', 'Show release notes'], ['resume', 'Resume another conversation', true],
   ['review', 'Review a pull request'], ['rewind', 'Rewind the conversation or code', true], ['security-review', 'Review pending changes for security issues'],
   ['status', 'Show account and system status', true], ['statusline', 'Set up the status line'], ['todos', 'Show the current todo list'],
@@ -25,11 +25,20 @@ const CODEX_BUILTINS = [
   ['fast', 'Toggle faster responses with higher usage'], ['feedback', 'Send feedback to the Codex team', true],
   ['goal', 'Set or view the goal for a long-running task'], ['init', 'Create an AGENTS.md for this project'],
   ['logout', 'Sign out of Codex', true], ['mcp', 'List configured MCP tools'], ['mention', 'Mention a file', true],
-  ['model', 'Choose the model and reasoning effort', true], ['new', 'Start a new conversation'],
+  ['model', 'Choose the model and reasoning effort'], ['new', 'Start a new conversation'],
   ['permissions', 'Choose what Codex is allowed to do', true], ['plan', 'Switch to Plan mode'],
   ['recap', 'Summarize the conversation now'], ['rename', 'Rename the current thread'],
   ['resume', 'Resume another conversation', true], ['review', 'Review current changes', true],
   ['skills', 'Choose skills for Codex to use', true], ['status', 'Show session configuration and token usage'],
+];
+const ANTIGRAVITY_BUILTINS = [
+  ['clear', 'Clear the conversation history'], ['compact', 'Summarize the conversation to free context'],
+  ['goal', 'Run a long-running task until the goal is achieved'], ['plan', 'Step-by-step planning before execution'],
+  ['model', 'Choose the model'], ['effort', 'Set reasoning effort'],
+  ['skills', 'List and select available skills', true], ['mcp', 'Manage MCP servers', true],
+  ['agents', 'Manage subagents', true], ['browser', 'Browser automation and testing'],
+  ['learn', 'Persist behavior for future tasks'], ['boost', 'Deep thinking and rigorous verification'],
+  ['help', 'Show help', true], ['exit', 'Exit the CLI session', true],
 ];
 
 // A single frontmatter value, including a folded or literal block (`description: >`).
@@ -104,6 +113,11 @@ export async function chatCommands(agent, cwd, { home = os.homedir(), env = proc
     for (const folder of folders) add('$', 'project', await skills(path.join(folder, '.agents', 'skills')));
     add('$', 'user', await skills(path.join(home, '.agents', 'skills')));
     add('$', 'user', await skills(path.join(codexHome, 'skills')));
+  } else if (agent === 'antigravity') {
+    add('/', 'built-in', builtins(ANTIGRAVITY_BUILTINS));
+    for (const folder of folders) add('/', 'project', await skills(path.join(folder, '.agents', 'skills')));
+    add('/', 'user', await skills(path.join(home, '.agents', 'skills')));
+    add('/', 'user', await skills(path.join(home, '.gemini', 'antigravity-cli', 'builtin', 'skills')));
   }
   return { commands: items };
 }
