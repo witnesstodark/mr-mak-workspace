@@ -3,6 +3,7 @@ import { readFile, realpath, stat } from 'node:fs/promises';
 import { readJson, realFile, secret, within } from './util.mjs';
 import { serveReport } from './report-chrome.mjs';
 import { serveFile } from './files.mjs';
+import { cardPhase, cardProgress } from './workspace.mjs';
 import { validateCard, CARD_MAX_BYTES } from './card-schema.mjs';
 
 const extensions = new Set(['.html', '.htm', '.md', '.txt', '.css', '.js', '.mjs', '.json', '.svg', '.png', '.jpg', '.jpeg', '.webp', '.gif', '.ico', '.mp4', '.webm', '.mp3', '.wav', '.ogg', '.pdf', '.woff', '.woff2', '.ttf', '.glb', '.gltf', '.bin', '.wasm']);
@@ -21,8 +22,30 @@ const fail = (message, status = 403) => { throw Object.assign(new Error(message)
 export class MobileReports {
   constructor(gateway) { this.gateway = gateway; this.grants = new Map(); }
   async registry() { return (await readJson(path.join(this.gateway.repo, 'workspace/workspace.json'), { entities: [] })).entities || []; }
+  // The cover is an image inside the card's own folder; anything else is treated as no cover.
+  async coverFile(entity) {
+    const raster = value => coverTypes.has(path.extname(value).toLowerCase());
+    if (!safePath(entity.folder) || !safePath(entity.cover) || !raster(entity.cover)) return null;
+    try {
+      const root = await realpath(path.join(this.gateway.repo, 'workspace', entity.folder));
+      if (!within(await realpath(this.gateway.repo), root)) return null;
+      const { file, info } = await realFile(root, entity.cover);
+      return info.isFile() && info.size <= 8 * 1024 * 1024 && raster(file) ? { file, info } : null;
+    } catch { return null; }
+  }
   async list() {
-    return (await this.registry()).filter(item => item.status !== 'archived' && safePath(item.folder)).map(item => ({ id: item.id, title: item.title, category: item.category, updated: item.updated || item.created, steps: (item.steps || []).map((step, index) => ({ name: step.name, index })) })).filter(item => item.steps.length).sort((a, b) => String(b.updated).localeCompare(String(a.updated)));
+    const cards = await Promise.all((await this.registry()).filter(item => item.status !== 'archived' && safePath(item.folder)).map(async item => {
+      const steps = (item.steps || []).map((step, index) => ({ name: step.name, index }));
+      const cover = steps.length ? await this.coverFile(item) : null, progress = cardProgress(item.progress), phase = cardPhase(item.phase);
+      return { id: item.id, title: item.title, category: item.category, updated: item.updated || item.created, steps, ...(cover ? { cover: `/mobile/api/reports/${encodeURIComponent(item.id)}/cover?v=${Math.floor(cover.info.mtimeMs)}` } : {}), ...(progress ? { progress } : {}), ...(phase ? { phase } : {}) };
+    }));
+    return cards.filter(item => item.steps.length).sort((a, b) => String(b.updated).localeCompare(String(a.updated)));
+  }
+  async serveCover(request, response, encodedId) {
+    let id; try { id = decodeURIComponent(encodedId); } catch { fail('Cover not found', 404); }
+    const entity = (await this.registry()).find(item => item.id === id && item.status !== 'archived'), cover = entity && await this.coverFile(entity);
+    if (!cover) fail('Cover not found', 404);
+    await serveFile(request, response, cover.file, cover.info, { 'Cache-Control': 'private, max-age=300' });
   }
   async open(device, { entityId, step = 0 }) {
     const entity = (await this.registry()).find(item => item.id === entityId);
@@ -84,7 +107,7 @@ export class MobileReports {
     if (!safePath(relative)) fail('Invalid report path');
     let root, filePath;
     if (relative.startsWith(grant.prefix)) { root = grant.root; filePath = relative.slice(grant.prefix.length); }
-    else if (/^workspace\/_shared\/(report\.(css|js)|examples\.css)$/.test(relative)) { root = path.join(gateway.repo, 'workspace/_shared'); filePath = relative.slice('workspace/_shared/'.length); }
+    else if (relative.startsWith('workspace/_shared/')) { root = path.join(gateway.repo, 'workspace/_shared'); filePath = relative.slice('workspace/_shared/'.length); }
     else fail('This file is outside the selected report.');
     if (!extensions.has(path.extname(filePath).toLowerCase())) fail('This file type is unavailable in report previews.');
     const { file, info } = await realFile(root, filePath);

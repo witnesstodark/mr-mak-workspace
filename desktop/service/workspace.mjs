@@ -10,6 +10,18 @@ export const localDay = (date = new Date()) => `${date.getFullYear()}-${String(d
 const brief = ({ id, title, description, status, category, created, updated, pinned, steps }) => ({ id, title, description, status, category, created, updated, pinned: !!pinned, steps: (steps || []).map(({ name }, index) => ({ name, index })) });
 const invalid = message => Object.assign(new Error(message), { status: 400 });
 
+// Display fields other tools write into a card (docs/workspace-template.md; src/lib/card-meta.ts
+// applies the same rules on the desktop). A value that cannot be drawn is dropped on its own, so
+// the card still lists with everything else.
+const metaText = (value, max) => typeof value === 'string' && value.trim() ? value.trim().slice(0, max) : undefined;
+export const cardPhase = value => metaText(value, 80);
+export function cardProgress(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const { done, total, label } = value, text = metaText(label, 60);
+  if (!Number.isFinite(done) || !Number.isFinite(total) || total <= 0 || done < 0 || done > total) return undefined;
+  return { done, total, ...(text ? { label: text } : {}) };
+}
+
 // Removes <script> and <style> blocks in one pass. A lazy regex up to the closing
 // tag rescans the rest of the text for every unclosed opening tag, which lets a
 // report stall the service. An unclosed block hides the rest, as it does in a browser.
@@ -39,7 +51,7 @@ export function metadataPatch(value) {
 export class Workspace {
   constructor(repo, changed = () => {}) { this.repo = repo; this.file = path.join(repo, 'workspace', 'workspace.json'); this.changed = changed; this.writes = Promise.resolve(); }
   async registry() {
-    const registry = JSON.parse(await readFile(this.file, 'utf8'));
+    const registry = JSON.parse((await readFile(this.file, 'utf8')).replace(/^\uFEFF/, ''));
     if (!Array.isArray(registry.entities)) throw new Error('Workspace registry is not ready.');
     return registry;
   }
@@ -78,7 +90,7 @@ export class Workspace {
       if (patch.status === undefined && patch.pinned === undefined && patch.category === undefined) throw invalid('Choose a status, category or pin change.');
       for (let attempt = 0; attempt < 6; attempt++) {
         const source = await readFile(this.file, 'utf8');
-        const registry = JSON.parse(source);
+        const registry = JSON.parse(source.replace(/^\uFEFF/, ''));
         const entity = registry.entities.find(item => item.id === id);
         if (!entity) throw Object.assign(new Error('Workspace card was not found.'), { status: 404 });
         if (patch.status !== undefined) entity.status = patch.status;
