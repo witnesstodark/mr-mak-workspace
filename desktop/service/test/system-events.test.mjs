@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { systemEvent, transcriptActivity, transcriptMessages, transcriptModel } from '../mobile-transcript.mjs';
+import { systemEvent, transcriptActivity, transcriptMessages, transcriptEffort, transcriptModel } from '../mobile-transcript.mjs';
 
 const notification = result => `<task-notification>\n<task-id>ac7d</task-id>\n<tool-use-id>toolu_01</tool-use-id>\n<output-file>E:\\tmp\\ac7d.output</output-file>\n<status>completed</status>\n<summary>Agent "/code-review high" finished</summary>\n<note>A task-notification fires each time this agent stops.</note>\n<result>${result}</result>\n</task-notification>`;
 
@@ -36,6 +36,9 @@ test('transcripts keep system events out of the user count and report the model'
   assert.equal(messages[2].event.detail, 'Nothing found.');
   assert.equal(transcriptModel(claude, 'claude'), 'sonnet');
   assert.equal(transcriptModel(claude.slice(0, 3), 'claude'), 'claude-opus-5-5-20261001');
+  assert.equal(transcriptEffort(claude, 'claude'), null);
+  assert.equal(transcriptEffort([{ type: 'assistant', effort: 'xhigh', message: {} }, { type: 'assistant', isSidechain: true, effort: 'low', message: {} }], 'claude'), 'xhigh');
+  assert.equal(transcriptEffort([{ type: 'assistant', effort: 'xhigh', message: {} }, { type: 'user', message: { content: '<local-command-stdout>Set effort level to medium (saved as your default for new sessions)</local-command-stdout>' } }], 'claude'), 'medium');
 
   const codex = [
     { type: 'turn_context', payload: { model: 'gpt-6-astra' } },
@@ -45,6 +48,22 @@ test('transcripts keep system events out of the user count and report the model'
   ];
   assert.deepEqual(transcriptMessages(codex, 'codex').map(item => item.role), ['system', 'user']);
   assert.equal(transcriptModel(codex, 'codex'), 'gpt-6.1-sol');
+  assert.equal(transcriptEffort([{ type: 'USER_INPUT', content: '<USER_SETTINGS_CHANGE>\nThe user changed setting `Model Selection` from None to Gemini 3.8 Flash (High).\n</USER_SETTINGS_CHANGE>' }], 'antigravity'), 'high');
+  assert.equal(transcriptEffort([...codex, { type: 'turn_context', payload: { model: 'gpt-6.1-sol', effort: 'high' } }], 'codex'), 'high');
+});
+
+test('a compacted Claude chat shows its summary as a collapsed event, not as your message', () => {
+  const summary = 'This session is being continued from a previous conversation that ran out of context.\n\n<tools-used-before-summary>Bash, Edit</tools-used-before-summary>\nSummary:\n1. Primary Request: fix the biplanes.';
+  const records = [
+    { type: 'user', uuid: 'u1', timestamp: 't1', origin: { kind: 'human' }, message: { content: 'Fix the biplanes' } },
+    { type: 'system', subtype: 'compact_boundary', uuid: 'b1', parentUuid: null, timestamp: 't2', content: 'Conversation compacted' },
+    { type: 'user', uuid: 'u2', parentUuid: 'b1', timestamp: 't3', isCompactSummary: true, isVisibleInTranscriptOnly: true, message: { content: summary } },
+    { type: 'user', uuid: 'u3', parentUuid: 'u2', timestamp: 't4', origin: { kind: 'human' }, message: { content: 'Go on' } },
+  ];
+  const messages = transcriptMessages(records, 'claude');
+  assert.deepEqual(messages.map(item => [item.role, item.text]), [['user', 'Fix the biplanes'], ['system', 'Conversation compacted · summary of earlier messages'], ['user', 'Go on']]);
+  assert.equal(messages[1].event.kind, 'notice');
+  assert.equal(messages[1].event.detail, 'This session is being continued from a previous conversation that ran out of context.\n\nSummary:\n1. Primary Request: fix the biplanes.');
 });
 
 test('Codex 0.163 transcripts read completed message items and hide injected instructions', () => {
