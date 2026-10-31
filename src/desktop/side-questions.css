@@ -1,0 +1,23 @@
+/* /btw side questions: kept apart from the conversation, above the composer. */
+.side-questions{flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:6px;width:calc(100% - 32px);max-width:840px;max-height:min(36vh,320px);margin:0 auto 8px;overflow-y:auto;scrollbar-width:thin}
+/* The Latest button would cover the dock above the composer. */
+.desk-conversation:has(.side-questions) .conversation-jump{top:12px;bottom:auto}
+.side-question{width:min(600px,94%);padding:8px 12px 10px;border:1px dashed color-mix(in srgb,var(--amber) 48%,transparent);border-radius:12px 12px 4px 12px;background:color-mix(in srgb,var(--amber) 6%,var(--surface-solid));font-size:12.5px;color:var(--text-bright)}
+.side-question>header{display:flex;align-items:center;gap:7px;font-size:9.5px;color:var(--text-dim)}
+.side-question>header>span:nth-child(2){flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.side-question>header button{display:inline-flex;align-items:center;gap:4px;padding:2px 4px;border:0;border-radius:5px;background:transparent;color:var(--text-dim);font-size:9.5px}
+.side-question>header button:hover{background:color-mix(in srgb,var(--text) 5%,transparent);color:var(--text)}
+.side-question-tag{padding:1px 6px;border-radius:8px;background:color-mix(in srgb,var(--amber) 16%,transparent);color:var(--amber);font:600 9.5px "Cascadia Code",Consolas,"SF Mono",monospace}
+.side-question-ask{margin:6px 0 0;color:var(--text);font-style:italic;line-height:1.5;overflow-wrap:anywhere}
+.side-question-answer{margin-top:6px;padding-top:6px;border-top:1px solid color-mix(in srgb,var(--amber) 20%,transparent);white-space:pre-wrap;line-height:1.6;overflow-wrap:anywhere}
+.side-question-wait{display:flex;align-items:center;gap:8px;margin:6px 0 0;font-size:11px;color:var(--amber)}
+.side-question-wait i{width:7px;height:7px;border-radius:50%;background:var(--amber);animation:conversation-pulse 1.2s ease-in-out infinite}
+.side-question>footer{display:flex;align-items:center;gap:8px;margin-top:7px;font-size:10.5px;color:var(--text-dim)}
+.side-question>footer span{flex:1;line-height:1.5}
+.side-question>footer button{display:inline-flex;align-items:center;gap:5px;padding:4px 8px;border:1px solid color-mix(in srgb,var(--text) 12%,transparent);border-radius:6px;background:transparent;color:var(--pink);font-size:10px}
+.conversation-btw{height:30px;padding:0 9px;border:1px dashed color-mix(in srgb,var(--amber) 50%,transparent);border-radius:8px;background:transparent;color:var(--amber);font:600 10.5px "Cascadia Code",Consolas,"SF Mono",monospace}
+.conversation-btw:disabled{opacity:.4}
+.conversation-btw:hover:not(:disabled){background:color-mix(in srgb,var(--amber) 9%,transparent)}
+/* A /btw the CLI recorded as an ordinary prompt. */
+.conversation-message.user.btw .conversation-copy-text{border-style:dashed;border-color:color-mix(in srgb,var(--amber) 48%,transparent);background:color-mix(in srgb,var(--amber) 6%,var(--surface-solid))}
+.conversation-message.user.btw>header>span:first-child{color:var(--amber)}

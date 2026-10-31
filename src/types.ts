@@ -9,12 +9,29 @@ export interface WorkspaceStep {
   viewer?: 'compare3d' | 'card'
 }
 
+/** Milestone progress shown as a mini bar on the home card. */
+export interface WorkspaceProgress {
+  done: number
+  total: number
+  /** Short caption next to the count, e.g. the milestone name. */
+  label?: string
+}
+
 export interface WorkspaceEntity {
   id: string
   title: string
   description: string
   /** Optional project emblem, relative to this entity's folder. */
   icon?: string
+  /** Optional cover image for the home card, relative to this entity's folder. */
+  cover?: string
+  /**
+   * Optional progress bar on the home card. Ignored (the card stays plain)
+   * unless `total` > 0 and 0 <= `done` <= `total`.
+   */
+  progress?: WorkspaceProgress
+  /** Optional short current phase, shown as a chip on the home card. */
+  phase?: string
   type: 'standalone' | 'group'
   category: string
   created: string

@@ -24,6 +24,9 @@ try {
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
   await page.goto(url);
+  // Archived cards stay off the home grid until the archive is shown.
+  await page.locator('.entity-card, .sidebar-archive-toggle').first().waitFor();
+  if (await page.locator('.sidebar-archive-toggle').count()) await page.locator('.sidebar-archive-toggle').click();
   let steps = 0;
   for (const entity of entities) {
     await page.locator(`.entity-card[data-entity="${entity.id}"]`).click();

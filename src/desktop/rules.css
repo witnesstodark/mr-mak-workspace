@@ -1,0 +1,41 @@
+/* Rules: the project rules every new agent chat starts with. */
+.rules-project{padding:4px 16px 10px}.rules-project label{font-size:9px;color:var(--text-dim)}.rules-project select{display:block;width:100%;margin-top:5px;background:var(--surface-solid);border:1px solid color-mix(in srgb,var(--text) 12%,transparent);border-radius:6px;padding:7px 5px;color:var(--text);font-size:11px;outline:none}
+.rules-project p{font-size:10px;line-height:1.6;color:var(--text-dim);margin:8px 0 0}
+.rules-scroll{flex:1;min-height:0;overflow:auto;padding:2px 12px 14px;scrollbar-width:thin}
+.rules-list{list-style:none;margin:0;padding:0;counter-reset:rule}
+.rules-list li{counter-increment:rule;display:flex;gap:6px;align-items:flex-start;padding:9px 8px 9px 10px;margin-top:6px;border:1px solid color-mix(in srgb,var(--text) 12%,transparent);border-radius:8px;background:color-mix(in srgb,var(--text) 1%,transparent)}
+.rules-list li::before{content:counter(rule);min-width:14px;font-size:9px;color:var(--text-dim);padding-top:2px}
+.rules-list li>p{flex:1;margin:0;font-size:11px;line-height:1.55;color:var(--text);overflow-wrap:anywhere}
+.rules-list li>div{display:flex;flex-shrink:0}.rules-list li>div .desk-icon{width:24px;height:24px}
+.rules-list form{flex:1;min-width:0}
+.rules-list textarea,.rules-add textarea{display:block;width:100%;box-sizing:border-box;resize:vertical;background:var(--bg-deep);border:1px solid color-mix(in srgb,var(--text) 12%,transparent);border-radius:6px;padding:7px 8px;color:var(--text-bright);font:11px/1.5 var(--font-body);outline:none}
+.rules-list textarea:focus-visible,.rules-add textarea:focus-visible{border-color:color-mix(in srgb,var(--pink) 30%,transparent)}
+.rules-list form>div{display:flex;gap:6px;margin-top:6px}
+.rules-list form button,.rules-add button{display:inline-flex;align-items:center;gap:5px;border:1px solid color-mix(in srgb,var(--text) 12%,transparent);border-radius:5px;background:color-mix(in srgb,var(--text) 2%,transparent);color:var(--text);padding:5px 9px;font-size:10px;cursor:pointer}
+.rules-list form button:disabled,.rules-add button:disabled{opacity:.4;cursor:default}
+.rules-add{margin-top:12px}.rules-add button{margin-top:7px;color:var(--pink)}
+.rules-empty{padding:8px 4px;font-size:11px;line-height:1.6;color:var(--text-dim)}
+.files-panel>.rules-footer{display:block;flex-shrink:0;padding:11px 16px}.rules-footer p{font-size:9px;color:var(--text-dim);line-height:1.6;margin:0 0 6px;overflow-wrap:anywhere}.rules-footer code{font-size:9px}
+.files-panel .rules-footer button{display:inline-flex;align-items:center;gap:5px;color:var(--pink);cursor:pointer;font-size:10px}
+/* A rule marked with "remember:" in a chat, and skill ideas from repeated requests. */
+.rule-band{display:flex;flex-direction:column;gap:6px;padding:7px 14px;border-bottom:1px solid color-mix(in srgb,var(--amber) 30%,transparent);background:color-mix(in srgb,var(--amber) 7%,var(--surface-solid))}
+.rule-band-item{display:flex;align-items:center;gap:10px;min-width:0;font-size:12px}
+.rule-band-label{flex-shrink:0;padding:1px 7px;border-radius:9px;border:1px solid color-mix(in srgb,var(--amber) 50%,transparent);color:var(--amber);font-size:10px;font-weight:600}
+.rule-band-item>p{flex:1;min-width:0;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-bright)}
+.rule-band-item>input{flex:1;min-width:0;height:26px;padding:0 8px;border:1px solid color-mix(in srgb,var(--amber) 40%,transparent);border-radius:6px;background:var(--surface-solid);color:var(--text-bright);font:inherit}
+.rule-band-item>div{display:flex;flex-shrink:0;gap:5px}
+.rule-band-item button{height:26px;padding:0 9px;border:1px solid color-mix(in srgb,var(--text) 14%,transparent);border-radius:6px;background:transparent;color:var(--text);font-size:11px}
+.rule-band-item button:first-child{border-color:color-mix(in srgb,var(--amber) 50%,transparent);color:var(--amber)}
+.rule-band-item button:hover:not(:disabled){background:color-mix(in srgb,var(--text) 6%,transparent)}
+@media (max-width:760px){.rule-band-item{flex-wrap:wrap}.rule-band-item>p{flex-basis:100%;white-space:normal}}
+.skill-discovery{margin-top:18px;padding-top:12px;border-top:1px solid color-mix(in srgb,var(--text) 12%,transparent)}
+.skill-discovery h3{margin:0 0 4px;font-size:11px;font-weight:600;color:var(--text-bright)}
+.skill-discovery>p{margin:0 0 9px;font-size:10px;line-height:1.6;color:var(--text-dim)}
+.skill-discovery>small{display:block;margin:9px 0 4px;font-size:9.5px;color:var(--text-dim)}
+.skill-candidate{margin:8px 0;padding:9px 10px;border:1px solid color-mix(in srgb,var(--text) 12%,transparent);border-radius:8px;font-size:10.5px}
+.skill-candidate header{display:flex;justify-content:space-between;gap:8px}.skill-candidate strong{color:var(--text-bright)}.skill-candidate header span{color:var(--amber)}
+.skill-candidate p{margin:4px 0;line-height:1.5;color:var(--text)}
+.skill-candidate details{margin:4px 0 6px;color:var(--text-dim)}.skill-candidate ol{margin:6px 0;padding-left:18px;line-height:1.5}
+.skill-candidate blockquote{margin:4px 0;padding-left:8px;border-left:2px solid color-mix(in srgb,var(--text) 16%,transparent);font-style:italic;overflow-wrap:anywhere}
+.skill-candidate button{padding:4px 9px;border:1px solid color-mix(in srgb,var(--pink) 35%,transparent);border-radius:6px;background:transparent;color:var(--pink);font-size:10.5px}
+.skill-candidate>small{display:block;color:var(--green);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, writeFile, appendFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocket } from 'ws';
-import { Sessions } from '../sessions.mjs';
+import { Sessions, terminalReport } from '../sessions.mjs';
 import { createService } from '../server.mjs';
 import { nativeActivity, tailNativeFile } from '../native-events.mjs';
 import { sleep } from '../util.mjs';
@@ -37,6 +37,16 @@ test('native activity separates accepted tasks, tool work, final answers and int
   assert.equal(nativeActivity({ type: 'assistant', message: { id: 'msg-1', stop_reason: 'end_turn', content: [{ type: 'text', text: 'Done.' }] } }, 'claude').id, 'msg-1');
   assert.equal(nativeActivity({ type: 'user', message: { content: '[Request interrupted by user]' } }, 'claude').kind, 'turn-interrupted');
   assert.equal(nativeActivity({ type: 'user', message: { content: [{ type: 'text', text: '[Request interrupted by user for tool use]' }] } }, 'claude').kind, 'turn-interrupted');
+  // A local command such as /compact is busy until its output, then idle: no model turn follows.
+  assert.equal(nativeActivity({ type: 'user', message: { content: '<command-name>/compact</command-name>\n<command-message>compact</command-message>' } }, 'claude').kind, 'turn-started');
+  assert.equal(nativeActivity({ type: 'user', message: { content: '<local-command-stdout>\x1b[2mCompacted (ctrl+o to see full summary)\x1b[22m</local-command-stdout>' } }, 'claude').kind, 'turn-interrupted');
+  // Idle compaction writes its summary as a user record after the turn ended; nothing follows it.
+  assert.equal(nativeActivity({ type: 'system', subtype: 'compact_boundary', content: 'Conversation compacted' }, 'claude'), null);
+  assert.equal(nativeActivity({ type: 'user', isCompactSummary: true, isVisibleInTranscriptOnly: true, message: { role: 'user', content: 'This session is being continued from a previous conversation that ran out of context.' } }, 'claude'), null);
+  assert.equal(nativeActivity({ type: 'system', subtype: 'informational', content: 'Compacted while idle, before the prompt cache expired' }, 'claude'), null);
+  // A resumed chat's notice about leftover background work starts no turn; a finished task does.
+  assert.equal(nativeActivity({ type: 'user', message: { content: "<task-notification>\n<status>stopped</status>\n<summary>Background shell command didn't finish before the previous session ended</summary>\n</task-notification>" } }, 'claude'), null);
+  assert.equal(nativeActivity({ type: 'user', message: { content: '<task-notification>\n<status>completed</status>\n<summary>Agent "Review" finished</summary>\n</task-notification>' } }, 'claude').kind, 'turn-started');
   assert.equal(nativeActivity({ type: 'assistant', message: { stop_reason: 'end_turn' } }, 'kimi'), null);
 });
 
@@ -160,4 +170,10 @@ test('only the subscribed Chats view can acknowledge the exact answer; navigatio
     assert.equal(item.unread, true);
     await send(chats.ws, seen, chats.messages); assert.equal(item.unread, false);
   } finally { sockets.forEach(ws => ws.terminate()); await service.close(); }
+});
+
+test('terminal replies and mouse reports do not count as typing, keys do', () => {
+  // Moving the pointer over a fullscreen Claude chat sends SGR mouse reports.
+  for (const report of ['\x1b[<35;40;12M', '\x1b[<0;10;5M\x1b[<0;10;5m', '\x1b[I', '\x1b[O', '\x1b[12;40R', '\x1b[?2026;2$y', '\x1b]11;rgb:1e1e/1e1e/1e1e\x1b\\','\x1b[M #!']) assert.equal(terminalReport(report), true, JSON.stringify(report));
+  for (const key of ['a', 'hello', '\r', '\x1b[A', '\x7f', '\x1b[<35;40;12Mx']) assert.equal(terminalReport(key), false, JSON.stringify(key));
 });

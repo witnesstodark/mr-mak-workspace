@@ -101,6 +101,21 @@ export default function Sidebar({
       </div>
 
       <nav className="sidebar-list">
+        <div style={{ marginBottom: 6 }}>
+          <div className="sidebar-section">
+            <span className="sidebar-label">🛠 Tools</span>
+          </div>
+          <div className="sidebar-item-row">
+            <a
+              href="#/ui-studio"
+              className={`sidebar-item${activeId === 'ui-studio' ? ' active' : ''}`}
+            >
+              <span className="item-icon" aria-hidden="true">🎮</span>
+              <span className="item-text">Game UI Studio</span>
+            </a>
+          </div>
+        </div>
+
         {pinned.length > 0 && (
           <div>
             <div className="sidebar-section">

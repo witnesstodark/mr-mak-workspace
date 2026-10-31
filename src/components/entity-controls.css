@@ -14,6 +14,15 @@
 .entity-card-wrap .entity-card { width: 100%; }
 .entity-card-wrap .card-top { padding-right: 24px; }
 .entity-card-wrap > .entity-status-button { position: absolute; right: 8px; top: 10px; }
+/* Over a cover image the dot needs its own backdrop to stay visible. */
+.entity-card-wrap.has-cover > .entity-status-button {
+  background: var(--surface-solid);
+  background: color-mix(in srgb, var(--surface-solid) 74%, transparent);
+  border-color: var(--hairline-strong);
+  backdrop-filter: blur(6px);
+}
+.entity-card-wrap.has-cover > .entity-status-button:hover,
+.entity-card-wrap.has-cover > .entity-status-button[aria-expanded="true"] { background: var(--surface-solid); }
 .entity-menu {
   position: fixed; inset: auto; margin: 0; padding: 16px; box-sizing: border-box;
   width: min(292px, calc(100vw - 24px)); max-height: calc(100dvh - 24px);

@@ -5,6 +5,7 @@ import MarkdownDocument, { MarkdownView } from './MarkdownDocument'
 import { ZoomImage } from './ImagePreview'
 import { downloadImage } from '../lib/download'
 import ReportFrame, { REPORT_SANDBOX } from './ReportFrame'
+import { assetChat, assetMessage, parseAssetRequest } from '../desktop/assetBridge'
 
 export default function ReportViewer({ url, title, relativePath }: { url: string; title: string; relativePath: string }) {
   const markdown = /\.md$/i.test(relativePath)
@@ -14,6 +15,28 @@ export default function ReportViewer({ url, title, relativePath }: { url: string
   const [available, setAvailable] = useState(false)
   const [loaded, setLoaded] = useState(false)
   const paint = useRef(0)
+  const frame = useRef<HTMLIFrameElement>(null)
+  // A card's Acervo sends an asset to the project's chat (src/desktop/assetBridge.ts).
+  useEffect(() => {
+    if (!isDesktop) return
+    const origin = new URL(url, location.href).origin
+    const onMessage = (event: MessageEvent) => {
+      const target = frame.current?.contentWindow
+      const data = event.data as { type?: unknown; id?: unknown } | null
+      if (!target || event.source !== target || event.origin !== origin || data?.type !== 'mrmak:asset-request' || typeof data.id !== 'string') return
+      const id = data.id
+      const answer = (value: { ok: boolean; text?: string; error?: string }) => target.postMessage({ type: 'mrmak:asset-response', id, ...value }, origin)
+      void (async () => {
+        const request = parseAssetRequest(data)
+        const state = desktopState(), chat = assetChat(request, state.sessions, state.selectedId)
+        await api(`/sessions/${encodeURIComponent(chat.id)}/input`, { text: assetMessage(request), submit: true })
+        await api(`/sessions/${encodeURIComponent(chat.id)}/focus`, {})
+        answer({ ok: true, text: `Enviado para o chat ${chat.name}.` })
+      })().catch((cause: unknown) => answer({ ok: false, error: cause instanceof Error ? cause.message : String(cause) }))
+    }
+    window.addEventListener('message', onMessage)
+    return () => window.removeEventListener('message', onMessage)
+  }, [url])
   const reveal = () => {
     cancelAnimationFrame(paint.current)
     paint.current = requestAnimationFrame(() => { paint.current = requestAnimationFrame(() => setLoaded(true)) })
@@ -38,7 +61,7 @@ export default function ReportViewer({ url, title, relativePath }: { url: string
   if (image) return <div className="report-image"><nav><span>{title}</span><a href={url} target="_blank" rel="noreferrer">Open original</a><a href={url} onClick={event => { event.preventDefault(); void downloadImage(url).catch(error => setError(error.message)) }}>Download</a></nav><ZoomImage src={url} alt={title} /></div>
   const ready = available && loaded
   return <div className="report-document" aria-busy={!ready}>
-    <ReportFrame url={url} title={title} className={`report-frame${ready ? ' loaded' : ''}`} sandbox={isDesktop ? REPORT_SANDBOX : undefined} onLoad={reveal} onError={() => setError('This page could not be loaded.')} />
+    <ReportFrame ref={frame} url={url} title={title} className={`report-frame${ready ? ' loaded' : ''}`} sandbox={isDesktop ? REPORT_SANDBOX : undefined} onLoad={reveal} onError={() => setError('This page could not be loaded.')} />
     {!ready && <div className="report-loading" role="status">Opening report…</div>}
   </div>
 }

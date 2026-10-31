@@ -66,9 +66,33 @@ const workspaceListeners = new Set<() => void>()
 export function mobileWorkspaceSelection() { return workspaceSelection }
 export function useMobileWorkspace() { return useSyncExternalStore(listener => { workspaceListeners.add(listener); return () => { workspaceListeners.delete(listener) } }, () => workspaceSelection) }
 export function selectMobileWorkspace(id: string | null, step?: number) { const lastStep = id ? read(`mrmak.mobile.report-step.${id}`) : null; step = step ?? (typeof lastStep === 'number' && Number.isInteger(lastStep) && lastStep >= 0 ? lastStep : 0); if (id) save(`mrmak.mobile.report-step.${id}`, step); workspaceSelection = { id, step }; save(workspaceKey, workspaceSelection); workspaceListeners.forEach(listener => listener()); syncBack() }
-export function reportPosition(id: string, step: number): ReportPosition {
-  const value = read(`mrmak.mobile.report.${id}.${step}`) as Partial<ReportPosition> | null
-  return validReportPosition(value) || { top: 0, left: 0 }
+// A tab's document is stable when tabs move; its numeric position and preview grant are not.
+function reportEntry(url: string): string | null {
+  try { return /^\/mobile\/view\/[^/]+\/(.+)$/.exec(new URL(url, location.origin).pathname)?.[1] || null } catch { return null }
+}
+function reportPositionKey(id: string, step: number, entryUrl?: string): string {
+  const entry = entryUrl && reportEntry(entryUrl)
+  return `mrmak.mobile.report.${id}.${entry ? `page.${encodeURIComponent(entry)}` : step}`
+}
+export function reportPosition(id: string, step: number, entryUrl?: string): ReportPosition {
+  const value = validReportPosition(read(reportPositionKey(id, step, entryUrl)))
+  if (value) return value
+  const entry = entryUrl && reportEntry(entryUrl), prefix = `mrmak.mobile.report.${id}.`
+  if (entry) {
+    // Migrate only legacy routes whose owning entry page is known. An old inner
+    // route has no ownership information and must not redirect a different tab.
+    try {
+      for (let index = 0; index < localStorage.length; index++) {
+        const key = localStorage.key(index)
+        if (!key?.startsWith(prefix) || !/^\d+$/.test(key.slice(prefix.length))) continue
+        const legacy = validReportPosition(read(key))
+        if (legacy?.path === entry) return legacy
+      }
+    } catch { /* Keep the report usable when storage is unavailable. */ }
+    const legacy = validReportPosition(read(prefix + step))
+    if (legacy && !legacy.path) return legacy
+  }
+  return { top: 0, left: 0 }
 }
 export function validReportPosition(value: unknown): ReportPosition | null {
   if (!value || typeof value !== 'object') return null
@@ -79,4 +103,4 @@ export function validReportPosition(value: unknown): ReportPosition | null {
   const scrollers = Array.isArray(state.scrollers) ? state.scrollers.slice(0, 12).filter(item => item && typeof item.selector === 'string' && item.selector.length <= 500 && [item.top,item.left].every(n => typeof n === 'number' && Number.isFinite(n) && n >= 0 && n <= 1e7)) : undefined
   return { path: state.path, hash: state.hash, top: state.top, left: state.left, ...(scrollers ? { scrollers } : {}) }
 }
-export function saveReportPosition(id: string, step: number, value: ReportPosition) { const valid = validReportPosition(value); if (valid) save(`mrmak.mobile.report.${id}.${step}`, valid) }
+export function saveReportPosition(id: string, step: number, value: ReportPosition, entryUrl?: string) { const valid = validReportPosition(value); if (valid) save(reportPositionKey(id, step, entryUrl), valid) }
