@@ -15,7 +15,7 @@ import { projectKey } from './recent-projects.mjs';
 import { ptyOptions } from './platform.mjs';
 import { composerText, terminalPrompt } from './terminal-prompt.mjs';
 import { opencodeVersion, opencodeEnvironment, readOpencodeState, watchOpencode } from './opencode.mjs';
-import { prepareAntigravityLog, readAntigravityConversation, validAntigravityId, watchAntigravity } from './antigravity.mjs';
+import { antigravityTranscript, prepareAntigravityLog, readAntigravityConversation, validAntigravityId, watchAntigravity } from './antigravity.mjs';
 
 const { Terminal } = headless;
 // Native CLIs record getcwd(): symlinks resolved (/tmp -> /private/tmp, cloud
@@ -259,6 +259,9 @@ export class Sessions extends EventEmitter {
     else if (session.agent === 'claude' && session.nativeId) claudeTranscript(session.cwd, session.nativeId).then(file => {
       if (session.process === proc) this.watchNative(session, file);
     }).catch(() => {});
+    else if (session.agent === 'antigravity' && session.nativeId) antigravityTranscript(session.nativeId).then(file => {
+      if (session.process === proc) this.watchNative(session, file);
+    }).catch(() => {});
   }
 
   beginDiscovery(session) {
@@ -351,6 +354,9 @@ export class Sessions extends EventEmitter {
     if (!id || id === session.nativeId || [...this.items.values()].some(item => item !== session && item.agent === 'antigravity' && item.nativeId === id)) return;
     session.nativeId = id; session.hasConversation = true; session.restoreError = null;
     this.changed(session);
+    if (session.process) antigravityTranscript(id).then(file => {
+      if (session.process && session.agent === 'antigravity') this.watchNative(session, file);
+    }).catch(() => {});
   }
 
   flushOutput(session) {
@@ -623,7 +629,7 @@ export class Sessions extends EventEmitter {
     session.unread = false; session.attention = false; this.changed(session);
   }
   async nativeBoundary(session, resumeId) {
-    const file = !resumeId ? null : session.agent === 'codex' ? await codexTranscript(resumeId) : session.agent === 'claude' ? await claudeTranscript(session.cwd, resumeId) : null;
+    const file = !resumeId ? null : session.agent === 'codex' ? await codexTranscript(resumeId) : session.agent === 'claude' ? await claudeTranscript(session.cwd, resumeId) : session.agent === 'antigravity' ? await antigravityTranscript(resumeId) : null;
     return file ? { file, offset: (await stat(file).catch(() => null))?.size || 0 } : null;
   }
   stop(id) { const session = this.get(id); this.requestStop(session); return { stopped: !!session.process }; }
