@@ -22,6 +22,7 @@ import { McpInventory } from './mcp.mjs';
 import { editGlobalRules, editRules, globalRulesFile, readRules, readRulesAt } from './project-rules.mjs';
 import { RuleSuggestions } from './rule-suggestions.mjs';
 import { createSkill, discoverSkills } from './skill-discovery.mjs';
+import { GameRunner, gameSetupPrompt, readGame, saveGame } from './game-run.mjs';
 import { body, equalSecret, json, publicError, readJson, realFile, saveJson, secret } from './util.mjs';
 import { ProjectAdapterRegistry } from './project-adapters/registry.mjs';
 import { KnowledgeManager, MarkdownKnowledgeProvider } from './knowledge/providers.mjs';
@@ -41,6 +42,7 @@ import { CACHE_TTL_MINUTES, IDLE_CACHE_MINUTES, IDLE_CACHE_MIN_TOKENS } from './
 import { chatCommands } from './chat-commands.mjs';
 import { ClaudeSessions, sessionRail } from './claude-sessions.mjs';
 import { chatPlan, savePlan, validPlanKey } from './chat-plan.mjs';
+import { FileInsights, folderMap } from './file-insights.mjs';
 import { ColdGuard, cacheView } from './chat-cache.mjs';
 import { SideQuestions } from './side-questions.mjs';
 import { isThemePreference } from './appearance.mjs';
@@ -71,7 +73,7 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
   const transcripts = new ConversationTranscripts();
   const claudeSessions = new ClaudeSessions(), sideQuestions = new SideQuestions(sessions);
   const coldGuard = new ColdGuard();
-  const ruleSuggestions = new RuleSuggestions(stateDir, transcripts);
+  const fileInsights = new FileInsights(), ruleSuggestions = new RuleSuggestions(stateDir, transcripts);
   const conversationMedia = new ConversationMedia();
   const readAloud = mobileOptions?.readAloud || new LocalReadAloud(repo);
   const environment = parseEnv(await readFile(path.join(repo, '.env'), 'utf8').catch(() => ''));
@@ -111,6 +113,9 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
   const notices = [];
   const send = (ws, type, value) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type, ...value })); };
   const broadcast = (type, value) => { for (const ws of clients) send(ws, type, value); };
+  const games = new GameRunner();
+  games.on('changed', cwd => broadcast('game', { path: cwd, status: games.status(cwd) }));
+  const gameState = async cwd => ({ ...await readGame(cwd), status: games.status(cwd) });
   const nativeSettings = new NativeSettings(native, value => broadcast('native-settings', value));
   const show = (window, extra = {}) => { native({ type: 'window', action: 'show', window }); broadcast('navigate', { window, ...extra }); };
   const focus = id => { sessions.get(id); selectedId = id; settings.selectedId = id; scheduleSettings(); show('chats', { sessionId: id }); return { selectedId: id }; };
@@ -296,6 +301,11 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
         // Rules for one project, or the global rules every chat gets.
         if (method === 'GET' && url.pathname === '/api/rules') return json(response, 200, url.searchParams.get('scope') === 'global' ? await readRulesAt(globalRulesFile(repo)) : await readRules(await projectFolder(url.searchParams.get('path'))));
         if (method === 'POST' && url.pathname === '/api/rules') return json(response, 200, data.scope === 'global' ? await editGlobalRules(repo, data) : await editRules(await projectFolder(data.path), data));
+        if (method === 'GET' && url.pathname === '/api/game') return json(response, 200, await gameState(await projectFolder(url.searchParams.get('path'))));
+        if (method === 'POST' && url.pathname === '/api/game') { const cwd = await projectFolder(data.path); await saveGame(cwd, data.config); return json(response, 200, await gameState(cwd)); }
+        if (method === 'POST' && url.pathname === '/api/game/run') { const cwd = await projectFolder(data.path); await games.run(cwd); return json(response, 200, await gameState(cwd)); }
+        if (method === 'POST' && url.pathname === '/api/game/stop') { const cwd = await projectFolder(data.path); await games.stop(cwd); return json(response, 200, await gameState(cwd)); }
+        if (method === 'POST' && url.pathname === '/api/game/setup') { const session = sessions.get(data.id), cwd = await projectFolder(session.gameFolder || session.cwd); return json(response, 200, sessions.input(session.id, gameSetupPrompt((await readGame(cwd)).path, cwd), { coordinator: true, submit: true })); }
         if (method === 'POST' && url.pathname === '/api/mcp/check') return json(response, 200, await mcp.check(data.id));
         if (method === 'POST' && url.pathname === '/api/native/settings') return json(response, 200, await nativeSettings.set(data.winKey));
         if (method === 'GET' && url.pathname === '/api/recent-projects') return json(response, 200, await projectList());
@@ -340,6 +350,11 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
           native({ type: 'recycle-file', path: file });
           return json(response, 200, { requested: true, path: file });
         }
+        if (method === 'GET' && url.pathname === '/api/files/git') return json(response, 200, await fileInsights.status(url.searchParams.get('path') || repo));
+        if (method === 'GET' && url.pathname === '/api/files/diff') return json(response, 200, await fileInsights.diff(url.searchParams.get('path') || ''));
+        if (method === 'GET' && url.pathname === '/api/files/map') return json(response, 200, await folderMap(url.searchParams.get('path') || repo));
+        // What the chosen chat's agent read and wrote, for the Files tab.
+        if (method === 'GET' && url.pathname === '/api/files/activity') { const id = url.searchParams.get('id'); const session = id && sessions.items.get(id); return json(response, 200, { id: session?.id || null, cwd: session?.cwd || null, files: session ? (await transcripts.read(session)).files || [] : [] }); }
         if (method === 'GET' && url.pathname === '/api/preview') return json(response, 200, await files.preview(url.searchParams.get('path') || ''));
         if (method === 'POST' && url.pathname === '/api/files/markdown') {
           const preview = await files.saveMarkdown(data); await integrations.publish('artifact', { kind: 'updated', path: preview.path, name: preview.name }); broadcast('workspace-changed', {});
@@ -463,7 +478,7 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
           if (method === 'POST' && action === 'clear') return json(response, 200, await sessions.clearScreen(id));
           if (method === 'POST' && action === 'reorder') return json(response, 200, await sessions.reorder(id, data.targetId, data.position));
           if (method === 'POST' && action === 'input') return json(response, 200, sessions.input(id, data.text, { coordinator: data.paste !== false, submit: data.submit !== false }));
-          if (method === 'PATCH' && !action) return json(response, 200, typeof data.pinned === 'boolean' ? sessions.pin(id, data.pinned) : 'tabColor' in data ? sessions.color(id, data.tabColor) : 'group' in data ? await sessions.assign(id, data.group) : sessions.rename(id, data.name));
+          if (method === 'PATCH' && !action) return json(response, 200, typeof data.pinned === 'boolean' ? sessions.pin(id, data.pinned) : 'tabColor' in data ? sessions.color(id, data.tabColor) : 'gameFolder' in data ? sessions.setGameFolder(id, data.gameFolder === null ? null : await projectFolder(data.gameFolder)) : 'group' in data ? await sessions.assign(id, data.group) : sessions.rename(id, data.name));
           if (method === 'DELETE' && !action) return json(response, 200, await closeChat(id));
         }
         if (method === 'POST' && url.pathname === '/api/window') {
@@ -515,7 +530,7 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
       if (!info.isFile()) throw new Error('File not found');
       await serveFile(request, response, file, info, {
         'Referrer-Policy': 'no-referrer', 'X-Frame-Options': 'DENY',
-        'Content-Security-Policy': `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: ${files.origin}; media-src 'self' blob: ${files.origin}; connect-src 'self' ws://127.0.0.1:* ${files.origin}; frame-src http://127.0.0.1:*; object-src 'none'; base-uri 'self'; frame-ancestors 'none'`,
+        'Content-Security-Policy': `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: ${files.origin}; media-src 'self' blob: ${files.origin}; connect-src 'self' ws://127.0.0.1:* ${files.origin}; frame-src http://localhost:* http://127.0.0.1:* http://[::1]:*; object-src 'none'; base-uri 'self'; frame-ancestors 'none'`,
       });
     } catch (error) { if (!response.headersSent) json(response, error.status || 400, { error: publicError(error) }); }
   });
@@ -567,7 +582,7 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
       async close() {
         if (closing) return; closing = true; mcp.close(); nativeSettings.close(); await files.writes.catch(() => {});
       watcher?.close(); clearTimeout(restoreTimer); coordinator.close(); clearTimeout(settingsTimer); await saveSettings(); await transcriptSave; await quick.saves; await workspace.writes;
-      dictation.close(); await mobile.close();
+      dictation.close(); await mobile.close(); await games.close();
       for (const ws of wss.clients) ws.terminate();
       wss.close(); await sessions.close();
       server.closeAllConnections(); contentServer.closeAllConnections();

@@ -30,8 +30,8 @@ async function workingFolder(value) {
   return process.platform === 'win32' ? folder : realpath(folder).catch(() => folder);
 }
 const publicSession = session => {
-  const { id, name, agent, cwd, bypass, effort, model, status, createdAt, lastOutputAt, lastInputAt, exitCode, nativeId, attention, activity, unread, completionVersion, lastCompletedId, cols, rows, open, pinned, tabOrder, tabColor, group, updatedAt, preview, hasConversation, restoreError } = session;
-  return { id, name, agent, cwd, bypass, effort, model, status, createdAt, lastOutputAt, lastInputAt, exitCode, nativeId, attention, activity, unread, completionVersion, lastCompletedId, cols, rows, open, pinned, tabOrder, tabColor, group, updatedAt, preview, hasConversation, restoreError };
+  const { id, name, agent, cwd, bypass, effort, model, status, createdAt, lastOutputAt, lastInputAt, exitCode, nativeId, attention, activity, unread, completionVersion, lastCompletedId, cols, rows, open, pinned, tabOrder, tabColor, group, gameFolder, updatedAt, preview, hasConversation, restoreError } = session;
+  return { id, name, agent, cwd, bypass, effort, model, status, createdAt, lastOutputAt, lastInputAt, exitCode, nativeId, attention, activity, unread, completionVersion, lastCompletedId, cols, rows, open, pinned, tabOrder, tabColor, group, gameFolder, updatedAt, preview, hasConversation, restoreError };
 };
 
 // Grouped tabs sit together at the position of their earliest open member; a tab
@@ -78,7 +78,7 @@ export class Sessions extends EventEmitter {
   }
 
   make(metadata) {
-    return { activity: 'idle', unread: false, completionVersion: 0, tabOrder: this.items.size, tabColor: null, group: null, ...metadata, effort: ['codex', 'claude', 'antigravity'].includes(metadata.agent) ? metadata.effort || defaultWorkerEffort : undefined, terminal: null, serializer: null, process: null, sequence: 0, pendingOutput: '', outputTimer: null };
+    return { activity: 'idle', unread: false, completionVersion: 0, tabOrder: this.items.size, tabColor: null, group: null, gameFolder: null, ...metadata, effort: ['codex', 'claude', 'antigravity'].includes(metadata.agent) ? metadata.effort || defaultWorkerEffort : undefined, terminal: null, serializer: null, process: null, sequence: 0, pendingOutput: '', outputTimer: null };
   }
 
   async hydrate(session) {
@@ -478,6 +478,12 @@ export class Sessions extends EventEmitter {
       session.tabOrder = Math.max(-1, ...this.list().filter(item => item.id !== id && item.pinned === session.pinned).map(item => item.tabOrder)) + 1;
       this.changed(session);
     }
+    return publicSession(session);
+  }
+  // The project whose game the chat's Run game panel shows; null is the chat's own folder.
+  // Many chats share one folder (the Workspace) while working on different games.
+  setGameFolder(id, folder) {
+    const session = this.get(id); session.gameFolder = folder || null; this.changed(session);
     return publicSession(session);
   }
   color(id, value) {

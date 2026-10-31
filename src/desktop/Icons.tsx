@@ -30,7 +30,7 @@ export function Icon({ name, size = 18, style }: { name: string; size?: number; 
     send: 'm4 4 17 8-17 8 4-8ZM8 12h13', pin: 'm8 3 8 0-1 7 4 4H5l4-4ZM12 14v7', more: 'M5 12h.1M12 12h.1M19 12h.1',
     terminal: 'm5 7 5 5-5 5M13 17h6', bell: 'M5 16h14l-2-3V8a5 5 0 0 0-10 0v5ZM10 20h4', refresh: 'M20 7v5h-5M4 17v-5h5M6 6a8 8 0 0 1 13 2M18 18A8 8 0 0 1 5 16',
     down: 'm5 9 7 7 7-7', enter: 'M19 4v9H5m5-5-5 5 5 5', tab: 'M4 12h13m-5-5 5 5-5 5M20 5v14', escape: 'M14 4h6v16h-6M16 12H4m5-5-5 5 5 5', copy: 'M9 9h12v12H9ZM15 9V3H3v12h6', edit: 'M4 20h4L19 9l-4-4L4 16ZM13 7l4 4', trash: 'M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7',
-    history: 'M3 5v5h5M4 9a9 9 0 1 1 0 6M12 7v5l3 2', coffee: 'M17 8h1a4 4 0 1 1 0 8h-1M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4ZM6 2v2M10 2v2M14 2v2', rail: 'M3 4h18v16H3ZM15 4v16M17.5 8h1M17.5 12h1M17.5 16h1', attach: 'm8 13 7-7a3 3 0 0 1 4 4L9 20a5 5 0 0 1-7-7L13 2M5 15l9-9', clean: 'm9 4 11 11M6 7l11 11-4 4L2 11ZM2 22h20',
+    history: 'M3 5v5h5M4 9a9 9 0 1 1 0 6M12 7v5l3 2', coffee: 'M17 8h1a4 4 0 1 1 0 8h-1M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4ZM6 2v2M10 2v2M14 2v2', rail: 'M3 4h18v16H3ZM15 4v16M17.5 8h1M17.5 12h1M17.5 16h1', eye: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12ZM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6', attach: 'm8 13 7-7a3 3 0 0 1 4 4L9 20a5 5 0 0 1-7-7L13 2M5 15l9-9', clean: 'm9 4 11 11M6 7l11 11-4 4L2 11ZM2 22h20',
   }
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true"><path d={paths[name] || paths.files} /></svg>
 }

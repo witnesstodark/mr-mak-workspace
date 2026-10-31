@@ -12,6 +12,8 @@ export interface ChatSession {
   attention: boolean; cols: number; rows: number; exitCode?: number | null
   activity: 'idle' | 'working' | 'waiting'; unread: boolean; completionVersion: number
   tabOrder: number; tabColor: string | null; group: string | null
+  /** The project whose game the Run game panel shows; the chat's folder when absent. */
+  gameFolder?: string | null
   open: boolean; pinned: boolean; updatedAt: string; preview?: string; hasConversation?: boolean; restoreError?: string | null
 }
 export interface RecentProject { path: string; name: string; sources: ('workspace' | 'mrmak' | 'claude' | 'codex')[]; pinned: boolean; lastUsedAt: string | null }
@@ -60,7 +62,8 @@ export interface ModelUsageStats {
 export interface VoiceOwner { clientId: string; surface: 'chats' | 'workspace' }
 export interface FileEntry { name: string; path: string; directory: boolean; size: number; modifiedAt: string | null }
 export interface Folder { path: string; parent: string; entries: FileEntry[]; truncated: boolean; mode: string }
-export interface Preview { path: string; name: string; size: number; kind: 'document' | 'image' | 'video' | 'audio' | 'text' | 'unsupported'; url?: string; text?: string; revision?: string; reason?: string }
+export interface FolderMapData { path: string; name: string; parent: string; size: number; complete: boolean; children: { name: string; path: string; directory: boolean; size: number; files: number }[] }
+export interface Preview { path: string; name: string; size: number; kind: 'document' | 'image' | 'video' | 'audio' | 'text' | 'unsupported' | 'diff' | 'map'; url?: string; text?: string; revision?: string; reason?: string; map?: FolderMapData }
 export interface DesktopState {
   ready: boolean; connected: boolean; error: string | null; repo: string; contentBase: string
   agents: AgentInfo[]; sessions: ChatSession[]; selectedId: string | null; notices: Notice[]
@@ -71,5 +74,10 @@ export interface DesktopState {
 export interface ServiceEvent {
   type: string; id?: string; data?: string; sequence?: number; session?: ChatSession; sessions?: ChatSession[]
   selectedId?: string; sessionId?: string; state?: string; error?: string; notice?: Notice
-  operation?: Operation; settings?: Settings; owner?: VoiceOwner | null; window?: string; route?: string; preview?: Preview; handoff?: Handoff
+  operation?: Operation; settings?: Settings; owner?: VoiceOwner | null; window?: string; route?: string; preview?: Preview; handoff?: Handoff | null
+  path?: string; status?: GameStatus
 }
+
+export interface GameConfig { command: string; cwd?: string; url?: string }
+export interface GameStatus { running: boolean; pid?: number; startedAt?: string; endedAt?: string; exitCode?: number | null; command?: string; output: string[] }
+export interface GameState { path: string; config: GameConfig | null; error?: string; status: GameStatus }

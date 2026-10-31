@@ -1,0 +1,25 @@
+/* The project's game beside its chat, styled like the session rail. */
+.game-panel{width:clamp(260px,34vw,460px);flex-shrink:0;display:flex;flex-direction:column;min-height:0;border-left:1px solid color-mix(in srgb,var(--text) 12%,transparent);background:var(--surface-solid);color:var(--text);font-size:11px}
+@media (max-width:760px){.game-panel{position:absolute;z-index:45;top:0;right:0;bottom:0;width:min(360px,92%);box-shadow:-12px 0 40px #0007}}
+.game-panel>header{display:flex;align-items:center;gap:6px;padding:6px 6px 6px 12px;border-bottom:1px solid color-mix(in srgb,var(--text) 12%,transparent)}
+.game-panel h2{flex:1;margin:0;font-size:12px;font-weight:600;color:var(--text-bright)}
+.game-panel-body{display:flex;flex-direction:column;gap:10px;flex:1;min-height:0;padding:10px 12px;overflow:auto}
+.game-panel-note{margin:0;color:var(--text-dim)}
+.game-panel-error{margin:0;color:#f08a7a}
+.game-panel-empty p{margin:0 0 10px;line-height:1.5}
+.game-panel-actions,.game-panel-run{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.game-panel-actions button:not(.desk-primary){height:28px;padding:0 10px;border:1px solid color-mix(in srgb,var(--text) 14%,transparent);border-radius:7px;background:transparent;color:var(--text)}
+.game-panel-run .desk-primary{display:inline-flex;align-items:center;gap:6px}
+.game-panel-state{color:var(--text-dim)}
+.game-panel-command{display:block;padding:6px 8px;border-radius:6px;background:color-mix(in srgb,var(--text) 7%,transparent);font-size:10.5px;overflow-wrap:anywhere}
+.game-panel-form{display:flex;flex-direction:column;gap:10px}
+.game-panel-form label{display:flex;flex-direction:column;gap:4px;color:var(--text-dim)}
+.game-panel-form small{font-size:10px;opacity:.8}
+.game-panel-project{display:flex;flex-direction:column;gap:4px;color:var(--text-dim)}
+.game-panel-project select{height:28px;padding:0 6px;border:1px solid color-mix(in srgb,var(--text) 14%,transparent);border-radius:6px;background:var(--panel, transparent);color:var(--text);font:inherit}
+.game-panel-form input{height:28px;padding:0 8px;border:1px solid color-mix(in srgb,var(--text) 14%,transparent);border-radius:6px;background:transparent;color:var(--text);font:inherit}
+.game-panel-preview{display:flex;flex-direction:column;gap:4px}
+.game-panel-preview-bar{display:flex;align-items:center;gap:6px;color:var(--text-dim)}
+.game-panel-preview-bar span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.game-panel-preview iframe{width:100%;aspect-ratio:16/10;border:1px solid color-mix(in srgb,var(--text) 12%,transparent);border-radius:6px;background:#000}
+.game-panel-output{flex:1;min-height:80px;padding:6px 8px;border-radius:6px;background:color-mix(in srgb,var(--text) 5%,transparent);font-family:ui-monospace,Consolas,monospace;font-size:10.5px;line-height:1.45;white-space:pre-wrap;overflow:auto}

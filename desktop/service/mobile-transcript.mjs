@@ -7,6 +7,7 @@ import { claudeTranscript } from './native-events.mjs';
 import { codexSegments } from './codex-history.mjs';
 import { antigravityFullTranscript } from './antigravity.mjs';
 import { readOpencodeSession } from './opencode-history.mjs';
+import { fileActivity } from './file-insights.mjs';
 import { cacheHistory, lastCache } from './chat-cache.mjs';
 
 export function transcriptActivity(records, agent) {
@@ -593,7 +594,7 @@ export class ConversationTranscripts {
           claudeQuota = await readClaudeUtilization().catch(() => null);
         }
         const usage = transcriptUsage(records, session.agent, model, claudeQuota);
-        const value = { supported: true, messages: messages.slice(-100), userMessages, activity: transcriptActivity(records, session.agent), cache: session.agent === 'claude' ? lastCache(records) : null, cacheStats: session.agent === 'claude' ? cacheHistory(records) : null, model, effort: transcriptEffort(records, session.agent), usage, truncated };
+        const value = { supported: true, messages: messages.slice(-100), userMessages, activity: transcriptActivity(records, session.agent), files: fileActivity(records, session.agent, session.cwd), cache: session.agent === 'claude' ? lastCache(records) : null, cacheStats: session.agent === 'claude' ? cacheHistory(records) : null, model, effort: transcriptEffort(records, session.agent), usage, truncated };
         const claude = session.agent === 'claude';
         cached = { key, value, prompts: messages.filter(item => item.role === 'user').slice(-500).map(({ id, at, text }) => ({ id, at, text: text.slice(0, 2000) })), stops: claude ? taskStops(records) : new Map(), commands: claude ? backgroundCommands(records) : [] };
         this.cache.set(session.id, cached);

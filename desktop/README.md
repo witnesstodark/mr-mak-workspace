@@ -185,6 +185,18 @@ write another's plan, and the service writes the same `.agents/plans/<chat>.md`.
 Claude gets it through `--mcp-config` (allowed without a prompt), Codex through
 `mcp_servers` overrides and OpenCode through its config.
 
+## Files, rules from chats and the prompt cache
+
+The Files tab shows each file's Git state (`M`, `A`, `D`, `R`, `U`, `!`) with its
+changed lines, a dot on folders holding changes, and the branch with ahead and
+behind (`file-insights.mjs`, `git status --porcelain -z` and `git diff HEAD
+--numstat`). Rows the selected chat's agent read glow purple and rows it wrote
+orange, from Claude's Read/Edit/Write tools and the files Codex patches; the eye
+button follows the agent, opening the folders down to each new file. A changed
+file has a diff button; a folder has a size map (squarified, by bytes, with
+changed entries outlined). Deep folders keep indenting in smaller steps past level
+six, with a guide line per open folder.
+
 A message that starts with `remember:` or `lembre:` (typed in Mr. Mak or in the
 terminal, read from the chat's transcript) shows a band in the chat: save to the
 project's `.agents/rules.md`, save as global, edit or skip. Global rules live in
@@ -214,6 +226,20 @@ local transcripts the first reply after `/effort` read the whole context from
 the cache, while the first reply after `/model` read none of it. A keep-warm ping was measured and left out: a `claude -p --resume
 --fork-session` ping read only 40,440 of the 74,607 tokens an interactive chat had
 cached and wrote 35,352 more, so it does not keep the chat's own cache warm.
+
+## Game panel and Overseer mode
+
+The play button in a chat's header opens that chat's Game panel; each chat
+opens and closes its own. A game belongs to a project folder: the panel shows the
+chat's folder unless the owner chose another project there, which the chat keeps
+(`gameFolder`, `PATCH /api/sessions/<id>`), so chats sharing the Workspace folder
+each run their own game. `.agents/game.json` in the project holds `command`, an optional `cwd` inside the
+project and an optional local `url`. **Ask the agent to set it up** sends the chat
+a request to write that file; the owner can also write it in the panel. **Run
+game** starts the command through the system shell in the project folder with no
+agent turn, keeps its last output lines and stops its process tree on **Stop
+game**. A `url` is previewed in the panel while the game runs (`GET`/`POST
+/api/game`, `/api/game/run`, `/api/game/stop`, `/api/game/setup`).
 
 ## Local microphone dictation
 
