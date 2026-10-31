@@ -22,3 +22,9 @@
 .mobile-setup { margin-top: 22px; font-size: 12px; line-height: 1.65; color: #aaa6b1; }.mobile-setup summary { color: #e0d9e3; cursor: pointer; }.mobile-setup ol { padding-left: 20px; }.mobile-setup li { padding: 4px 0; }.mobile-setup a { color: #e5bbce; text-decoration: underline; }
 .mobile-access-footer { border-top: 1px solid #29262f; margin-top: 20px; padding-top: 14px; font-size: 11px; color: #8f8b97; line-height: 1.6; display: grid; gap: 12px; }
 .mobile-access-dialog .desk-error-inline { display: flex; gap: 8px; align-items: start; }.mobile-access-dialog .desk-error-inline button { flex-shrink: 0; background: none; border: 0; color: inherit; cursor: pointer; }
+.mobile-name-setting { margin-top: 22px; padding-top: 16px; border-top: 1px solid #29262f; }
+.mobile-name-setting label { display: grid; gap: 8px; font-size: 12px; color: #e0d9e3; }
+.mobile-name-setting input { border: 1px solid #34313a; background: #19181e; color: #efe8f1; border-radius: 7px; padding: 9px 10px; font: 13px var(--font-body); }
+.mobile-name-setting input:focus { outline: none; border-color: #a7748d; }
+.mobile-name-setting p { font-size: 11px; line-height: 1.6; color: #8f8b97; margin: 8px 0 0; }
+.mobile-name-setting .mobile-name-status { color: #8ee0c6; }

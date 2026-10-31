@@ -11,9 +11,10 @@ import { inventory } from './agents.mjs';
 import { TailscaleTransport } from './mobile-tailscale.mjs';
 import { ConversationMedia } from './conversation-media.mjs';
 import { LocalReadAloud } from './local-read-aloud.mjs';
-import { MobileTranscripts } from './mobile-transcript.mjs';
+import { MobileTranscripts, pendingQuestions } from './mobile-transcript.mjs';
 import { MobileReports } from './mobile-reports.mjs';
 import { MobileDictation } from './mobile-dictation.mjs';
+import { phoneAppNames, terminalColors } from './display-settings.mjs';
 
 const digest = value => createHash('sha256').update(value).digest('hex');
 const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status }); };
@@ -24,8 +25,8 @@ const DEVICE_TTL = 180 * 24 * 60 * 60 * 1000;
 const send = (ws, value) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(value)); };
 
 export class MobileGateway {
-  constructor({ repo, uiDir, stateDir, sessions, attachments, settings, changed, closeChat, transport = new TailscaleTransport(), dictation = new MobileDictation(repo), chooseDictation, readAloud = new LocalReadAloud(repo) }) {
-    Object.assign(this, { repo, uiDir, sessions, attachments, settings, changed, closeChat, transport });
+  constructor({ repo, uiDir, stateDir, sessions, attachments, settings, changed, closeChat, transport = new TailscaleTransport(), dictation = new MobileDictation(repo), chooseDictation, readAloud = new LocalReadAloud(repo), questions = null }) {
+    Object.assign(this, { repo, uiDir, sessions, attachments, settings, changed, closeChat, transport, questions });
     this.file = path.join(stateDir, 'mobile-access.json');
     this.saves = Promise.resolve(); this.pending = new Map(); this.clients = new Set(); this.inflight = new Map(); this.uploads = new Map(); this.queues = new Map();
     this.transcripts = new MobileTranscripts(); this.conversationMedia = new ConversationMedia(); this.active = false; this.error = ''; this.origin = ''; this.rate = { at: Date.now(), count: 0 };
@@ -161,6 +162,12 @@ export class MobileGateway {
       && ['document', 'empty'].includes(request.headers['sec-fetch-dest']);
     if (request.headers['sec-fetch-site'] === 'cross-site' && !shellNavigation) fail('Cross-site requests are not allowed', 403);
   }
+  // Desktop display choices the phone follows: terminal colors and its app name.
+  display() {
+    let colors;
+    try { colors = terminalColors(this.settings().terminalColors); } catch { colors = {}; }
+    return { terminalColors: colors, appName: phoneAppNames(this.settings().phoneName).short };
+  }
   session(id) {
     const session = this.sessions.get(id);
     if (session.agent === 'shell') fail('Mobile access supports agent chats.', 403);
@@ -266,7 +273,7 @@ export class MobileGateway {
         if (method === 'POST' && route === '/mobile/api/transcribe') return json(response, 200, await this.dictation.transcribe(request, device.id, () => this.active && this.state.devices.some(item => item.id === device.id && item.expires > Date.now())));
         if (method === 'GET' && route === '/mobile/api/reports') return json(response, 200, await this.reports.list());
         if (method === 'POST' && route === '/mobile/api/reports/open') return json(response, 200, await this.reports.open(device, data));
-        if (method === 'GET' && route === '/mobile/api/bootstrap') return json(response, 200, { sessions: this.list(), agents: inventory().filter(item => item.id !== 'shell'), device: { id: device.id, name: device.name }, defaultAgent: this.settings().defaultAgent, defaultBypass: this.settings().defaultBypass, dictation: await this.dictation.status() });
+        if (method === 'GET' && route === '/mobile/api/bootstrap') return json(response, 200, { sessions: this.list(), agents: inventory().filter(item => item.id !== 'shell'), device: { id: device.id, name: device.name }, defaultAgent: this.settings().defaultAgent, defaultBypass: this.settings().defaultBypass, dictation: await this.dictation.status(), ...this.display() });
         if (method === 'POST' && route === '/mobile/api/disconnect') { await this.revoke(device.id); response.setHeader('Set-Cookie', this.cookie('', true)); return json(response, 200, { disconnected: true }); }
         if (method === 'POST' && route === '/mobile/api/images') {
           if (this.uploads.size >= 150) fail('Too many pending images. Try again later.', 429);
@@ -280,10 +287,24 @@ export class MobileGateway {
           if (!inventory().some(item => item.id !== 'shell' && item.id === data.agent && item.available)) fail('Choose an installed agent.');
           return json(response, 201, await this.sessions.create({ agent: data.agent, name: data.name, cwd: this.repo, bypass: this.settings().defaultBypass === true }));
         }
-        const match = /^\/mobile\/api\/sessions\/([a-f0-9-]{36})\/(messages|send|resume|close|key|read-aloud)$/.exec(route);
+        const match = /^\/mobile\/api\/sessions\/([a-f0-9-]{36})\/(messages|send|resume|close|key|read-aloud|answer|rename)$/.exec(route);
         if (match) {
           const session = this.session(match[1]);
-          if (method === 'GET' && match[2] === 'messages') return json(response, 200, await this.conversationMedia.present(await this.transcripts.read(session), session, device.id));
+          // The desktop's rename rules (English names); every window and phone sees it live.
+          if (method === 'POST' && match[2] === 'rename') {
+            if (typeof data.name !== 'string' || !data.name.trim()) fail('Write a name for this chat.');
+            return json(response, 200, this.sessions.rename(session.id, data.name));
+          }
+          if (method === 'GET' && match[2] === 'messages') {
+            const transcript = await this.transcripts.read(session);
+            const questions = session.agent === 'claude' ? pendingQuestions(transcript.messages, this.questions?.pending(session.id) || [], !!session.process) : [];
+            return json(response, 200, { ...await this.conversationMedia.present(transcript, session, device.id), questions });
+          }
+          if (method === 'POST' && match[2] === 'answer') {
+            // Delivered through the waiting hook, exactly as the terminal dialog would answer.
+            if (!this.questions || !uuid(data.id)) fail('This question can only be answered in the terminal.', 409);
+            return json(response, 200, await this.questions.answer(session.id, data.id, data.answers));
+          }
           if (method === 'POST' && match[2] === 'read-aloud') {
             const controller = new AbortController(); let complete = false;
             const abort = () => { if (!complete) controller.abort(); };
@@ -298,7 +319,8 @@ export class MobileGateway {
           if (method === 'POST' && match[2] === 'resume') return json(response, 200, session.process ? this.list().find(item => item.id === session.id) : await this.sessions.resume(session.id));
           if (method === 'POST' && match[2] === 'close') return json(response, 200, await this.closeChat(session.id));
           if (method === 'POST' && match[2] === 'key') {
-            const keys = { enter: '\r', escape: '\x1b', up: '\x1b[A', down: '\x1b[B', left: '\x1b[D', right: '\x1b[C', tab: '\t', interrupt: '\x03' };
+            // Page keys scroll a fullscreen CLI's own history; it has no terminal scrollback.
+            const keys = { enter: '\r', escape: '\x1b', up: '\x1b[A', down: '\x1b[B', left: '\x1b[D', right: '\x1b[C', tab: '\t', interrupt: '\x03', pageup: '\x1b[5~', pagedown: '\x1b[6~' };
             if (!Object.hasOwn(keys, data.key)) fail('Unknown terminal key.');
             this.sessions.input(session.id, keys[data.key]); return json(response, 200, { delivered: true });
           }
@@ -307,8 +329,11 @@ export class MobileGateway {
       }
       if (!['GET', 'HEAD'].includes(method)) fail('Not allowed', 405);
       if (route === '/mobile/manifest.webmanifest') {
+        // Always fresh (no-store above, and the service worker never caches it), so
+        // a renamed workstation reaches the next Home Screen install.
+        const names = phoneAppNames(this.settings().phoneName);
         response.writeHead(200, { 'Content-Type': 'application/manifest+json' });
-        response.end(JSON.stringify({ id: '/mobile/', name: 'Iaar Mobile', short_name: 'Iaar', start_url: '/mobile/', scope: '/mobile/', display: 'standalone', background_color: '#0d0e12', theme_color: '#0d0e12', icons: [{ src: '/assets/mak-mobile-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' }, { src: '/assets/mak-mobile-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' }] })); return;
+        response.end(JSON.stringify({ id: '/mobile/', name: names.name, short_name: names.short, start_url: '/mobile/', scope: '/mobile/', display: 'standalone', background_color: '#0d0e12', theme_color: '#0d0e12', icons: [{ src: '/assets/mak-mobile-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' }, { src: '/assets/mak-mobile-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' }] })); return;
       }
       if (route === '/mobile/sw.js') {
         response.writeHead(200, { 'Content-Type': 'text/javascript', 'Service-Worker-Allowed': '/mobile/' });

@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import type { AgentInfo, ChatSession } from '../desktop/types'
+import type { AgentInfo, ChatSession, TerminalColors } from '../desktop/types'
 import { resetMobileNavigation } from './app-state'
 import { clearVoiceDrafts, type VoiceDraft } from './voice-drafts'
 
@@ -10,8 +10,10 @@ interface MobileState {
   sessions: ChatSession[]; agents: AgentInfo[]; selectedId: string | null
   device?: { id: string; name: string }; defaultAgent?: string; defaultBypass?: boolean
   dictation?: DictationInfo
+  // Chosen on the desktop: terminal colour overrides and this workstation's name.
+  terminalColors?: TerminalColors; appName?: string
 }
-export interface MobileEvent { type: string; id?: string; session?: ChatSession; sessions?: ChatSession[]; data?: string; sequence?: number; error?: string; dictation?: DictationInfo }
+export interface MobileEvent { type: string; id?: string; session?: ChatSession; sessions?: ChatSession[]; data?: string; sequence?: number; error?: string; dictation?: DictationInfo; terminalColors?: TerminalColors; appName?: string }
 let state: MobileState = { ready: false, authenticated: false, connected: false, error: '', sessions: [], agents: [], selectedId: localStorage.getItem('iaar.mobile.selected') }
 const listeners = new Set<() => void>(), events = new Set<(event: MobileEvent) => void>()
 let socket: WebSocket | null = null, timer = 0, heartbeat = 0, handshake = 0, starting = false, stopped = false, connectionVersion = 0
@@ -40,6 +42,12 @@ export async function transcribeMobileAudio(recording: VoiceDraft, signal: Abort
   const result = await response.json()
   if (!response.ok) throw new MobileError(result.error || 'Could not transcribe this recording. Try again.', response.status)
   return result
+}
+// Before pairing the bootstrap is refused; the public manifest still names this workstation.
+export function loadMobileAppName() {
+  fetch('/mobile/manifest.webmanifest', { cache: 'no-store', credentials: 'same-origin' }).then(response => response.json()).then(manifest => {
+    if (!state.appName && typeof manifest?.short_name === 'string' && manifest.short_name) update({ appName: manifest.short_name })
+  }).catch(() => {})
 }
 export function selectMobileChat(id: string) { localStorage.setItem('iaar.mobile.selected', id); update({ selectedId: id }) }
 export function onMobileEvent(listener: (event: MobileEvent) => void) { events.add(listener); return () => { events.delete(listener) } }
@@ -75,7 +83,7 @@ export async function startMobile() {
   starting = true
   const version = connectionVersion, controller = new AbortController(); bootstrapAbort = controller
   try {
-    const initial = await mobileApi<Pick<MobileState, 'sessions' | 'agents' | 'device' | 'defaultAgent' | 'defaultBypass' | 'dictation'>>('/bootstrap', undefined, AbortSignal.any([controller.signal, AbortSignal.timeout(8000)]))
+    const initial = await mobileApi<Pick<MobileState, 'sessions' | 'agents' | 'device' | 'defaultAgent' | 'defaultBypass' | 'dictation' | 'terminalColors' | 'appName'>>('/bootstrap', undefined, AbortSignal.any([controller.signal, AbortSignal.timeout(8000)]))
     if (version !== connectionVersion || controller.signal.aborted) return
     authRejected = false
     update({ ...initial, ready: true, authenticated: true, error: '', selectedId: initial.sessions.some(item => item.id === state.selectedId) ? state.selectedId : null })
@@ -89,6 +97,7 @@ export async function startMobile() {
       if (event.type === 'connected') { clearTimeout(handshake); update({ connected: true, sessions: event.sessions || state.sessions, error: '' }) }
       if (event.type === 'session' && event.session) { const next = event.session; update({ sessions: state.sessions.some(item => item.id === next.id) ? state.sessions.map(item => item.id === next.id ? next : item) : [...state.sessions, next] }) }
       if (event.type === 'dictation' && event.dictation) update({ dictation: event.dictation })
+      if (event.type === 'display') update({ terminalColors: event.terminalColors || {}, appName: event.appName || 'Iaar' })
       if (event.type === 'error') update({ error: event.error || 'Connection error' })
       events.forEach(listener => listener(event))
     }

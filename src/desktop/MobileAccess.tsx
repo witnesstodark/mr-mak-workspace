@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api, onServiceEvent, useDesktop } from './client'
 import { Icon } from './Icons'
 import './mobile-access.css'
@@ -11,6 +11,26 @@ interface MobileState {
   pending: { id: string; name: string; code: string; expires: number }[]
 }
 interface Pairing { url: string; code: string; expires: number; qr: string }
+
+// The name under the phone's Home Screen icon and in its title (Settings.phoneName).
+function PhoneName() {
+  const desktop = useDesktop(), saved = desktop.settings.phoneName || 'Iaar'
+  // A draft exists only while typing; otherwise the field shows the saved name.
+  const [draft, setDraft] = useState<string | null>(null), [status, setStatus] = useState(''), [error, setError] = useState('')
+  const cancelled = useRef(false)
+  async function save() {
+    const name = draft
+    setDraft(null)
+    if (cancelled.current) { cancelled.current = false; return }
+    if (name === null || name.trim() === saved) return
+    setError(''); setStatus('Saving…')
+    try { await api('/settings', { phoneName: name }); setStatus('Saved. New Home Screen icons use this name.') }
+    catch (err) { setStatus(''); setError(err instanceof Error ? err.message : String(err)) }
+  }
+  return <div className="mobile-name-setting"><label>Name on your phone<input value={draft ?? saved} maxLength={30} placeholder="Iaar" disabled={!desktop.connected} onFocus={() => { setDraft(saved); setStatus('') }} onChange={event => setDraft(event.target.value)} onBlur={() => void save()} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); if (event.key === 'Escape') { event.stopPropagation(); cancelled.current = true; event.currentTarget.blur() } }} /></label>
+    <p>Shown under the Home Screen icon and as the phone app's title, up to 30 characters. An icon already on the Home Screen keeps its old name. On iPhone, remove it and add it again; you can also type the name in the Add to Home Screen sheet. On Android, Chrome updates an installed app's name by itself after a while, or reinstall it.</p>
+    {status && <p className="mobile-name-status" role="status">{status}</p>}{error && <p className="desk-error-inline" role="alert">{error}</p>}</div>
+}
 
 export default function MobileAccess() {
   const desktop = useDesktop()
@@ -63,6 +83,7 @@ export default function MobileAccess() {
       {(error || state?.error) && <div className="desk-error-inline" role="alert">{error || state?.error}<button aria-label="Dismiss mobile error" onClick={() => { setError(''); setState(current => current && { ...current, error: '' }) }}><Icon name="close" size={14} /></button></div>}
       {!!state?.devices.length && <div className="mobile-device-list"><h3>Your devices</h3>{state.devices.map(device => <div key={device.id}><Icon name="phone" /><span><strong>{device.name}</strong><small>{device.connected ? 'Connected now' : device.lastSeen ? `Last connected ${new Date(device.lastSeen).toLocaleString()}` : 'Paired · waiting for phone'}</small></span><button disabled={busy} onClick={() => action('revoke', { id: device.id })}>Disconnect</button></div>)}</div>}
       <details className="mobile-setup" open={!state?.enabled}><summary>First connection</summary><ol><li>Install <a href="https://tailscale.com/download" target="_blank" rel="noreferrer">Tailscale</a> on this computer and your phone.</li><li>Sign in to the same Tailscale account on both devices. Keep it connected.</li><li>Enable mobile access here, scan the QR code, then confirm the matching code.</li><li>On your phone, add Iaar to your Home Screen from the browser menu.</li></ol><p>If HTTPS needs enabling, follow the <a href="https://tailscale.com/docs/features/tailscale-serve" target="_blank" rel="noreferrer">Tailscale Serve setup</a>.</p><button disabled={busy} onClick={async () => { setBusy(true); try { setProbe(await api('/mobile/check')) } catch { setError('Could not check Tailscale.') } finally { setBusy(false) } }}>Check Tailscale</button>{probe && <p role="status">{probe.ready ? 'Tailscale is ready. Enable mobile access above.' : probe.message}</p>}</details>
+      <PhoneName />
       <DictationSettings info={dictation.info} onChange={dictation.choose} disabled={!desktop.connected} />
       <footer className="mobile-access-footer"><span>Keep this computer awake and Iaar running. A phone can send tasks with the chat's existing permissions.</span>{state?.enabled && <button disabled={busy} onClick={() => action('disable')}>Turn off mobile access</button>}</footer>
     </section></div>}

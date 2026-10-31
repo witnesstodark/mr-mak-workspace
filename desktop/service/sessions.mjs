@@ -18,8 +18,8 @@ import { createCursorChat } from './cursor.mjs';
 
 const { Terminal } = headless;
 const publicSession = session => {
-  const { id, name, agent, cwd, bypass, effort, status, createdAt, lastOutputAt, lastInputAt, exitCode, nativeId, attention, activity, unread, completionVersion, lastCompletedId, cols, rows, open, pinned, tabOrder, tabColor, updatedAt, preview, hasConversation, restoreError } = session;
-  return { id, name, agent, cwd, bypass, effort, status, createdAt, lastOutputAt, lastInputAt, exitCode, nativeId, attention, activity, unread, completionVersion, lastCompletedId, cols, rows, open, pinned, tabOrder, tabColor, updatedAt, preview, hasConversation, restoreError };
+  const { id, name, agent, cwd, bypass, effort, status, createdAt, lastOutputAt, lastInputAt, exitCode, nativeId, attention, activity, waiting, unread, completionVersion, lastCompletedId, cols, rows, open, pinned, tabOrder, tabColor, updatedAt, preview, hasConversation, restoreError } = session;
+  return { id, name, agent, cwd, bypass, effort, status, createdAt, lastOutputAt, lastInputAt, exitCode, nativeId, attention, activity, waiting: waiting || null, unread, completionVersion, lastCompletedId, cols, rows, open, pinned, tabOrder, tabColor, updatedAt, preview, hasConversation, restoreError };
 };
 
 export class Sessions extends EventEmitter {
@@ -37,7 +37,7 @@ export class Sessions extends EventEmitter {
     await mkdir(this.stateDir, { recursive: true });
     const saved = await readJson(path.join(this.stateDir, 'sessions.json'), []);
     for (const [index, metadata] of saved.entries()) {
-      const item = this.make({ ...metadata, name: restoredTitle(metadata.name, index), open: metadata.open ?? metadata.agent !== 'kimi', pinned: !!metadata.pinned, updatedAt: metadata.updatedAt || metadata.lastInputAt || metadata.createdAt, hasConversation: metadata.hasConversation ?? (metadata.agent === 'codex' && !!metadata.nativeId), status: 'stopped', activity: 'idle', attention: !!metadata.unread });
+      const item = this.make({ ...metadata, name: restoredTitle(metadata.name, index), open: metadata.open ?? metadata.agent !== 'kimi', pinned: !!metadata.pinned, updatedAt: metadata.updatedAt || metadata.lastInputAt || metadata.createdAt, hasConversation: metadata.hasConversation ?? (metadata.agent === 'codex' && !!metadata.nativeId), status: 'stopped', activity: 'idle', waiting: null, attention: !!metadata.unread });
       this.items.set(item.id, item);
       if (item.open) await this.hydrate(item);
     }
@@ -143,7 +143,11 @@ export class Sessions extends EventEmitter {
     if (this.closed || !session.open) throw new Error('The chat was closed before its terminal started.');
     if (session.agent === 'antigravity' && resumeId && !validAntigravityId(resumeId)) throw new Error('Use the Antigravity conversation UUID from its /resume picker.');
     const antigravityLog = session.agent === 'antigravity' ? await prepareAntigravityLog(this.stateDir, session.id) : undefined;
-    const command = terminalCommand(session.agent, { bypass: session.bypass, resumeId, nativeId: session.nativeId, effort: session.effort, opencodeMajor, antigravityLog });
+    // Lets a paired phone answer Claude's question dialog (see claude-questions.mjs).
+    // Without it the terminal dialog still works, so a failure never blocks the launch.
+    const questions = session.agent === 'claude' ? await this.questions?.launch(session.id).catch(() => null) : null;
+    if (questions) Object.assign(env, questions.env);
+    const command = terminalCommand(session.agent, { bypass: session.bypass, resumeId, nativeId: session.nativeId, effort: session.effort, opencodeMajor, antigravityLog, settings: questions?.settings });
     if (session.agent === 'codex') env.CODEX_INTERNAL_ORIGINATOR_OVERRIDE = `iaar_chat_${session.id}`;
     const proc = pty.spawn(command.file, command.args, ptyOptions({ cwd: session.cwd, env, cols: session.cols, rows: session.rows }));
     session.process = proc;
@@ -178,8 +182,9 @@ export class Sessions extends EventEmitter {
       }
       session.stopNativeWatch?.();
       session.stopNativeWatch = null;
+      this.questions?.end(session.id);
       session.status = 'exited';
-      session.activity = 'idle';
+      session.activity = 'idle'; session.waiting = null;
       session.exitCode = exitCode;
       this.changed(session);
       this.emit('notice', { id: randomUUID(), sessionId: session.id, name: session.name, kind: 'exit', text: `${session.name} exited (${exitCode}).`, at: new Date().toISOString() });
@@ -228,19 +233,32 @@ export class Sessions extends EventEmitter {
   }
 
   nativeEvent(session, event) {
+    // A tool result for a question means it was answered or cancelled somewhere.
+    for (const id of event.toolResults || []) {
+      if (!session.openQuestions?.has(id)) continue;
+      this.questions?.resolved(session.id, session.openQuestions.get(id));
+      session.openQuestions.delete(id);
+    }
     if (event.kind === 'turn-started') {
       if (session.activity === 'working') return;
-      session.activity = 'working'; session.attention = false;
+      session.activity = 'working'; session.attention = false; session.waiting = null;
     } else if (event.kind === 'turn-interrupted') {
-      session.activity = 'idle';
+      session.activity = 'idle'; session.waiting = null;
+      this.questions?.closeSession(session.id);
     } else if (event.kind === 'turn-completed') {
       if (event.id && session.lastCompletedId === event.id) return;
       session.lastCompletedId = event.id;
-      session.activity = 'idle'; session.unread = true; session.attention = true;
+      session.activity = 'idle'; session.unread = true; session.attention = true; session.waiting = null;
       session.completionVersion++;
       if (event.preview) session.preview = event.preview;
+      this.questions?.closeSession(session.id);
     } else if (event.kind === 'attention') {
-      session.activity = 'waiting'; session.attention = true;
+      session.activity = 'waiting'; session.attention = true; session.waiting = null;
+    } else if (event.kind === 'question') {
+      // The transcript record and the hook can both report the same question.
+      if (event.toolUseId) (session.openQuestions ||= new Map()).set(event.toolUseId, event.key);
+      if (session.activity === 'waiting' && session.waiting === 'question') return;
+      session.activity = 'waiting'; session.attention = true; session.waiting = 'question';
     } else return;
     session.hasConversation = true; session.updatedAt = new Date().toISOString();
     this.changed(session);
@@ -308,7 +326,9 @@ export class Sessions extends EventEmitter {
     // Drain xterm's asynchronous parser before serializing the current screen.
     await new Promise(resolve => session.terminal.write('', resolve));
     this.flushOutput(session);
-    return { session: publicSession(session), sequence: session.sequence, data: session.serializer.serialize({ scrollback: 1500 }) };
+    // Send all retained scrollback: a phone resubscribes on every return to the
+    // app and must not see less history than a desktop tab that stayed open.
+    return { session: publicSession(session), sequence: session.sequence, data: session.serializer.serialize() };
   }
 
   async read(id, lines = 70) {

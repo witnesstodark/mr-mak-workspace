@@ -44,6 +44,21 @@ both mouse tracking and the requested SGR encoding, including saved screens,
 so switching tabs or reconnecting does not disable its mouse wheel. Classic
 Claude and Codex continue using local terminal scrollback.
 
+## Claude questions from the phone
+
+Claude chats start with `--settings .iaar/claude-question-hooks.json`, which
+adds one `PermissionRequest` hook for `AskUserQuestion` beside the user's own
+hooks; no settings file of the user's is edited. Claude Code runs this hook
+while its own question dialog is open, so the terminal still shows the dialog
+at once. The hook (`desktop/service/claude-question-hook.mjs`) registers the
+question with the local service using a per-terminal token and waits. A phone
+answer is returned as `updatedInput.answers`, exactly as the dialog would
+submit it; an answer in the terminal wins instead, the transcript shows its
+tool result and the hook exits without a decision. A `PreToolUse` hook is not
+used because it holds the dialog back until the hook finishes. Checked with
+Claude Code 2.1.314; a version without this hook behaviour still answers in
+the terminal as before.
+
 ## Local microphone dictation
 
 Desktop chats, the Iaar composer and paired mobile chats support free local Whisper
@@ -59,6 +74,24 @@ and **Iaar Focus** (muted colors). Original preserves CLI diff colors for added
 and removed lines. The choice is saved for all desktop chats and applies to open
 terminals immediately without restarting sessions. Existing saved preferences
 are retained. The same choice is available in each chat’s options menu.
+
+**Change terminal colors** below it opens a dialog for background, text, cursor
+and selection, the role colours (You, Agent and Details colour lines in Iaar
+Focus; Attention is the CLI's yellow for warnings and prompts) and, under **All
+CLI colours**, the 16 ANSI colours. Each has a colour picker, a hex field and a
+reset; **Reset all** returns to the appearance's palette. A live preview shows
+either appearance, and a note appears when text contrast falls below 4.5:1.
+The overrides are saved as `terminalColors` (`#rrggbb` values for known keys
+only, checked by the service), laid over both appearances, and applied at once
+to every open desktop terminal and to the phone's Terminal view. Selection is
+drawn translucent so selected text stays readable.
+
+## Chat names
+
+Double-click a chat tab to rename it in place: Enter or clicking elsewhere
+saves, Escape cancels. **Chat options → Rename chat** does the same, and a
+paired phone can rename the open chat by tapping its name. Names must be
+English; every window and phone shows the new name at once.
 
 ## OpenCode terminals
 
@@ -108,6 +141,17 @@ node desktop/service/test-opencode-native.mjs --binary C:\path\to\opencode.exe -
 It isolates the CLI's home and data directories, verifies two separate native
 histories, then closes and resumes a real terminal. Tested with OpenCode 1.18.3
 and 2.0.21 on Windows. No paid model calls are made.
+
+Claude's question dialog has a similar no-account check against a local
+Messages API fixture. It answers one question from a paired phone and one in
+the terminal:
+
+```powershell
+node desktop/service/test-claude-question.mjs --binary C:\path\to\claude.exe
+```
+
+It uses an isolated Claude config and home with a placeholder key. Tested with
+Claude Code 2.1.314 on Windows.
 
 Windows x64 and Linux are supported native targets. macOS remains a future target;
 the shared platform boundary avoids making Linux behavior a prerequisite for it.

@@ -5,12 +5,12 @@ import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
 import { api, onServiceEvent, pickFiles, reportError, sendEvent, uploadImage } from './client'
 import { Icon } from './Icons'
-import type { AgentId } from './types'
-import { decorateTerminal, focusTheme, originalTheme, type TerminalAppearance } from './terminalAppearance'
+import type { AgentId, TerminalColors } from './types'
+import { decorateTerminal, originalTheme, terminalRoleColors, terminalTheme, type TerminalAppearance } from './terminalAppearance'
 import { fileManager, isMac, modKey, modLabel } from './platform'
 import { terminalClipboardGate } from './terminalClipboard'
 
-export default function TerminalPane({ id, agent, fontSize, appearance, onAttachmentStatus }: { id: string; agent: AgentId; fontSize: number; appearance: TerminalAppearance; onAttachmentStatus: (id: string, text: string) => void }) {
+export default function TerminalPane({ id, agent, fontSize, appearance, colors = {}, onAttachmentStatus }: { id: string; agent: AgentId; fontSize: number; appearance: TerminalAppearance; colors?: TerminalColors; onAttachmentStatus: (id: string, text: string) => void }) {
   const host = useRef<HTMLDivElement>(null)
   const area = useRef<HTMLDivElement>(null)
   const terminalRef = useRef<Terminal | null>(null)
@@ -196,12 +196,16 @@ export default function TerminalPane({ id, agent, fontSize, appearance, onAttach
       onAttachmentStatus(id, ''); terminal.dispose(); terminalRef.current = null; fitRef.current = null
     }
   }, [id, agent, onAttachmentStatus])
+  // Colour changes apply to the open terminal at once; the CLI is not restarted.
+  const colorKey = JSON.stringify(colors)
+  const theme = terminalTheme(appearance, colors)
   useEffect(() => {
     const terminal = terminalRef.current
     if (!terminal) return
-    terminal.options.theme = appearance === 'focus' ? focusTheme : originalTheme
-    if (appearance === 'focus') return decorateTerminal(terminal, agent)
-  }, [id, agent, appearance])
+    const saved = JSON.parse(colorKey) as TerminalColors
+    terminal.options.theme = terminalTheme(appearance, saved)
+    if (appearance === 'focus') return decorateTerminal(terminal, agent, terminalRoleColors(saved))
+  }, [id, agent, appearance, colorKey])
   useEffect(() => {
     if (terminalRef.current) { terminalRef.current.options.fontSize = fontSize; fitRef.current?.fit(); sendEvent({ type: 'resize', id, cols: terminalRef.current.cols, rows: terminalRef.current.rows }) }
   }, [fontSize, id])
@@ -210,8 +214,8 @@ export default function TerminalPane({ id, agent, fontSize, appearance, onAttach
     window.addEventListener('iaar-dictation-inserted', focus)
     return () => window.removeEventListener('iaar-dictation-inserted', focus)
   }, [id])
-  return <div ref={area} className={`terminal-area ${appearance === 'focus' ? 'terminal-focus' : ''}`} onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = 'none' }} onDrop={event => { event.preventDefault(); event.stopPropagation(); setDragging(false); reportError(`Drop original files or folders from ${fileManager} into Iaar Desktop. Paste clipboard images with ${modLabel}V.`) }}>
-    <div ref={host} className="terminal-host" aria-label="Interactive agent terminal" />
+  return <div ref={area} className={`terminal-area ${appearance === 'focus' ? 'terminal-focus' : ''}`} style={{ background: theme.background }} onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = 'none' }} onDrop={event => { event.preventDefault(); event.stopPropagation(); setDragging(false); reportError(`Drop original files or folders from ${fileManager} into Iaar Desktop. Paste clipboard images with ${modLabel}V.`) }}>
+    <div ref={host} className="terminal-host" style={{ background: theme.background }} aria-label="Interactive agent terminal" />
     {dragging && <div className="terminal-drop"><Icon name="attach" size={30} /><strong>Drop to insert paths</strong><span>Files, folders and images</span></div>}
   </div>
 }

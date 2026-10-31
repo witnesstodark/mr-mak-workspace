@@ -1,5 +1,5 @@
 import type { IDecoration, IMarker, ITheme, Terminal } from '@xterm/xterm'
-import type { AgentId } from './types'
+import type { AgentId, TerminalColors } from './types'
 
 export type TerminalAppearance = 'focus' | 'original'
 export type TerminalRole = 'user' | 'agent' | 'detail'
@@ -19,6 +19,55 @@ export const focusTheme: ITheme = {
     if (index >= 216) { const gray = (8 + (index - 216) * 10).toString(16).padStart(2, '0'); return `#${gray}${gray}${gray}` }
     return '#b8bec6'
   }),
+}
+
+// The user's colour overrides (Settings → Change terminal colors), saved as
+// #rrggbb and laid over either appearance. The service validates the same keys.
+export const ansiColorKeys = ['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white', 'brightBlack', 'brightRed', 'brightGreen', 'brightYellow', 'brightBlue', 'brightMagenta', 'brightCyan', 'brightWhite'] as const
+export type AnsiColorKey = typeof ansiColorKeys[number]
+// xterm.js's own palette, used where an appearance leaves a colour unset.
+const xtermAnsi: Record<AnsiColorKey, string> = {
+  black: '#2e3436', red: '#cc0000', green: '#4e9a06', yellow: '#c4a000', blue: '#3465a4', magenta: '#75507b', cyan: '#06989a', white: '#d3d7cf',
+  brightBlack: '#555753', brightRed: '#ef2929', brightGreen: '#8ae234', brightYellow: '#fce94f', brightBlue: '#729fcf', brightMagenta: '#ad7fa8', brightCyan: '#34e2e2', brightWhite: '#eeeeec',
+}
+const opaque = (value: string | undefined) => (value || '').slice(0, 7)
+
+export const terminalTheme = (appearance: TerminalAppearance, colors: TerminalColors = {}) => withTerminalColors(appearance === 'focus' ? focusTheme : originalTheme, colors, appearance === 'focus')
+// Also used by the phone's Terminal view over its own base palette.
+export function withTerminalColors(base: ITheme, colors: TerminalColors = {}, focus = false): ITheme {
+  const theme: ITheme = { ...base }
+  // Iaar Focus draws plain text in the agent's colour.
+  if (focus && colors.agent) theme.foreground = colors.agent
+  // Attention is the CLI's yellow: warnings and prompts that wait for you.
+  if (colors.attention) { theme.yellow = colors.attention; theme.brightYellow = colors.attention }
+  for (const key of ansiColorKeys) if (colors[key]) theme[key] = colors[key]
+  if (colors.background) { theme.background = colors.background; if (focus) theme.cursorAccent = colors.background }
+  if (colors.foreground) theme.foreground = colors.foreground
+  if (colors.cursor) theme.cursor = colors.cursor
+  // Selection stays translucent so selected text remains readable.
+  if (colors.selection) theme.selectionBackground = `${colors.selection}55`
+  return theme
+}
+export const terminalRoleColors = (colors: TerminalColors = {}) => ({ user: colors.user || roleColors.user, agent: colors.agent || roleColors.agent, detail: colors.detail || roleColors.detail })
+
+// The colour each setting currently shows, override or not.
+export function effectiveTerminalColor(key: string, appearance: TerminalAppearance, colors: TerminalColors = {}) {
+  const theme = terminalTheme(appearance, colors)
+  if (key === 'background' || key === 'foreground' || key === 'cursor') return opaque(theme[key])
+  if (key === 'selection') return opaque(theme.selectionBackground)
+  if (key === 'user' || key === 'agent' || key === 'detail') return terminalRoleColors(colors)[key]
+  if (key === 'attention') return colors.attention || opaque(theme.yellow) || xtermAnsi.yellow
+  return opaque(theme[key as AnsiColorKey]) || xtermAnsi[key as AnsiColorKey] || ''
+}
+
+// WCAG contrast ratio of two #rrggbb colours.
+export function contrastRatio(first: string, second: string) {
+  const luminance = (hex: string) => {
+    const [r, g, b] = [1, 3, 5].map(index => parseInt(hex.slice(index, index + 2), 16) / 255).map(value => value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+  }
+  const [light, dark] = [luminance(first), luminance(second)].sort((a, b) => b - a)
+  return (light + 0.05) / (dark + 0.05)
 }
 
 // Presentation cues in the native CLI, not a conversation parser. Never change
@@ -44,7 +93,7 @@ export function terminalRoles(lines: { text: string; wrapped?: boolean }[], agen
 
 type RowDecoration = { marker: IMarker; decorations: IDecoration[]; signature: string }
 
-export function decorateTerminal(terminal: Terminal, agent: AgentId) {
+export function decorateTerminal(terminal: Terminal, agent: AgentId, colors: Record<TerminalRole, string> = roleColors) {
   if (agent !== 'codex' && agent !== 'claude') return () => {}
   let rows: RowDecoration[] = [], timer = 0, disposed = false
   const remove = (row: RowDecoration) => { row.decorations.forEach(item => item.dispose()); row.marker.dispose() }
@@ -65,14 +114,15 @@ export function decorateTerminal(terminal: Terminal, agent: AgentId) {
     for (let y = buffer.viewportY; y < end; y++) {
       const line = buffer.getLine(y)
       if (!line) continue
-      const color = roleColors[roles[y - from]]
+      const color = colors[roles[y - from]]
       const spans: { start: number; width: number }[] = []
       let start = -1
       for (let x = 0; x <= terminal.cols; x++) {
         const cell = x < terminal.cols ? line.getCell(x) : undefined
         // Keep inverse selections and explicit backgrounds in native menus,
-        // permission prompts and diffs readable.
-        const paint = cell && !cell.isInverse() && cell.getBgColorMode() === 0
+        // permission prompts and diffs readable. The CLI's yellow (warnings and
+        // prompts) keeps the theme's Attention colour.
+        const paint = cell && !cell.isInverse() && cell.getBgColorMode() === 0 && !(cell.isFgPalette() && (cell.getFgColor() === 3 || cell.getFgColor() === 11))
         if (paint && start < 0) start = x
         if (!paint && start >= 0) { spans.push({ start, width: x - start }); start = -1 }
       }

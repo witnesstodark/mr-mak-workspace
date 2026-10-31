@@ -23,6 +23,19 @@ start an installed agent, and read Workspace reports.
    web app asks to connect again, enter the eight-digit connection code shown
    under a fresh desktop QR code and confirm it on the computer.
 
+### Name on your phone
+
+In **Phone settings** on the computer, **Name on your phone** sets the name
+under the Home Screen icon and the phone app's title, up to 30 characters
+(default **Iaar**). Use it to tell computers apart, for example **Mobz**. The
+name is served in the web app manifest, which is never cached, and in the
+page's iOS title. An icon already on the Home Screen keeps its old name:
+
+- **iPhone:** remove the icon and add it again from Safari's Share menu. You can
+  also type the name in the Add to Home Screen sheet.
+- **Android:** Chrome updates an installed app's name by itself after a while,
+  or you can uninstall and install it again.
+
 Every owner connects their own devices. Typed chat access needs no shared Iaar
 server, public domain or new model API key. Existing CLI account limits still apply.
 The optional microphone button uses a separately billed transcription API.
@@ -33,12 +46,29 @@ between 8443 and 8446. It preserves existing routes and never enables Funnel.
 
 - **Active / History:** select a conversation. Pinned chats come first.
 - **Conversation:** recent user and assistant messages from Codex or Claude's
-  local history. Tool output stays in the terminal. The view is bounded to the
-  recent transcript; native CLI history remains on the computer.
+  local history, with each tool call on one line (its main argument, such as
+  the command or file). Tap a tool call to see its input and the start of its
+  result. Reasoning is not shown. The view is bounded to the recent
+  transcript; native CLI history remains on the computer.
+- **Questions:** when Claude asks with its question dialog, the chat shows
+  **Needs your answer** and Conversation shows the questions with their
+  options and descriptions. Choose one option, several where the question
+  allows it, or **Other** to write your own answer, then **Send answer**. The
+  terminal dialog stays open on the computer meanwhile: whichever answer
+  comes first is used. A chat started before this update takes phone answers
+  after its next start; until then, answer in Terminal.
 - **Terminal:** the real CLI screen for any supported agent, with scrolling,
   copy and buttons for Enter, Escape, all four arrows, Tab and Stop. Use left
   and right to change choices in CLI menus, including reasoning effort. Wide lines scroll
-  sideways so opening a phone does not resize the desktop terminal.
+  sideways so opening a phone does not resize the desktop terminal. A
+  fullscreen CLI, such as Claude's fullscreen view, keeps its history itself
+  and the terminal holds only its current screen: use **Page up** and
+  **Page down** to scroll it. This also scrolls the desktop view of that chat.
+  The Terminal view uses the colours set on the computer in **Settings →
+  Change terminal colors** and follows changes live.
+- **Rename chat:** tap the chat's name in its header, write an English name
+  and choose **Save name**. The desktop tab and other phones show it at once;
+  a name the desktop would refuse is explained in the dialog.
 - **Close chat:** use the cross in the chat header and confirm. This also
   closes its desktop tab and stops that CLI process. The conversation stays
   in **History**, where you can open it and choose **Resume chat**. Other chats
@@ -188,7 +218,10 @@ pairing; the mobile API exposes selected chat actions and read-only reports.
 
 Run `npm test` for pairing, origin checks, delivery recovery, report boundaries
 and route ownership. After `npm run build`, run
-`node desktop/service/test/mobile-ui.mjs` for two-client browser checks. These
+`node desktop/service/test/mobile-ui.mjs` for two-client browser checks,
+`node desktop/service/test/question-ui.mjs` for answering a question and
+`node desktop/service/test/display-ui.mjs` for renaming, terminal colours and
+the phone name. These
 tests use an isolated transport and stub CLI processes, without touching your
 Tailscale setup or starting a model request. A real phone and Tailscale sign-in
 are still required to verify the complete remote connection on your network.

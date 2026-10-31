@@ -159,3 +159,6 @@
 .terminal-dictation .mobile-voice-panel small{display:block;margin-top:8px;color:#b6aabe}
 .terminal-dictation .mobile-voice-panel button{margin:8px 5px 0 0;padding:6px;border:1px solid #503648;background:#302332;color:#eee;border-radius:4px}
 .terminal-dictation .saved .mobile-voice-error{top:155px}
+.chat-tab-rename{flex:1 1 auto;min-width:120px;height:26px;margin-right:4px;padding:0 7px;border:1px solid #a7748d;border-radius:6px;background:#15151b;color:#efe8f1;font:11px var(--font-body);outline:none}
+/* xterm paints its viewport black; the host carries the theme (and custom) background. */
+.terminal-host .xterm .xterm-viewport{background-color:transparent}

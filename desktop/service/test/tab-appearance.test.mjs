@@ -96,9 +96,9 @@ test('Focus separates user text, agent prose and tool details across wrapped nat
 });
 
 test('Focus decorations preserve terminal contents and native inverse/background selections', async () => {
-  const terminal = new headless.Terminal({ cols: 40, rows: 6, allowProposedApi: true });
+  const terminal = new headless.Terminal({ cols: 40, rows: 7, allowProposedApi: true });
   const addon = new serialize.SerializeAddon(); terminal.loadAddon(addon);
-  await new Promise(resolve => terminal.write('› My prompt\r\n• Ran command\r\n  └ Details\r\n• Main answer\r\n\x1b[7mSelected\x1b[0m normal\r\n\x1b[44mMenu\x1b[0m plain', resolve));
+  await new Promise(resolve => terminal.write('› My prompt\r\n• Ran command\r\n  └ Details\r\n• Main answer\r\n\x1b[7mSelected\x1b[0m normal\r\n\x1b[44mMenu\x1b[0m plain\r\n\x1b[33mProceed?\x1b[0m yes', resolve));
   const before = addon.serialize();
   const decorations = new Set();
   // The browser renderer exposes this event; headless xterm only needs the
@@ -120,6 +120,8 @@ test('Focus decorations preserve terminal contents and native inverse/background
     assert.equal(at(3)[0].foregroundColor, roleColors.agent);
     assert.ok(at(4).every(x => x.x >= 8));
     assert.ok(at(5).every(x => x.x >= 4));
+    // Yellow prompts keep the Attention colour instead of a role colour.
+    assert.ok(at(6).length && at(6).every(x => x.x >= 8));
     assert.equal(addon.serialize(), before);
     dispose(); assert.equal(decorations.size, 0); assert.equal(addon.serialize(), before);
   } finally { dispose?.(); globalThis.window = previousWindow; terminal.dispose(); }

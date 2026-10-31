@@ -22,7 +22,7 @@ export function Icon({ name, size = 18, style }: { name: string; size?: number; 
     help: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20ZM9.1 8a3 3 0 0 1 5.8 1c0 2-3 2-3 4M12 17h.01',
     mcp: 'M8 3v5M16 3v5M5 8h14v3a7 7 0 0 1-14 0ZM12 18v4',
     skills: 'M12 3 2 8l10 5 10-5ZM5 10v7l7 4 7-4v-7M22 8v7', settings: 'M4 6h16M4 12h16M4 18h16M8 3v6M16 9v6M10 15v6',
-    plus: 'M12 5v14M5 12h14', close: 'm6 6 12 12M18 6 6 18', folder: 'M3 7V5h6l2 2h10v13H3Z', files: 'M7 3h10l4 4v14H7ZM3 7v14',
+    plus: 'M12 5v14M5 12h14', edit: 'M4 20h4L19 9l-4-4L4 16v4ZM13 7l4 4', close: 'm6 6 12 12M18 6 6 18', folder: 'M3 7V5h6l2 2h10v13H3Z', files: 'M7 3h10l4 4v14H7ZM3 7v14',
     chats: 'M4 4h16v12H9l-5 4Z M8 8h8M8 12h5', workspace: 'M3 4h18v15H3ZM3 8h18M8 8v11', search: 'M16 16l5 5M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0',
     arrow: 'm9 5 7 7-7 7', back: 'm15 5-7 7 7 7', up: 'm5 15 7-7 7 7', external: 'M14 3h7v7M21 3 10 14M10 3H3v18h18v-7',
     speaker: 'M4 9h4l5-4v14l-5-4H4ZM17 8a6 6 0 0 1 0 8M20 5a10 10 0 0 1 0 14', pause: 'M8 5v14M16 5v14', play: 'm8 4 12 8-12 8Z',

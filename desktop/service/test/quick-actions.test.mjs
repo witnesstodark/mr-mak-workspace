@@ -70,7 +70,8 @@ test('reasoning is medium or above, research uses xhigh, and max needs an explic
   for (const agent of ['codex', 'claude']) {
     if (!inventory().find(item => item.id === agent)?.available) continue;
     const command = terminalCommand(agent, { effort: 'xhigh', bypass: false });
-    const script = process.platform === 'win32' ? Buffer.from(command.args.at(-1), 'base64').toString('utf16le') : command.args.join(' ');
+    // A native .exe (Claude's own installer) is launched directly, not through PowerShell.
+    const script = command.args.includes('-EncodedCommand') ? Buffer.from(command.args.at(-1), 'base64').toString('utf16le') : command.args.join(' ');
     assert.match(script, agent === 'codex' ? /model_reasoning_effort="xhigh"/ : /--effort[' ]+xhigh/);
   }
 });
