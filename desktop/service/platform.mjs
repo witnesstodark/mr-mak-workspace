@@ -111,18 +111,35 @@ export async function terminateProcessTree(pid, { force = false } = {}) {
   if (!force) for (const target of [pid, ...tree]) send(target, 'SIGCONT');
 }
 
-async function descendants(pid) {
-  const stdout = await new Promise((resolve, reject) => execFile('ps', ['-A', '-o', 'pid=,ppid='], (error, output) => error ? reject(error) : resolve(output)));
+// Every process each terminal started, children before grandchildren, from one listing.
+export async function descendants(pid) { return (await processTrees([pid]))[0]; }
+export async function processTrees(pids) {
+  const list = isWindows
+    ? ['powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', "Get-CimInstance Win32_Process | ForEach-Object { '{0} {1}' -f $_.ProcessId, $_.ParentProcessId }"]]
+    : ['ps', ['-A', '-o', 'pid=,ppid=']];
+  const stdout = await new Promise((resolve, reject) => execFile(list[0], list[1], { ...processSpawnOptions(), timeout: 20000, maxBuffer: 4 * 1024 * 1024 }, (error, output) => error ? reject(error) : resolve(output)));
   const children = new Map();
   for (const line of stdout.split('\n')) {
     const [child, parent] = line.trim().split(/\s+/).map(Number);
     if (child > 0 && parent > 0) children.set(parent, [...children.get(parent) || [], child]);
   }
-  const result = [];
-  for (let index = -1; index < result.length; index++) {
-    for (const child of children.get(index < 0 ? pid : result[index]) || []) if (child !== process.pid && !result.includes(child)) result.push(child);
-  }
-  return result;
+  return pids.map(pid => {
+    const result = [];
+    for (let index = -1; index < result.length; index++) {
+      for (const child of children.get(index < 0 ? pid : result[index]) || []) if (child !== process.pid && !result.includes(child)) result.push(child);
+    }
+    return result;
+  });
+}
+
+// CPU priority for agent terminals. Windows hands a below-normal or idle class
+// down to every process started afterwards, and nice values are always inherited,
+// so the CLI's tools and MCP servers follow the terminal.
+export const CPU_PRIORITIES = { normal: os.constants.priority.PRIORITY_NORMAL, 'below-normal': os.constants.priority.PRIORITY_BELOW_NORMAL, low: os.constants.priority.PRIORITY_LOW };
+export function setCpuPriority(pid, level) {
+  if (!Number.isInteger(pid) || pid <= 0 || !(level in CPU_PRIORITIES)) return false;
+  // Raising a priority again needs privileges outside Windows; that process keeps its value.
+  try { os.setPriority(pid, CPU_PRIORITIES[level]); return true; } catch { return false; }
 }
 
 export function revealCommand(file) {

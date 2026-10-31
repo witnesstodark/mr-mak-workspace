@@ -10,3 +10,19 @@ self.addEventListener('fetch', event => {
     return response;
   }).catch(async () => (await caches.match(event.request)) || Response.error()));
 });
+
+/* A chat waiting for you: one notification per chat, replaced while it waits. */
+self.addEventListener('push', event => {
+  let data = {};
+  try { data = event.data?.json() || {}; } catch { /* An unreadable push still tells the person to look. */ }
+  event.waitUntil(self.registration.showNotification(data.title || 'Mr. Mak', { body: data.body || 'A chat is waiting for you.', tag: data.chat ? `chat-${data.chat}` : 'mrmak', renotify: true, icon: '/assets/mak-mobile-192.png', data: { chat: data.chat || null } }));
+});
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const chat = event.notification.data?.chat;
+  event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+    const open = list.find(client => new URL(client.url).pathname.startsWith('/mobile'));
+    if (open) { if (chat) open.postMessage({ type: 'open-chat', chat }); return open.focus(); }
+    return self.clients.openWindow(chat ? `/mobile/#chat=${encodeURIComponent(chat)}` : '/mobile/');
+  }));
+});

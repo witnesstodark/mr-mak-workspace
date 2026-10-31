@@ -20,6 +20,7 @@ async function fixture(t) {
   const writes = [];
   sessions.get = value => { assert.equal(value, id); return session; };
   sessions.list = () => [session]; sessions.input = (_id, value) => writes.push(value);
+  sessions.read = async () => ({ screen: session.screen || '' }); sessions.keys = (_id, value) => writes.push(value);
   sessions.snapshot = async () => ({ session, sequence: 1, data: 'hello' });
   sessions.seen = () => {};
   const transport = { probe: async () => ({ installed: true, ready: true }), enable: async origin => ({ origin }), disable: async () => {} };
@@ -86,6 +87,24 @@ test('terminal navigation sends all four arrows only from a paired same-origin p
   session.agent = 'codex'; await gateway.revoke(device.pending.id);
   assert.equal((await request(route, { key: 'right' }, device.cookie)).status, 401);
   assert.equal(writes.length, 4);
+});
+
+test('a paired phone reads the terminal menu with its conversation and answers it once', async t => {
+  const { request, pair, id, writes, session, gateway } = await fixture(t), device = await pair();
+  gateway.transcripts.read = async () => ({ supported: true, messages: [] });
+  session.screen = ['Allow command?', '$ echo phone', '', '> 1. Yes, proceed', '  2. No', 'Press enter to confirm'].join('\n');
+  const { data } = await request(`/sessions/${id}/messages`, undefined, device.cookie);
+  assert.deepEqual([data.prompt.question, data.prompt.detail, data.prompt.options], ['Allow command?', ['$ echo phone'], ['Yes, proceed', 'No']]);
+  const route = `/sessions/${id}/prompt`, answer = { id: data.prompt.id, choice: 0 };
+  assert.equal((await request(route, answer)).status, 401);
+  assert.equal((await request(route, answer, device.cookie, { Origin: 'https://unrelated.example' })).status, 403);
+  assert.equal((await request(route, { ...answer, id: 'stale' }, device.cookie)).status, 409);
+  assert.deepEqual(writes, []);
+  assert.equal((await request(route, answer, device.cookie)).status, 200);
+  assert.deepEqual(writes, ['\r']);
+  assert.equal((await request(route, answer, device.cookie)).status, 409);
+  session.process = null;
+  assert.equal((await request(`/sessions/${id}/messages`, undefined, device.cookie)).data.prompt, null);
 });
 
 test('mobile close uses the shared close action, retains history and rejects untrusted requests', async t => {
@@ -267,6 +286,26 @@ test('delivery receipts and device pairing survive a service restart', async t =
   t.after(() => next.close());
   const result = await fetch(`${next.origin}/mobile/api/sessions/${id}/send`, { method: 'POST', headers: { Origin: next.origin, Cookie: device.cookie, 'Content-Type': 'application/json' }, body: JSON.stringify(message) });
   assert.equal((await result.json()).status, 'delivered'); assert.equal(writes.length, 2);
+});
+
+test('mobile access retries its route when Tailscale fails while the service starts', async t => {
+  const { gateway, repo } = await fixture(t);
+  await gateway.close();
+  let failures = 2;
+  const transport = { probe: async () => ({ installed: true, ready: true }), enable: async origin => { if (failures-- > 0) throw new Error('Tailscale Serve could not start.'); return { origin }; }, disable: async () => {} };
+  // Node 22 also logs an ExperimentalWarning for the mock timers.
+  const logged = []; t.mock.method(console, 'error', message => { if (/Mobile access/.test(message)) logged.push(message); });
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const next = await new MobileGateway({ repo, stateDir: repo, uiDir: gateway.uiDir, sessions: gateway.sessions, attachments: gateway.attachments, settings: gateway.settings, transport }).init();
+  t.after(() => next.close());
+  assert.deepEqual([next.status().enabled, next.status().error], [false, 'Tailscale Serve could not start.']);
+  assert.match(logged[0], /Mobile access could not start: Tailscale Serve could not start/);
+  // Waits in real time (setImmediate is not mocked) for the retry to finish, however loaded the machine is.
+  const settle = async done => { const end = Date.now() + 10000; while (!done() && Date.now() < end) await new Promise(resolve => setImmediate(resolve)); };
+  t.mock.timers.tick(10000); await settle(() => logged.length >= 2);
+  assert.deepEqual([logged.length, next.status().enabled], [2, false]);
+  t.mock.timers.tick(30000); await settle(() => next.active);
+  assert.deepEqual([next.status().enabled, next.status().error], [true, '']);
 });
 
 test('conversation adapters omit tool results and prefer Codex native user/answer events', () => {
