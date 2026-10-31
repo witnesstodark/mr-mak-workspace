@@ -13,7 +13,10 @@ import MobileAccess from './MobileAccess'
 import DictationComposer from './DictationComposer'
 import ProjectPicker from './ProjectPicker'
 import Conversation from './Conversation'
-import { modelLabel, useChatModel } from './chatModel'
+import { modelLabel, useChatStats } from './chatModel'
+import ModelUsageFooter from './ModelUsageFooter'
+import CacheChip from './CacheChip'
+import ModelMenu from './ModelMenu'
 import { chatView, hasConversationView, saveChatView, type ChatView } from './chatView'
 import { isMac, isWindows, modKey, modLabel, shortcutLabel } from './platform'
 
@@ -111,7 +114,8 @@ export default function Chats() {
   const attachmentStatus = useCallback((id: string, text: string) => setAttachmentNotice(current => text || current.id === id ? { id, text } : current), [])
   const active = orderedChats(state.sessions)
   const session = active.find(item => item.id === state.selectedId) || active[0]
-  const model = useChatModel(session)
+  const { model, modelName, effort: usedEffort, usage, cache, cacheStats } = useChatStats(session)
+  const effort = usedEffort || session?.effort
   const agent = state.agents.find(item => item.id === session?.agent)
   const running = session?.status === 'running' || session?.status === 'starting'
   const [, setViewVersion] = useState(0)
@@ -194,7 +198,7 @@ export default function Chats() {
       {hasConversationView(session) && <HandoffOffer key={`handoff-${session.id}`} session={session} threshold={state.settings.handoffAfter ?? 40} agentLabel={agent?.label || session.agent} />}
       {view === 'conversation' ? <Conversation key={session.id} session={session} connected={state.connected} agentLabel={agent?.label || session.agent} openTerminal={() => showView('terminal', false)} systemEvents={state.settings.systemEvents} /> : <TerminalPane key={session.id} id={session.id} agent={session.agent} fontSize={fontSize} appearance={state.settings.terminalAppearance || 'original'} optionMeta={!!state.settings.terminalOptionMeta} onAttachmentStatus={attachmentStatus} />}
       {!running && <div className="terminal-reconnect"><span>{session.restoreError || 'Reconnecting to your conversation…'}</span><button onClick={() => api(`/sessions/${session.id}/resume`, {}).catch(reportError)}>Reconnect</button></div>}
-      <footer className="chat-status">{attachmentNotice.id === session.id && attachmentNotice.text ? <span className="attachment-status" role="status"><Icon name="attach" size={12} /><span>{attachmentNotice.text}</span></span> : <><span><i className={state.connected ? 'connected-dot' : 'disconnected-dot'} />{state.connected ? running ? 'Connected · autosaved' : 'Reconnecting…' : 'Reconnecting…'}</span><span title={[model && `Model: ${model}`, session.effort && 'Reasoning effort', 'Terminal permissions'].filter(Boolean).join(' · ')}>{model && <span className="chat-status-model">{modelLabel(model)} · </span>}{session.effort && `${session.effort} · `}{session.agent === 'shell' ? (isMac ? 'macOS' : isWindows ? 'Windows' : 'Local') : session.bypass ? 'Bypass' : 'CLI permissions'}</span><span className="status-shortcut">{modLabel}V · image</span></>}</footer>
+      <footer className="chat-status">{attachmentNotice.id === session.id && attachmentNotice.text ? <span className="attachment-status" role="status"><Icon name="attach" size={12} /><span>{attachmentNotice.text}</span></span> : <><span><i className={state.connected ? 'connected-dot' : 'disconnected-dot'} />{state.connected ? running ? 'Connected · autosaved' : 'Reconnecting…' : 'Reconnecting…'}</span><span>{hasConversationView(session) && <><ModelMenu key={session.id} session={session} model={model} modelName={modelName} effort={effort || null} running={running} onOpenTerminal={() => showView('terminal', false)} /> · </>}<span title="Terminal permissions">{session.agent === 'shell' ? (isMac ? 'macOS' : isWindows ? 'Windows' : 'Local') : session.bypass ? 'Bypass' : 'CLI permissions'}</span></span>{session.agent === 'claude' && <CacheChip cache={cache} stats={cacheStats} />}<ModelUsageFooter agent={session.agent} usage={usage} model={modelName || (model ? modelLabel(model) : null)} /><span className="status-shortcut">{modLabel}V · image</span></>}</footer>
     </> : <div className="chats-empty"><div className="empty-orbit"><Nose size={64} tone="black" /></div><span className="desk-eyebrow">ROOM TO THINK</span><h1>Your agents,<br />close at hand.</h1><p>A chat for each task.<br />Keep this window beside whatever<br />you are working on.</p><button className="desk-primary" onClick={() => setNewChat(true)}><Icon name="plus" size={17} />Open your first chat</button><div className="empty-agent-names"><span>Claude</span><span>Codex</span><span>OpenCode</span><span>Kimi</span></div><small>Your CLI accounts. Your local files.</small></div>}
     </div>
     {newChat && <NewChat close={() => setNewChat(false)} />}

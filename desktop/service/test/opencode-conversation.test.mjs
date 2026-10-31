@@ -79,6 +79,7 @@ test('OpenCode 2.x Conversation shows its stored text, images, tool calls and no
   for (const hidden of ['PRIVATE_REASONING_SENTINEL', 'TOOL_OUTPUT_SENTINEL', 'Project instructions loaded']) assert.equal(everything.includes(hidden), false, hidden);
   assert.deepEqual(first.activity.map(({ id, name, status }) => [id, name, status]), [['call_read', 'read', 'completed'], ['call_test', 'bash', 'failed'], ['call_write', 'write', 'running']]);
   assert.equal(first.model, 'anthropic/claude-sonnet-4-5');
+  assert.equal(first.effort, null, 'the default variant is not an effort');
   assert.equal(first.userMessages, 2);
   assert.equal(first.truncated, false);
 
@@ -94,6 +95,7 @@ test('OpenCode 2.x Conversation shows its stored text, images, tool calls and no
   const reverted = await transcripts.read(session);
   assert.deepEqual(reverted.messages.map(item => item.id), ['msg_c002', 'msg_c003', 'msg_c004', 'msg_c005-error']);
   assert.equal(reverted.model, 'openai/gpt-5.1-codex');
+  assert.equal(reverted.effort, 'high');
   assert.deepEqual(reverted.activity.map(item => item.id), ['call_read', 'call_test']);
 });
 
@@ -112,6 +114,7 @@ test('OpenCode 1.x Conversation reads message parts; the 2.x copy of the session
   assert.equal(value.messages[2].event.detail, 'Earlier: the spawn point lives in level.ts.');
   assert.deepEqual(value.activity.map(({ id, name, status }) => [id, name, status]), [['call_grep', 'grep', 'completed']]);
   assert.equal(value.model, 'ollama/gpt-oss:20b');
+  assert.equal(value.effort, null);
   assert.equal(JSON.stringify(value).includes('SENTINEL'), false);
 
   // OpenCode 2.x copied the session when it first opened the store; 1.x kept writing its own tables.
@@ -145,5 +148,5 @@ test('desktop Conversation and its stats serve an OpenCode chat with granted ima
   assert.equal(transcript.messages[0].text, 'Where is the spawn point set?');
   const media = await fetch(service.origin + transcript.messages[0].images[0].url);
   assert.equal(media.status, 200); assert.equal(media.headers.get('content-type'), 'image/png');
-  assert.deepEqual(await (await request(`/sessions/${chat.id}/stats`)).json(), { supported: true, userMessages: 2, truncated: false, model: 'ollama/gpt-oss:20b', handoff: null });
+  assert.deepEqual(await (await request(`/sessions/${chat.id}/stats`)).json(), { supported: true, userMessages: 2, truncated: false, model: 'ollama/gpt-oss:20b', effort: null, usage: null, handoff: null });
 });

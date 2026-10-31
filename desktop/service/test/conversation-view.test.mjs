@@ -93,12 +93,20 @@ test('desktop conversation view reads the native transcript, grants its media an
   assert.deepEqual(pinned.filter(item => item.pinned).map(item => item.path), [game]);
   assert.deepEqual((await service.coordinator.execute('list_projects', { query: 'game' })).map(item => item.path), [game]);
 
-  assert.deepEqual(await (await request(`/sessions/${session.id}/stats`)).json(), { supported: true, userMessages: 1, truncated: false, model: null, handoff: null });
+  assert.deepEqual(await (await request(`/sessions/${session.id}/stats`)).json(), { supported: true, userMessages: 1, truncated: false, model: null, effort: null, usage: null, handoff: null });
   const handoff = await request(`/sessions/${session.id}/handoff`, {});
   assert.equal(handoff.status, 400); assert.match((await handoff.json()).error, /Reconnect this chat/);
   assert.equal((await (await request('/settings', { handoffAfter: 5 })).json()).handoffAfter, 40);
   const settings = await (await request('/settings', { handoffAfter: 0 })).json();
   assert.equal(settings.handoffAfter, 0);
+  // The idle-cache alert must come before the hour-long cache expires.
+  assert.equal(settings.idleCacheMinutes, 55); assert.equal(settings.idleCacheMinTokens, 100000);
+  const idle = await (await request('/settings', { idleCacheMinutes: 60, idleCacheMinTokens: 5000 })).json();
+  assert.deepEqual([idle.idleCacheMinutes, idle.idleCacheMinTokens], [55, 100000]);
+  const changed = await (await request('/settings', { idleCacheMinutes: 0, idleCacheMinTokens: 200000 })).json();
+  assert.deepEqual([changed.idleCacheMinutes, changed.idleCacheMinTokens], [0, 200000]);
+  const compact = await request(`/sessions/${session.id}/compact`, {});
+  assert.equal(compact.status, 400); assert.match((await compact.json()).error, /Reconnect this chat/);
 });
 
 const claudeScreen = [

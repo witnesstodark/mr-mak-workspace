@@ -127,9 +127,16 @@ try {
   await input.fill('/model');
   await expect(page.getByRole('listbox', { name: 'Commands' })).toBeVisible();
   await input.press('Enter');
+  await expect.poll(() => writes.some(item => item.data.includes('/model'))).toBe(true);
+  await expect(page.locator('.desk-conversation')).toHaveCount(1);
+  await expect(input).toHaveValue('');
+  // A command that draws its own picker hands the chat to the terminal.
+  await input.fill('/permissions');
+  await expect(page.getByRole('listbox', { name: 'Commands' })).toBeVisible();
+  await input.press('Enter');
   await expect(page.locator('.desk-conversation')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Terminal', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  assert.ok(writes.some(item => item.data.includes('/model')));
+  assert.ok(writes.some(item => item.data.includes('/permissions')));
   await page.getByRole('button', { name: 'Conversation', exact: true }).click();
   await expect(input).toHaveValue('');
   for (const width of [500, 900]) {

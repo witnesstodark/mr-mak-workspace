@@ -1,11 +1,13 @@
 import { open, readdir, readFile, stat } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import os from 'node:os';
 import path from 'node:path';
 import { imageReferences } from './conversation-media.mjs';
 import { claudeTranscript } from './native-events.mjs';
 import { codexSegments } from './codex-history.mjs';
 import { antigravityFullTranscript } from './antigravity.mjs';
 import { readOpencodeSession } from './opencode-history.mjs';
+import { cacheHistory, lastCache } from './chat-cache.mjs';
 
 export function transcriptActivity(records, agent) {
   const tools = new Map();
@@ -117,6 +119,271 @@ export function transcriptModel(records, agent) {
     const set = record.type === 'user' && typeof record.message?.content === 'string' && /<local-command-stdout>Set model to (?:\x1b\[[0-9;]*m)*`?([^`\s\x1b<]+)/.exec(record.message.content);
     if (set) return set[1];
   }
+  return null;
+}
+
+// The reasoning effort the chat last used, which /effort or /model may have
+// changed since launch: Codex records it per turn; Claude Code on each reply;
+// Antigravity in parentheses after the model it reports, as in "Gemini 3.8 Flash (High)".
+export function transcriptEffort(records, agent) {
+  if (agent === 'antigravity') return /\((low|medium|high|xhigh|max)\)$/i.exec(transcriptModel(records, agent) || '')?.[1].toLowerCase() || null;
+  for (let index = records.length - 1; index >= 0; index--) {
+    const record = records[index];
+    if (agent === 'codex' && record.type === 'turn_context' && typeof record.payload?.effort === 'string') return record.payload.effort;
+    // OpenCode 2.x keeps the model's variant (high, max…) with the model; "default" is none.
+    if (agent === 'opencode' && typeof record.model === 'string') return record.effort || null;
+    if (agent !== 'claude' || record.isSidechain) continue;
+    if (record.type === 'assistant' && typeof record.effort === 'string') return record.effort;
+    const set = record.type === 'user' && typeof record.message?.content === 'string' && /<local-command-stdout>Set effort level to ([a-z]+)/.exec(record.message.content);
+    if (set) return set[1];
+  }
+  return null;
+}
+
+// Read cached Claude Code rate limits and account quota.
+export async function readClaudeUtilization(env = process.env, home = os.homedir()) {
+  try {
+    const claudeHome = env.CLAUDE_CONFIG_DIR || path.join(home, '.claude');
+    const confPath = env.CLAUDE_CONFIG_DIR ? path.join(claudeHome, '.claude.json') : path.join(home, '.claude.json');
+    const conf = JSON.parse((await readFile(confPath, 'utf8')).replace(/^\uFEFF/, ''));
+    const cu = conf?.cachedUsageUtilization;
+    const u = cu?.utilization || cu;
+    if (!u) return null;
+
+    const parseIsoSec = str => str ? Math.floor(Date.parse(str) / 1000) || 0 : 0;
+    const rateLimitsList = [];
+
+    if (u.five_hour || u.seven_day) {
+      rateLimitsList.push({
+        limitId: 'claude_general',
+        limitName: 'General',
+        isExclusive: false,
+        primary: u.five_hour ? {
+          usedPercent: Math.round(u.five_hour.utilization ?? 0),
+          windowMinutes: 300,
+          resetsAt: parseIsoSec(u.five_hour.resets_at)
+        } : null,
+        secondary: u.seven_day ? {
+          usedPercent: Math.round(u.seven_day.utilization ?? 0),
+          windowMinutes: 10080,
+          resetsAt: parseIsoSec(u.seven_day.resets_at)
+        } : null,
+        planType: conf.oauthAccount?.seatTier || conf.oauthAccount?.billingType || 'Claude Pro'
+      });
+    }
+
+    if (Array.isArray(u.limits)) {
+      for (const item of u.limits) {
+        if (item.kind === 'weekly_scoped' || item.scope?.model) {
+          const modelName = item.scope?.model?.display_name || 'Scoped Model';
+          rateLimitsList.push({
+            limitId: `scoped_${modelName.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
+            limitName: modelName,
+            isExclusive: true,
+            primary: {
+              usedPercent: Math.round(item.percent ?? 0),
+              windowMinutes: 10080,
+              resetsAt: parseIsoSec(item.resets_at)
+            },
+            planType: `Exclusive: ${modelName}`
+          });
+        }
+      }
+    }
+
+    if (u.seven_day_opus && typeof u.seven_day_opus.utilization === 'number') {
+      rateLimitsList.push({
+        limitId: 'scoped_opus',
+        limitName: 'Opus',
+        isExclusive: true,
+        primary: {
+          usedPercent: Math.round(u.seven_day_opus.utilization),
+          windowMinutes: 10080,
+          resetsAt: parseIsoSec(u.seven_day_opus.resets_at)
+        },
+        planType: 'Exclusive: Opus'
+      });
+    }
+
+    return {
+      rateLimitsList,
+      fetchedAt: cu?.fetchedAtMs || null,
+      spend: u.spend || null,
+      extraUsage: u.extra_usage || null
+    };
+  } catch {
+    return null;
+  }
+}
+
+// Model usage metrics, context window fill and rate limits per agent.
+export function transcriptUsage(records, agent, activeModel = null, externalQuota = null) {
+  if (!records || !records.length) return null;
+
+  if (agent === 'codex') {
+    let latestTokenCount = null;
+    const rateLimitsMap = new Map();
+    for (let i = records.length - 1; i >= 0; i--) {
+      const rec = records[i];
+      if (rec.type === 'event_msg' && rec.payload?.type === 'token_count') {
+        if (!latestTokenCount) latestTokenCount = rec.payload;
+        if (rec.payload.rate_limits?.limit_id && !rateLimitsMap.has(rec.payload.rate_limits.limit_id)) {
+          rateLimitsMap.set(rec.payload.rate_limits.limit_id, rec.payload.rate_limits);
+        }
+      }
+    }
+    if (!latestTokenCount) return null;
+    const info = latestTokenCount.info || {};
+    const lastUsage = info.last_token_usage || {};
+    const totalUsage = info.total_token_usage || {};
+    const contextWindow = info.model_context_window || 258400;
+    const currentTokens = lastUsage.total_tokens || lastUsage.input_tokens || totalUsage.total_tokens || 0;
+    const contextPercent = contextWindow > 0 ? Math.min(100, Math.round((currentTokens / contextWindow) * 100)) : null;
+
+    const rateLimitsList = Array.from(rateLimitsMap.values()).map(rl => {
+      const isExclusive = rl.limit_id === 'premium' || (rl.limit_name && /premium|exclusive|o1|o3/i.test(rl.limit_name));
+      return {
+        limitId: rl.limit_id,
+        limitName: rl.limit_name || (rl.limit_id === 'premium' ? 'Premium (o1/o3)' : 'General'),
+        isExclusive: !!isExclusive,
+        primary: rl.primary ? {
+          usedPercent: rl.primary.used_percent ?? 0,
+          windowMinutes: rl.primary.window_minutes ?? 300,
+          resetsAt: rl.primary.resets_at ?? 0
+        } : null,
+        secondary: rl.secondary ? {
+          usedPercent: rl.secondary.used_percent ?? 0,
+          windowMinutes: rl.secondary.window_minutes ?? 10080,
+          resetsAt: rl.secondary.resets_at ?? 0
+        } : null,
+        planType: rl.plan_type || null,
+        credits: rl.credits || null
+      };
+    });
+
+    return {
+      agent: 'codex',
+      tokens: {
+        current: currentTokens,
+        cumulative: totalUsage.total_tokens || currentTokens,
+        input: lastUsage.input_tokens || 0,
+        cached: lastUsage.cached_input_tokens || 0,
+        output: lastUsage.output_tokens || 0,
+        reasoning: lastUsage.reasoning_output_tokens || 0,
+        contextWindow,
+        contextPercent
+      },
+      rateLimits: rateLimitsList[0] || null,
+      rateLimitsList
+    };
+  }
+
+  if (agent === 'claude') {
+    let costState = null;
+    let latestAssistantUsage = null;
+    let usageAt = null, compaction = null;
+    for (let i = records.length - 1; i >= 0; i--) {
+      const rec = records[i];
+      if (!costState && rec.type === 'cost-state') costState = rec;
+      // A compaction after the latest reply replaced the context with its summary.
+      if (!latestAssistantUsage && !compaction && rec.type === 'system' && rec.subtype === 'compact_boundary') compaction = rec;
+      if (!latestAssistantUsage && rec.type === 'assistant' && !rec.isSidechain && rec.message?.usage) {
+        latestAssistantUsage = rec.message.usage;
+        usageAt = rec.timestamp || null;
+      }
+      if (costState && latestAssistantUsage) break;
+    }
+    if (!latestAssistantUsage && !costState && !externalQuota) return null;
+
+    const u = latestAssistantUsage || {};
+    const input = u.input_tokens || 0;
+    const cached = (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
+    const output = u.output_tokens || 0;
+    const currentTokens = compaction ? Number(compaction.compactMetadata?.postTokens) || 0 : input + cached + output;
+    const contextWindow = /1m/i.test(activeModel || '') ? 1000000 : 200000;
+    const contextPercent = Math.min(100, Math.round((currentTokens / contextWindow) * 100));
+
+    const rateLimitsList = externalQuota?.rateLimitsList || [];
+
+    return {
+      agent: 'claude',
+      tokens: {
+        current: currentTokens,
+        cumulative: currentTokens,
+        input,
+        cached,
+        output,
+        contextWindow,
+        contextPercent
+      },
+      costUSD: typeof costState?.totalCostUSD === 'number' ? Math.round(costState.totalCostUSD * 1000) / 1000 : null,
+      modelUsage: costState?.modelUsage || null,
+      rateLimits: rateLimitsList[0] || null,
+      rateLimitsList,
+      fetchedAt: externalQuota?.fetchedAt || null,
+      // The chat's last model request; its prompt cache expires counting from here.
+      at: compaction?.timestamp || usageAt
+    };
+  }
+
+  if (agent === 'antigravity') {
+    let latestResponse = null;
+    for (let i = records.length - 1; i >= 0; i--) {
+      const rec = records[i];
+      if (rec.type === 'PLANNER_RESPONSE' && (rec.input_tokens !== undefined || rec.output_tokens !== undefined)) {
+        latestResponse = rec;
+        break;
+      }
+    }
+    if (!latestResponse) return null;
+    const input = latestResponse.input_tokens || 0;
+    const cached = latestResponse.cache_read_tokens || 0;
+    const output = latestResponse.output_tokens || 0;
+    const currentTokens = input + output;
+    const contextWindow = 1048576;
+    const contextPercent = Math.min(100, Math.round((currentTokens / contextWindow) * 100));
+
+    const isExclusiveModel = /gemini\s*4|opus|astra/i.test(activeModel || '');
+    const modelTier = isExclusiveModel
+      ? (/gemini\s*4/i.test(activeModel) ? 'Gemini 4' : /opus/i.test(activeModel) ? 'Opus' : 'Astra')
+      : null;
+
+    const rateLimitsList = [];
+    rateLimitsList.push({
+      limitId: 'antigravity_general',
+      limitName: 'General',
+      isExclusive: false,
+      primary: null,
+      planType: 'Google Antigravity'
+    });
+
+    if (isExclusiveModel && modelTier) {
+      rateLimitsList.push({
+        limitId: `exclusive_${modelTier.toLowerCase().replace(/\s+/g, '_')}`,
+        limitName: modelTier,
+        isExclusive: true,
+        // Antigravity's transcript holds no quota figures; the context fill is not one.
+        primary: null,
+        planType: `Exclusive: ${modelTier}`
+      });
+    }
+
+    return {
+      agent: 'antigravity',
+      tokens: {
+        current: currentTokens,
+        cumulative: currentTokens,
+        input,
+        cached,
+        output,
+        contextWindow,
+        contextPercent
+      },
+      rateLimits: rateLimitsList[0] || null,
+      rateLimitsList
+    };
+  }
+
   return null;
 }
 
@@ -320,7 +587,13 @@ export class ConversationTranscripts {
         const messages = transcriptMessages(records, session.agent, Infinity);
         // Prompts the user sent; it measures how long a conversation has become.
         const userMessages = messages.filter(item => item.role === 'user').length;
-        const value = { supported: true, messages: messages.slice(-100), userMessages, activity: transcriptActivity(records, session.agent), model: transcriptModel(records, session.agent), truncated };
+        const model = transcriptModel(records, session.agent);
+        let claudeQuota = null;
+        if (session.agent === 'claude') {
+          claudeQuota = await readClaudeUtilization().catch(() => null);
+        }
+        const usage = transcriptUsage(records, session.agent, model, claudeQuota);
+        const value = { supported: true, messages: messages.slice(-100), userMessages, activity: transcriptActivity(records, session.agent), cache: session.agent === 'claude' ? lastCache(records) : null, cacheStats: session.agent === 'claude' ? cacheHistory(records) : null, model, effort: transcriptEffort(records, session.agent), usage, truncated };
         const claude = session.agent === 'claude';
         cached = { key, value, stops: claude ? taskStops(records) : new Map(), commands: claude ? backgroundCommands(records) : [] };
         this.cache.set(session.id, cached);
@@ -340,7 +613,7 @@ export class ConversationTranscripts {
       if (!read) return { supported: false, messages: [] };
       if (read.key === cached?.key) return cached.value;
       const messages = transcriptMessages(read.records, 'opencode', Infinity);
-      const value = { supported: true, messages: messages.slice(-100), userMessages: messages.filter(item => item.role === 'user').length, activity: transcriptActivity(read.records, 'opencode'), model: transcriptModel(read.records, 'opencode'), truncated: read.truncated };
+      const value = { supported: true, messages: messages.slice(-100), userMessages: messages.filter(item => item.role === 'user').length, activity: transcriptActivity(read.records, 'opencode'), model: transcriptModel(read.records, 'opencode'), effort: transcriptEffort(read.records, 'opencode'), usage: null, truncated: read.truncated };
       this.cache.set(session.id, { key: read.key, value });
       if (this.cache.size > 25) this.cache.delete(this.cache.keys().next().value);
       return value;

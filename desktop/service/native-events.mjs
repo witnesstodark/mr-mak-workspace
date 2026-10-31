@@ -27,6 +27,10 @@ export function nativeActivity(record, agent) {
       const content = record.message?.content;
       const interrupted = value => typeof value === 'string' && value.startsWith('[Request interrupted by user');
       if (interrupted(content) || Array.isArray(content) && content.some(item => item.type === 'text' && interrupted(item.text))) return { kind: 'turn-interrupted' };
+      // A local command such as /compact or /model ends with its output; no model turn follows.
+      if (typeof content === 'string' && /^\s*<local-command-(?:stdout|stderr)>/.test(content)) return { kind: 'turn-interrupted' };
+      // A resumed chat reports background work the previous process left behind; no model turn follows.
+      if (typeof content === 'string' && content.startsWith('<task-notification>') && content.includes('before the previous session ended')) return null;
       // Tool results also confirm ongoing work; file snapshots and metadata do not.
       if (content) return { kind: 'turn-started' };
     }

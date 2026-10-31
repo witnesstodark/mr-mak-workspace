@@ -49,7 +49,9 @@ test('chat commands list built-ins, project and user commands, skills and enable
   assert.equal(find(claude, 'ship').description, 'Prepare a release build.');
   assert.equal(find(claude, 'notes').description, 'Keep notes');
   assert.equal(find(claude, 'tools:review').source, 'plugin');
-  assert.equal(find(claude, 'model').terminal, true);
+  assert.equal(find(claude, 'model').terminal, undefined);
+  assert.equal(find(claude, 'effort').terminal, undefined);
+  assert.equal(find(claude, 'config').terminal, true);
   assert.equal(find(claude, 'compact').terminal, undefined);
   assert.ok(!find(claude, 'empty-folder') && !find(claude, 'off:hidden') && !find(claude, 'level-pass'));
   assert.equal(claude.filter(item => item.name === 'balance-pass').length, 1);
@@ -58,6 +60,7 @@ test('chat commands list built-ins, project and user commands, skills and enable
   assert.deepEqual(find(codex, 'level-pass'), { trigger: '$', name: 'level-pass', description: 'Lay out a level', source: 'project' });
   assert.equal(find(codex, 'prompts:triage').trigger, '/');
   assert.ok(find(codex, 'permissions').terminal && !find(codex, 'approvals') && !find(codex, 'balance-pass'));
+  assert.equal(find(codex, 'model').terminal, undefined);
 
   assert.deepEqual(await chatCommands('shell', cwd, { home, env: {} }), { commands: [] });
 });

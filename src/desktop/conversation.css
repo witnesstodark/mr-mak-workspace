@@ -47,8 +47,18 @@
 .conversation-working{display:flex;align-items:center;gap:9px;font-size:11px;color:var(--text);margin:0 0 18px}
 .conversation-working i{width:7px;height:7px;border-radius:50%;background:var(--green);animation:conversation-pulse 1.2s ease-in-out infinite}
 @keyframes conversation-pulse{50%{opacity:.25}}
+.conversation-message.pending .conversation-copy-text{white-space:pre-wrap;opacity:.75}
+.conversation-checking{display:flex;align-items:baseline;margin:6px 4px 0;font-size:11px;color:var(--text-dim)}
+.conversation-dots{display:inline-flex;gap:3px;margin-left:5px}
+.conversation-dots i{width:4px;height:4px;border-radius:50%;background:currentColor;animation:conversation-dot 1.2s ease-in-out infinite}
+.conversation-dots i:nth-child(2){animation-delay:.2s}.conversation-dots i:nth-child(3){animation-delay:.4s}
+@keyframes conversation-dot{0%,60%,100%{opacity:.25;transform:translateY(0)}30%{opacity:1;transform:translateY(-3px)}}
+@media (prefers-reduced-motion:reduce){.conversation-dots i{animation:none;opacity:.6}}
 .conversation-notice{display:flex;align-items:center;gap:12px;margin:0 0 18px;padding:10px 12px;border:1px solid color-mix(in srgb,var(--pink) 24%,transparent);border-radius:9px;background:var(--surface-solid);font-size:11px;color:var(--amber)}
 .conversation-notice p{flex:1;margin:0;line-height:1.5}
+.conversation-effort{position:relative;flex-wrap:wrap;justify-content:center;width:calc(100% - 32px);max-width:840px;box-sizing:border-box;margin:0 auto 8px;padding:10px 36px;color:var(--text);text-align:center}
+.conversation-effort p{flex-basis:100%}
+.conversation-effort .desk-icon{position:absolute;top:6px;right:6px}
 .conversation-jump{position:absolute;left:50%;bottom:118px;transform:translateX(-50%);display:flex;align-items:center;gap:6px;padding:6px 12px;border:1px solid color-mix(in srgb,var(--text) 24%,transparent);border-radius:16px;background:var(--surface-solid);color:var(--text-bright);font-size:11px;box-shadow:0 3px 14px #0006;z-index:5}
 .desk-conversation .background-work{width:calc(100% - 32px)}
 .conversation-composer{position:relative;flex-shrink:0;width:calc(100% - 32px);max-width:840px;margin:0 auto 12px;padding:8px 10px 6px;border:1px solid color-mix(in srgb,var(--text) 12%,transparent);border-radius:22px;background:var(--surface-solid)}
