@@ -8,6 +8,7 @@ import Topbar from './components/Topbar'
 import HomeGrid from './components/HomeGrid'
 import EntityControls from './components/EntityControls'
 import ReportBoundary from './components/ReportBoundary'
+import UIStudioFrame from './components/UIStudioFrame'
 import { contentUrl, isDesktop } from './desktop/client'
 
 const Compare3D = lazy(() => import('./components/Compare3D'))
@@ -71,14 +72,29 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
+  const isUIStudio = route.id === 'ui-studio' || route.id === 'game-ui-studio'
+
   useEffect(() => {
-    document.title = entity ? `Mr. Mak — ${entity.title}` : 'Mr. Mak — Workspace'
-  }, [entity])
+    document.title = isUIStudio
+      ? 'Mr. Mak — Game UI Studio'
+      : entity
+        ? `Mr. Mak — ${entity.title}`
+        : 'Mr. Mak — Workspace'
+  }, [entity, isUIStudio])
 
   const goHome = useCallback(() => {
     history.pushState(null, '', window.location.pathname + window.location.search)
     setRoute({ id: null, step: -1 })
   }, [])
+
+  const toggleUIStudio = useCallback(() => {
+    if (isUIStudio) {
+      goHome()
+    } else {
+      history.pushState(null, '', '#/ui-studio')
+      setRoute({ id: 'ui-studio', step: -1 })
+    }
+  }, [isUIStudio, goHome])
 
   const selectStep = useCallback((id: string, index: number) => {
     history.replaceState(null, '', entityHash(id, index))
@@ -155,18 +171,27 @@ export default function App() {
 
       <main className="main">
         <Topbar
-          entity={entity}
+          entity={isUIStudio ? null : entity}
           stepIndex={stepIndex}
           onStep={selectStep}
           onHome={goHome}
           // A compare3d step's "report" is a JSON manifest — opening it raw in a
           // tab helps nobody, so the external link is hidden for those.
-          reportUrl={step?.viewer === 'compare3d' || step?.viewer === 'card' ? null : reportUrl}
+          reportUrl={isUIStudio ? null : step?.viewer === 'compare3d' || step?.viewer === 'card' ? null : reportUrl}
+          isUIStudio={isUIStudio}
+          onToggleUIStudio={toggleUIStudio}
         />
 
         <div className="content">
-          <ReportBoundary key={reportUrl || 'home'} onHome={goHome}>
-          {entity && reportUrl && step?.viewer === 'card' ? (
+          <ReportBoundary key={isUIStudio ? 'ui-studio' : reportUrl || 'home'} onHome={goHome}>
+          {isUIStudio ? (
+            <UIStudioFrame
+              url={contentUrl('/workspace/2026-10-27_game-ui-studio/editor.html')}
+              title="Game UI Studio"
+              className="report-frame loaded"
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads allow-modals"
+            />
+          ) : entity && reportUrl && step?.viewer === 'card' ? (
             <Suspense fallback={<div className="report-loading">Opening card…</div>}><EditableCard key={`${entity.id}:${stepIndex}`} url={reportUrl} entityId={entity.id} step={stepIndex} /></Suspense>
           ) : entity && reportUrl && step?.viewer === 'compare3d' ? (
             <Suspense fallback={<div className="boot"><MakLogo size={56} animated={false} /></div>}><Compare3D

@@ -50,6 +50,7 @@ import { FileInsights, folderMap } from './file-insights.mjs';
 import { ColdGuard, cacheView } from './chat-cache.mjs';
 import { SideQuestions } from './side-questions.mjs';
 import { isThemePreference } from './appearance.mjs';
+import { StudioState, STUDIO_STATE_LIMIT } from './ui-studio-state.mjs';
 
 // A project folder named by the UI: an existing absolute directory.
 async function projectFolder(value) {
@@ -81,6 +82,7 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
   const conversationMedia = new ConversationMedia();
   const readAloud = mobileOptions?.readAloud || new LocalReadAloud(repo);
   const environment = parseEnv(await readFile(path.join(repo, '.env'), 'utf8').catch(() => ''));
+  const studioState = await new StudioState(stateDir).init();
   const settingsPath = path.join(stateDir, 'settings.json');
   const savedSettings = await readJson(settingsPath, null);
   let settings = { defaultAgent: 'codex', defaultBypass: false, coordinatorModel: environment.MRMAK_COORDINATOR_MODEL?.trim() || null, terminalFontSize: 13, terminalAppearance: 'original', workspaceTheme: 'dark', coordinatorEffort: 'medium', voiceName: 'cedar', voiceStyle: defaultVoiceStyle, handoffAfter: 40, idleCacheMinutes: IDLE_CACHE_MINUTES, idleCacheMinTokens: IDLE_CACHE_MIN_TOKENS, groupTabsByProject: false, projectOrder: [], usageLimitMode: 'all', usageDirection: 'used', systemEvents: 'compact', agentPriority: 'below-normal', ...savedSettings };
@@ -276,7 +278,7 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
         }
         if (method === 'GET' && url.pathname === '/api/dictation') return json(response, 200, await dictation.status());
         if (method === 'POST' && url.pathname === '/api/transcribe') return json(response, 200, await dictation.transcribe(request, 'desktop', () => !closing));
-        const data = ['POST', 'PATCH', 'PUT', 'DELETE'].includes(method) ? await body(request, url.pathname === '/api/files/markdown' ? 12 * 1024 * 1024 : url.pathname.startsWith('/api/workspace/cards') ? 2 * 1024 * 1024 : 256 * 1024) : {};
+        const data = ['POST', 'PATCH', 'PUT', 'DELETE'].includes(method) ? await body(request, url.pathname === '/api/files/markdown' ? 12 * 1024 * 1024 : url.pathname === '/api/ui-studio/state' ? STUDIO_STATE_LIMIT : url.pathname.startsWith('/api/workspace/cards') ? 2 * 1024 * 1024 : 256 * 1024) : {};
         if (method === 'POST' && url.pathname === '/api/dictation') return json(response, 200, await chooseDictation(data.provider));
         if (method === 'GET' && url.pathname === '/api/mobile') return json(response, 200, mobile.status());
         if (method === 'GET' && url.pathname === '/api/mobile/check') return json(response, 200, await mobile.transport.probe());
@@ -376,6 +378,8 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
           const preview = await files.saveMarkdown(data); await integrations.publish('artifact', { kind: 'updated', path: preview.path, name: preview.name }); broadcast('workspace-changed', {});
           return json(response, 200, preview);
         }
+        if (method === 'GET' && url.pathname === '/api/ui-studio/state') return json(response, 200, studioState.get());
+        if (method === 'POST' && url.pathname === '/api/ui-studio/state') return json(response, 200, await studioState.update(data));
         if (method === 'POST' && url.pathname === '/api/settings') {
           if (inventory().some(item => item.id === data.defaultAgent)) settings.defaultAgent = data.defaultAgent;
           if (typeof data.defaultBypass === 'boolean') settings.defaultBypass = data.defaultBypass;
@@ -405,7 +409,7 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
           if (Array.isArray(data.collapsedGroups)) settings.collapsedGroups = [...new Set(data.collapsedGroups.filter(item => typeof item === 'string' && item.length <= 60))].slice(0, 200);
           await saveSettings(); broadcast('settings', { settings }); return json(response, 200, settings);
         }
-        if (method === 'POST' && url.pathname === '/api/sessions') { const session = await sessions.create({ ...data, bypass: data.bypass ?? settings.defaultBypass }); await integrations.publish('session', { event: 'started', session }); focus(session.id); return json(response, 201, session); }
+        if (method === 'POST' && url.pathname === '/api/sessions') { const session = await sessions.create({ ...data, bypass: data.bypass ?? settings.defaultBypass }); await integrations.publish('session', { event: 'started', session }); if (data.background !== true) focus(session.id); return json(response, 201, session); }
         if (method === 'POST' && url.pathname === '/api/groups/by-project') return json(response, 200, await sessions.toggleProjectGroups());
         if (method === 'POST' && url.pathname === '/api/groups/move') return json(response, 200, await sessions.moveGroup(data.group, data.pinned, data.targetId, data.position));
         if (method === 'POST' && url.pathname === '/api/groups/rename') {

@@ -1,6 +1,6 @@
 # Project skills
 
-Twenty-one skills live in this project. `.agents/skills` is the maintained source
+Twenty-two skills live in this project. `.agents/skills` is the maintained source
 for Codex; `.claude/skills` contains complete, identical copies for Claude Code,
 including scripts and references. Both Skills sections open the full instructions.
 These are local project files, not global installations.
@@ -24,6 +24,7 @@ maintained source. `npm run test:template` checks that the two copies agree.
 | [game-animation-integration](../.agents/skills/game-animation-integration/SKILL.md) | Bring approved animation into a game, including clip mapping, turn exits, locomotion phase and gameplay event timing. |
 | [game-audio-workflow](../.agents/skills/game-audio-workflow/SKILL.md) | Audition, select and integrate sounds with stable asset IDs, contact events, mixer rules and native listening checks. |
 | [game-level-design](../.agents/skills/game-level-design/SKILL.md) | Build reviewable level drafts, validate scale and traversal, and apply accepted changes to the actual scene. |
+| [game-ui-studio](../.agents/skills/game-ui-studio/SKILL.md) | Work as the Game UI Studio Copilot: answer with `gameui-edit` blocks, bring a project's UI art into the studio and load the game's existing screens as studio screens. |
 | [game-ui-workflow](../.agents/skills/game-ui-workflow/SKILL.md) | Take a HUD or menu from a visual study to live game data, input behavior and native review. |
 | [game-vfx-workflow](../.agents/skills/game-vfx-workflow/SKILL.md) | Develop effect layers, event timing, attachment, cleanup and in-game visual comparisons. |
 | [gameplay-visual-review](../.agents/skills/gameplay-visual-review/SKILL.md) | Verify game changes with controlled native captures and separate implementation, visual review and acceptance. |
