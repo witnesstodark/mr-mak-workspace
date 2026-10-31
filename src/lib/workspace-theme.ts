@@ -7,8 +7,10 @@ export type ResolvedTheme = PaletteId
 export type ThemeTarget = 'workspace' | 'chat'
 const changed = 'mrmak-workspace-theme'
 const system = window.matchMedia('(prefers-color-scheme: dark)')
+const mobile = location.pathname === '/mobile' || location.pathname.startsWith('/mobile/')
+const preferenceKey = (target: ThemeTarget) => `mrmak.${mobile ? 'mobile.' : ''}${target}Theme`
 const valid = (value: unknown): WorkspaceTheme => isThemePreference(value) ? value : 'dark'
-const readPreference = (target: ThemeTarget) => { try { return valid(localStorage.getItem(`mrmak.${target}Theme`)) } catch { return 'dark' as const } }
+const readPreference = (target: ThemeTarget) => { try { return valid(localStorage.getItem(preferenceKey(target))) } catch { return 'dark' as const } }
 const subscribe = (listener: () => void) => {
   window.addEventListener('storage', listener)
   window.addEventListener(changed, listener)
@@ -24,15 +26,15 @@ const snapshot = () => `${readPreference('workspace')}:${readPreference('chat')}
 export function useWorkspaceTheme(target: ThemeTarget = 'workspace') {
   const { settings } = useDesktop()
   useSyncExternalStore(subscribe, snapshot)
-  const preference = isDesktop ? valid(settings[`${target}Theme`]) : readPreference(target)
+  const preference = isDesktop && !mobile ? valid(settings[`${target}Theme`]) : readPreference(target)
   const resolved = resolveTheme(preference, system.matches)
   return { preference, resolved }
 }
 
 export async function setWorkspaceTheme(preference: WorkspaceTheme, target: ThemeTarget = 'workspace') {
-  if (isDesktop) await api('/settings', { [`${target}Theme`]: preference })
+  if (isDesktop && !mobile) await api('/settings', { [`${target}Theme`]: preference })
   else {
-    localStorage.setItem(`mrmak.${target}Theme`, preference)
+    localStorage.setItem(preferenceKey(target), preference)
     window.dispatchEvent(new Event(changed))
   }
 }

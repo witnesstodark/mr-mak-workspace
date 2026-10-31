@@ -1,12 +1,21 @@
 import path from 'node:path';
-import { readFile, realpath } from 'node:fs/promises';
+import { readFile, realpath, stat } from 'node:fs/promises';
 import { readJson, realFile, secret, within } from './util.mjs';
 import { serveReport } from './report-chrome.mjs';
 import { serveFile } from './files.mjs';
 import { validateCard, CARD_MAX_BYTES } from './card-schema.mjs';
 
 const extensions = new Set(['.html', '.htm', '.md', '.txt', '.css', '.js', '.mjs', '.json', '.svg', '.png', '.jpg', '.jpeg', '.webp', '.gif', '.ico', '.mp4', '.webm', '.mp3', '.wav', '.ogg', '.pdf', '.woff', '.woff2', '.ttf', '.glb', '.gltf', '.bin', '.wasm']);
+const coverTypes = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']);
 const safePath = value => typeof value === 'string' && value.length < 1200 && !value.split(/[\\/]/).some(part => !part || part.startsWith('.') || /^(node_modules|auth\.json|tokens?\.json)$/i.test(part)) && !path.isAbsolute(value) && !value.includes(':');
+const cardPrefix = entity => `workspace/${entity.folder.replaceAll('\\', '/')}/`;
+// How the phone shows a linked file: a page in the report frame, text as Markdown,
+// media and anything else in the browser.
+const fileView = (file, url, text) => {
+  const extension = path.extname(file).toLowerCase();
+  const kind = ['.html', '.htm'].includes(extension) ? 'html' : text !== undefined ? 'markdown' : coverTypes.has(extension) || extension === '.svg' ? 'image' : ['.mp4', '.webm'].includes(extension) ? 'video' : 'other';
+  return { name: path.basename(file), url, kind, ...(text !== undefined ? { text } : {}) };
+};
 const fail = (message, status = 403) => { throw Object.assign(new Error(message), { status }); };
 
 export class MobileReports {
@@ -27,15 +36,44 @@ export class MobileReports {
     if (!card && !['.html', '.htm', '.md', '.txt'].includes(extension)) fail('Open this type of report on your computer.');
     if (card && info.size > CARD_MAX_BYTES) fail('This card is too large to preview.', 400);
     const document = card ? validateCard(JSON.parse(await readFile(file, 'utf8'))) : undefined;
-    const prefix = `workspace/${entity.folder.replaceAll('\\', '/')}/`;
+    const url = this.viewUrl(device, root, cardPrefix(entity), relative);
+    if (card) return { statePersistence: false, title: entity.title, step: entity.steps[step].name, kind: 'card', url, document };
+    return { statePersistence: true, title: entity.title, step: entity.steps[step].name, kind: extension === '.md' || extension === '.txt' ? 'markdown' : 'html', url, ...(extension === '.md' || extension === '.txt' ? { text: (await readFile(file, 'utf8')).slice(0, 2 * 1024 * 1024) } : {}) };
+  }
+  // A short-lived grant on one folder for this phone, and the file's address under it.
+  viewUrl(device, root, prefix, relative) {
     for (const [id, grant] of this.grants) if (grant.expires < Date.now() || !this.gateway.state.devices.some(item => item.id === grant.deviceId)) this.grants.delete(id);
     const existing = [...this.grants].find(([, grant]) => grant.deviceId === device.id && grant.root === root && grant.prefix === prefix);
     const token = existing?.[0] || secret();
     if (!existing && this.grants.size >= 100) this.grants.delete(this.grants.keys().next().value);
     this.grants.set(token, { root, prefix, deviceId: device.id, expires: Date.now() + 30 * 60 * 1000 });
-    const url = `/mobile/view/${token}/${prefix}${relative.split(/[\\/]/).map(encodeURIComponent).join('/')}`;
-    if (card) return { statePersistence: false, title: entity.title, step: entity.steps[step].name, kind: 'card', url, document };
-    return { statePersistence: true, title: entity.title, step: entity.steps[step].name, kind: extension === '.md' || extension === '.txt' ? 'markdown' : 'html', url, ...(extension === '.md' || extension === '.txt' ? { text: (await readFile(file, 'utf8')).slice(0, 2 * 1024 * 1024) } : {}) };
+    return `/mobile/view/${token}/${prefix}${relative.split(/[\\/]/).map(encodeURIComponent).join('/')}`;
+  }
+  // A local file linked in a chat, relative to the chat's folder. A Workspace report
+  // page opens as that report; another file inside the chat's folder or the Workspace
+  // repository opens on its own, with its card's folder (or its own folder) for assets.
+  async openLocal(device, session, target) {
+    if (typeof target !== 'string' || !target.trim() || target.length > 1200 || /[\x00-\x1f]/.test(target)) fail('Choose a local file.', 400);
+    let file;
+    try { file = await realpath(path.resolve(session.cwd, target)); } catch { fail('This file is not on your computer anymore.', 404); }
+    const info = await stat(file);
+    if (!info.isFile()) fail('Open folders on your computer.', 400);
+    const repo = await realpath(this.gateway.repo), folder = await realpath(session.cwd).catch(() => null);
+    const base = [folder, repo].find(item => item && within(item, file) && safePath(path.relative(item, file)));
+    if (!base) fail('This file is outside the chat folder and the Workspace.');
+    const extension = path.extname(file).toLowerCase();
+    if (!extensions.has(extension)) fail('Open this type of file on your computer.');
+    const text = ['.md', '.txt'].includes(extension) && info.size <= 2 * 1024 * 1024 ? await readFile(file, 'utf8') : undefined;
+    const workspace = path.join(repo, 'workspace');
+    for (const entity of within(workspace, file) ? await this.registry() : []) {
+      if (entity.status === 'archived' || !safePath(entity.folder)) continue;
+      const root = await realpath(path.join(workspace, entity.folder)).catch(() => null);
+      if (!root || !within(root, file)) continue;
+      const step = (entity.steps || []).findIndex(item => safePath(item.path) && path.resolve(root, item.path) === file);
+      if (step >= 0) return { report: { entityId: entity.id, step } };
+      return { file: fileView(file, this.viewUrl(device, root, cardPrefix(entity), path.relative(root, file)), text) };
+    }
+    return { file: fileView(file, this.viewUrl(device, path.dirname(file), 'files/', path.basename(file)), text) };
   }
   async serve(request, response, url) {
     const gateway = this.gateway;

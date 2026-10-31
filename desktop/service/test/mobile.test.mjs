@@ -288,6 +288,26 @@ test('delivery receipts and device pairing survive a service restart', async t =
   assert.equal((await result.json()).status, 'delivered'); assert.equal(writes.length, 2);
 });
 
+test('mobile access retries its route when Tailscale fails while the service starts', async t => {
+  const { gateway, repo } = await fixture(t);
+  await gateway.close();
+  let failures = 2;
+  const transport = { probe: async () => ({ installed: true, ready: true }), enable: async origin => { if (failures-- > 0) throw new Error('Tailscale Serve could not start.'); return { origin }; }, disable: async () => {} };
+  // Node 22 also logs an ExperimentalWarning for the mock timers.
+  const logged = []; t.mock.method(console, 'error', message => { if (/Mobile access/.test(message)) logged.push(message); });
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const next = await new MobileGateway({ repo, stateDir: repo, uiDir: gateway.uiDir, sessions: gateway.sessions, attachments: gateway.attachments, settings: gateway.settings, transport }).init();
+  t.after(() => next.close());
+  assert.deepEqual([next.status().enabled, next.status().error], [false, 'Tailscale Serve could not start.']);
+  assert.match(logged[0], /Mobile access could not start: Tailscale Serve could not start/);
+  // Waits in real time (setImmediate is not mocked) for the retry to finish, however loaded the machine is.
+  const settle = async done => { const end = Date.now() + 10000; while (!done() && Date.now() < end) await new Promise(resolve => setImmediate(resolve)); };
+  t.mock.timers.tick(10000); await settle(() => logged.length >= 2);
+  assert.deepEqual([logged.length, next.status().enabled], [2, false]);
+  t.mock.timers.tick(30000); await settle(() => next.active);
+  assert.deepEqual([next.status().enabled, next.status().error], [true, '']);
+});
+
 test('conversation adapters omit tool results and prefer Codex native user/answer events', () => {
   const records = [
     { type: 'response_item', payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'Injected instructions' }] } },

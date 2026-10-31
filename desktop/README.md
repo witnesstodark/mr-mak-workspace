@@ -261,6 +261,24 @@ limit or error to continue, and only focuses a chat that asks the owner a
 question or a permission. With the mode on the coordinator also splits large
 requests across chats.
 
+## Chat details on the phone
+
+Under a chat's tools the phone shows one line: the plan's progress and next step,
+the 5-hour and weekly plan limits, the prompt cache, and the files changed inside
+the chat's folder with their lines. Each opens a sheet: the plan's steps, the
+limits with their reset times, and the changed files, where a file opens its diff.
+A rule marked with `remember:` or `lembre:` shows above the message box with Save
+to project, Skip and, under ⋯, Save as global. The service reads all of it in one
+`/mobile/api/sessions/:id/details` call (`chatExtras` in `server.mjs`); a diff is
+served only for a file the chat's folder lists as changed.
+
+A local file linked in a chat message opens on the phone instead of reloading the
+app. A Workspace report page opens as that report; another file inside the chat's
+folder or the Workspace repository opens in a viewer (a page in the sandboxed
+report frame, Markdown as text, images and video directly) through a 30-minute
+grant on its card's folder or its own folder (`openLocal` in `mobile-reports.mjs`).
+Files in dot folders, outside both places or of other types stay on the computer.
+
 ## Local microphone dictation
 
 Desktop chats, the Mak composer and paired mobile chats support free local Whisper

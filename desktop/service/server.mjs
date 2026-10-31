@@ -27,7 +27,7 @@ import { RuleSuggestions } from './rule-suggestions.mjs';
 import { createSkill, discoverSkills } from './skill-discovery.mjs';
 import { GameRunner, gameSetupPrompt, readGame, saveGame } from './game-run.mjs';
 import { CPU_PRIORITIES } from './platform.mjs';
-import { body, equalSecret, json, publicError, readJson, realFile, saveJson, secret } from './util.mjs';
+import { body, equalSecret, json, publicError, readJson, realFile, saveJson, secret, within } from './util.mjs';
 import { ProjectAdapterRegistry } from './project-adapters/registry.mjs';
 import { KnowledgeManager, MarkdownKnowledgeProvider } from './knowledge/providers.mjs';
 import { IntegrationManager } from './integrations/manager.mjs';
@@ -561,7 +561,27 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
   // The Plan tool's calls come back here with the chat's key; off unless the owner turns it on.
   const planSecret = secret();
   sessions.planTool = { enabled: () => !!settings.planTool, url: () => `${origin}/chat-plan/tool`, secret: planSecret };
-  mobile = await new MobileGateway({ ...mobileOptions, transcripts, readAloud, dictation, chooseDictation, repo, uiDir, stateDir, sessions, attachments, closeChat, settings: () => settings, changed: state => broadcast('mobile-state', { mobile: state }) }).init();
+  // What the phone shows beside a chat: its plan, plan limits, prompt cache, rules
+  // waiting to be saved and the Git changes inside its folder.
+  const chatExtras = {
+    async details(session) {
+      const read = await transcripts.read(session), folder = path.resolve(session.cwd);
+      const [stats, plan, rules, git] = await Promise.all([liveStats(session, read, stateDir).catch(() => read), chatPlan(session, claudeSessions).catch(() => null), ruleSuggestions.list(session).catch(() => []), fileInsights.status(folder).catch(() => null)]);
+      const changes = (git?.files || []).filter(item => within(folder, item.path));
+      return { plan, usage: stats?.usage || null, cache: read.cache ? cacheView(read.cache) : null, rules, changes: changes.slice(0, 200).map(item => ({ ...item, name: path.relative(folder, item.path).replaceAll(path.sep, '/'), folder: /[\\/]$/.test(item.path) })), changeCount: changes.length };
+    },
+    resolveRule: (session, data) => ruleSuggestions.resolve(session, data, repo),
+    async coldCheck(session, text) { if (session.agent === 'claude' && !text.trimStart().startsWith('/')) coldGuard.check(session, (await transcripts.read(session)).cache); },
+    // The phone shows no offer: auto mode switches, ask mode sends the message as it is.
+    async effortCheck(session, text) { await effortAdvisor.check(session, text, { interactive: false }); },
+    // Only a file the chat's folder lists as changed.
+    async diff(session, file) {
+      const folder = path.resolve(session.cwd), git = await fileInsights.status(folder);
+      if (typeof file !== 'string' || !git.files.some(item => item.path === file && within(folder, file))) throw Object.assign(new Error('This file has no change in this chat folder.'), { status: 404 });
+      return fileInsights.diff(file);
+    },
+  };
+  mobile = await new MobileGateway({ ...mobileOptions, transcripts, readAloud, dictation, chooseDictation, repo, uiDir, stateDir, sessions, attachments, closeChat, chatExtras, settings: () => settings, changed: state => broadcast('mobile-state', { mobile: state }) }).init();
   const wss = new WebSocketServer({ noServer: true, maxPayload: 128 * 1024 });
   server.on('upgrade', (request, socket, head) => {
     const url = new URL(request.url, origin);

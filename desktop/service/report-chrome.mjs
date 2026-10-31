@@ -37,8 +37,13 @@ ${reportThemeCSS}
 </script>`);
 }
 
+function reportPrelude(options) {
+  const theme = preludeFor(options);
+  return options?.mobileState ? Buffer.concat([theme, mobileReportStatePrelude(options.parentOrigin)]) : theme;
+}
+
 export function reportChromeStream(options) {
-  const prelude = options?.mobileState ? mobileReportStatePrelude(options.parentOrigin) : preludeFor(options);
+  const prelude = reportPrelude(options);
   let pending = Buffer.alloc(0), inserted = false;
   const emit = function () {
     const text = pending.toString('utf8');
@@ -65,7 +70,7 @@ export function reportChromeStream(options) {
 
 export async function serveReport(request, response, file, info, headers, reportOptions = {}) {
   const options = {theme: new URL(request.url, 'http://localhost').searchParams.get('mrmak-theme'), parentOrigin: headers['Access-Control-Allow-Origin'] || '', ...reportOptions};
-  const prelude = options?.mobileState ? mobileReportStatePrelude(options.parentOrigin) : preludeFor(options);
+  const prelude = reportPrelude(options);
   response.writeHead(200, {'Content-Type':'text/html; charset=utf-8', 'Content-Length':info.size + prelude.length, 'Cache-Control':'no-cache', 'X-Content-Type-Options':'nosniff', ...headers});
   if (request.method === 'HEAD') { response.end(); return; }
   await pipeline(createReadStream(file), reportChromeStream(options), response).catch(error => {
