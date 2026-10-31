@@ -5,6 +5,7 @@ import { promisify } from 'node:util';
 import { parse as parseEnv } from 'dotenv';
 import { isWindows, macLocale, powerShellLiteral, resolveCommand, shellCommand, shellLabel } from './platform.mjs';
 import { validAntigravityId } from './antigravity.mjs';
+import { PLAN_SERVER, PLAN_TOOL_NAME, codexInstruction } from './chat-plan.mjs';
 
 export { shellCommand };
 
@@ -100,11 +101,12 @@ export function codexSupportsNoDaemon(env = process.env) {
   return codexHelp.get(key);
 }
 
-export function terminalCommand(agent, { bypass = false, resumeId, nativeId, effort, model, settings, opencodeMajor = 1, antigravityLog, initialPrompt, readDir, noDaemon = false } = {}) {
+export function terminalCommand(agent, { bypass = false, resumeId, nativeId, effort, model, settings, opencodeMajor = 1, antigravityLog, initialPrompt, readDir, noDaemon = false, instructions, planServer } = {}) {
   if (!AGENTS.some(item => item.id === agent)) throw new Error('Unknown agent');
   resumeId = nativeConversationId(resumeId); nativeId = nativeConversationId(nativeId);
   initialPrompt = initialPromptArgument(initialPrompt);
   if (initialPrompt && (resumeId || !['codex', 'claude'].includes(agent))) throw new Error('Only a new Codex or Claude chat can start with a message.');
+  if (instructions != null && (typeof instructions !== 'string' || !path.isAbsolute(instructions) || /[\x00-\x1f]/.test(instructions))) throw new Error('The chat instructions file is not valid.');
   if (readDir != null && (typeof readDir !== 'string' || !path.isAbsolute(readDir) || /[\x00-\x1f]/.test(readDir))) throw new Error('Choose an absolute folder.');
   const command = agent === 'shell' ? shellCommand() : { file: commandPath(AGENTS.find(item => item.id === agent).command), args: [] };
   if (!command || !command.file) throw new Error(`${agent} is not installed on this computer`);
@@ -119,6 +121,17 @@ export function terminalCommand(agent, { bypass = false, resumeId, nativeId, eff
     if (noDaemon) args.push('--no-daemon');
     if (bypass) args.push('--dangerously-bypass-approvals-and-sandbox');
     if (effort) args.push('-c', `model_reasoning_effort="${effort}"`);
+    // Mr. Mak's instructions for this chat: its plan file and the project's rules.
+    if (instructions) args.push('-c', `developer_instructions=${codexInstruction(instructions)}`);
+    // The Plan tool, when the owner turned it on. TOML literal strings need no
+    // escapes and survive the Windows shim, which drops double quotes; a value
+    // that cannot be one leaves the chat without the tool.
+    const literal = value => `'${value}'`;
+    const values = planServer ? [planServer.command, ...planServer.args, ...Object.values(planServer.env)] : [];
+    if (planServer && values.every(value => !/['\r\n]/.test(value))) {
+      const env = Object.entries(planServer.env).map(([name, value]) => `${name} = ${literal(value)}`).join(', ');
+      args.push('-c', `mcp_servers.${PLAN_SERVER}.command=${literal(planServer.command)}`, '-c', `mcp_servers.${PLAN_SERVER}.args=[${planServer.args.map(literal).join(', ')}]`, '-c', `mcp_servers.${PLAN_SERVER}.env={ ${env} }`);
+    }
     // Codex reads outside its working folder by default.
     if (initialPrompt) args.push(initialPrompt);
   } else if (agent === 'claude') {
@@ -131,6 +144,9 @@ export function terminalCommand(agent, { bypass = false, resumeId, nativeId, eff
     // The model chosen in the chat footer, and the status line that reports plan limits.
     if (model) { if (!/^[a-z0-9][a-z0-9.\-[\]]{0,80}$/i.test(model)) throw new Error('Choose one of the listed models.'); args.push('--model', model); }
     if (settings) args.push('--settings', settings);
+    if (instructions) args.push('--append-system-prompt-file', instructions);
+    // The Plan tool joins the MCP servers the owner configured, allowed without a prompt.
+    if (planServer) args.push('--mcp-config', planServer.configFile, '--allowedTools', PLAN_TOOL_NAME);
     if (readDir) args.push('--add-dir', readDir);
   } else if (agent === 'antigravity') {
     if (resumeId && !validAntigravityId(resumeId)) throw new Error('Use the Antigravity conversation UUID from its /resume picker.');

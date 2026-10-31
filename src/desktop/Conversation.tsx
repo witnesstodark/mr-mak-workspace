@@ -15,6 +15,7 @@ import { spokenText, useReadAloud } from '../mobile/useReadAloud'
 import { readingVoiceChanged, readingVoices, saveReadingVoice, savedReadingVoice } from '../mobile/readingVoices'
 import { commandToken, completeCommand, matchingCommands, terminalCommand, type ChatCommand } from './commandSuggestions'
 import TerminalPrompt, { type PromptChoice, type TerminalPromptData } from '../components/TerminalPrompt'
+import { useConversationJump } from './sessionRailState'
 import SideQuestions, { type SideQuestion } from './SideQuestions'
 import { isMac } from './platform'
 import './conversation.css'
@@ -140,6 +141,7 @@ export default function Conversation({ session, connected, agentLabel, openTermi
     finally { setAnswering(false); void reload.current() }
   }
   useLayoutEffect(() => { const box = scroller.current; if (box && follow.current) box.scrollTop = box.scrollHeight }, [messages.length, transcript, working, held?.stage, coldOffer, advice])
+  useConversationJump(session.id, scroller, follow)
   useEffect(() => { input.current?.focus() }, [session.id])
   useLayoutEffect(() => {
     const box = input.current
@@ -283,7 +285,7 @@ ${current.text}` : back.text, paths: [...back.paths, ...current.paths.filter(ite
         {transcript?.truncated && <p className="conversation-note">Showing the latest part of a long conversation. The terminal keeps the full history.</p>}
         {messages.map((message, index) => message.role === 'system' ? systemEvents !== 'hidden' && message.event && <SystemEvent key={`${message.id}:${systemEvents}`} event={message.event} time={message.at ? time(message.at) : undefined} expanded={systemEvents === 'full'}
           components={{ a: ({ href, children }) => <MessageLink href={href} sessionId={session.id}>{children}</MessageLink> }} fileLink={(file, label) => <MessageLink href={file} sessionId={session.id}>{label}</MessageLink>} />
-        : <article key={message.id} data-index={index} className={`conversation-message ${message.role}${isBtw(message) ? ' btw' : ''}`}>
+        : <article key={message.id} data-index={index} data-message-id={message.id} className={`conversation-message ${message.role}${isBtw(message) ? ' btw' : ''}`}>
           <header>{message.role === 'user' ? <span>{isBtw(message) ? 'You · /btw side question' : 'You'}</span> : <span className="conversation-agent"><AgentLogo agent={session.agent} size={15} />{agentLabel}</span>}{message.at && <time>{time(message.at)}</time>}{message.role === 'assistant' && message.text.trim() && <CopyButton text={message.text} />}
             {message.role === 'user' && canEdit && !openEdit && message.text.trim() && <button type="button" className="conversation-copy" title="Edit and send again" aria-label="Edit message" onClick={() => { setEditError(''); setEditing({ id: message.id, text: visibleUserMessage(message.text) }) }}><Icon name="edit" size={14} /></button>}</header>
           {openEdit?.id === message.id ? <form className="conversation-edit" onSubmit={event => { event.preventDefault(); void sendEdit() }}>

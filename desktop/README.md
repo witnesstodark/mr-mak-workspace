@@ -151,6 +151,50 @@ the phone gets no offer, so there `Ask` sends unchanged and `Auto` still switche
 Ctrl+Enter (⌘Enter on macOS) sends once at the current effort with no check. The
 UI Studio Copilot and edited messages always send that way.
 
+## Project rules, agent CPU priority and engines
+
+Rules live in each project at `.agents/rules.md`, one `- ` line per rule, and the
+Workspace Rules panel adds, edits and removes them (`GET`/`POST /api/rules`).
+Only rule lines change; other text in the file stays. A new chat in that folder
+starts with them: Claude Code reads the file through `--append-system-prompt-file`,
+Codex gets a `developer_instructions` pointer to it (a value that is not TOML is
+used verbatim, so it needs no quoting) and OpenCode lists it in its
+`instructions`. The file's header asks the agent to add a rule when the owner
+corrects it. Antigravity and Kimi are not given the rules. A chat already open keeps
+what it started with.
+
+Each chat's plan sits beside it: the header's Plan button shows its progress and
+opens the panel (the Session Rail for Claude chats, where Plan is the first tab).
+New Claude Code, Codex and OpenCode chats start with instructions written to
+`chat-instructions/<chat>.md` in the state folder: keep the plan of a multi-step
+task in `.agents/plans/<chat>.md` in the project (the folder ignores itself), as
+`Request:`, `Status:` (working, needs review, blocked, done), `- [ ]`/`- [>]`/`- [x]`
+steps and `Next:`. The same file carries the global and project rules and points
+the agent to the `mrmak-chat-features` skill in the Mr. Mak repository, which
+explains the plan, rules, Run game, card assets, handoffs and file links. A Claude chat without
+a plan file still shows its own task list (`TaskCreate`, `TodoWrite`) and its
+scheduled follow-ups (`CronCreate`, `ScheduleWakeup`), read from the transcript.
+The button and the panel mark the chat when it waits for an answer, or when its
+plan reached review, a block or the end after your last message.
+
+Settings → Plan tool (off by default, so chats carry no extra tool) gives new
+Claude Code, Codex and OpenCode chats a `report_plan` tool instead of the file
+instruction. `chat-plan-mcp.mjs` is its MCP server; each call reaches
+`/chat-plan/tool` with a key derived from the chat's ID, so one chat cannot
+write another's plan, and the service writes the same `.agents/plans/<chat>.md`.
+Claude gets it through `--mcp-config` (allowed without a prompt), Codex through
+`mcp_servers` overrides and OpenCode through its config.
+
+A message that starts with `remember:` or `lembre:` (typed in Mr. Mak or in the
+terminal, read from the chat's transcript) shows a band in the chat: save to the
+project's `.agents/rules.md`, save as global, edit or skip. Global rules live in
+`.agents/global-rules.md` of the Mr. Mak repository; every new Claude Code, Codex
+and OpenCode chat starts with them, and the Rules panel edits them under "Global".
+The Rules panel's "Find skill ideas" reads the last two weeks of the project's
+Claude Code and Codex requests and asks Claude (Sonnet, no tools) for repeated
+tasks; "Create draft skill" writes `SKILL.md` in `.agents/skills` when the project
+keeps shared skills there, else in `.claude/skills`, never over an existing one.
+
 Claude chats show their prompt cache in the footer: warm with the minutes left,
 counted from the last reply (one hour on a subscription), or cold. The first
 message sent from Mr. Mak to a cold chat with 50k tokens or more of context is
@@ -160,6 +204,16 @@ cache-tax mod's table). On the desktop the held message waits in the chat with
 put it back in the composer. Sending it again also goes through, and slash
 commands are never held. Messages sent from the phone are held the same way;
 messages typed straight into the terminal are not.
+
+The chip's tooltip adds the chat's cache figures, and clicking it opens the
+Session Rail's **Cache** view: the cache now, the share of input read from it,
+tokens and list-price cost read and written, and each reply that wrote most of
+its context again with the reason (`cacheHistory`: expired, model changed,
+compacted, or the prompt's start changed). Changing effort is not a reason: in
+local transcripts the first reply after `/effort` read the whole context from
+the cache, while the first reply after `/model` read none of it. A keep-warm ping was measured and left out: a `claude -p --resume
+--fork-session` ping read only 40,440 of the 74,607 tokens an interactive chat had
+cached and wrote 35,352 more, so it does not keep the chat's own cache warm.
 
 ## Local microphone dictation
 

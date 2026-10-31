@@ -72,7 +72,8 @@ export function tailNativeFile(file, agent, onEvent, from = 0) {
   return () => { closed = true; clearInterval(timer); };
 }
 
-export async function claudeTranscript(cwd, nativeId) {
+// The folder that holds every Claude Code conversation started in a working folder.
+export async function claudeProjectFolder(cwd) {
   const root = path.join(process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude'), 'projects');
   const folders = await readdir(root).catch(() => []);
   // Claude names the folder after getcwd(). Chats saved before working folders
@@ -82,9 +83,13 @@ export async function claudeTranscript(cwd, nativeId) {
   for (const spelling of spellings) {
     const escaped = spelling.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
     const folder = folders.find(item => item.toLowerCase() === escaped);
-    if (folder) return path.join(root, folder, `${nativeId}.jsonl`);
+    if (folder) return path.join(root, folder);
   }
-  return path.join(root, spellings.at(-1).replace(/[^a-zA-Z0-9]/g, '-'), `${nativeId}.jsonl`);
+  return path.join(root, spellings.at(-1).replace(/[^a-zA-Z0-9]/g, '-'));
+}
+
+export async function claudeTranscript(cwd, nativeId) {
+  return path.join(await claudeProjectFolder(cwd), `${nativeId}.jsonl`);
 }
 
 export { codexTranscript } from './codex-history.mjs';

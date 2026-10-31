@@ -595,13 +595,22 @@ export class ConversationTranscripts {
         const usage = transcriptUsage(records, session.agent, model, claudeQuota);
         const value = { supported: true, messages: messages.slice(-100), userMessages, activity: transcriptActivity(records, session.agent), cache: session.agent === 'claude' ? lastCache(records) : null, cacheStats: session.agent === 'claude' ? cacheHistory(records) : null, model, effort: transcriptEffort(records, session.agent), usage, truncated };
         const claude = session.agent === 'claude';
-        cached = { key, value, stops: claude ? taskStops(records) : new Map(), commands: claude ? backgroundCommands(records) : [] };
+        cached = { key, value, prompts: messages.filter(item => item.role === 'user').slice(-500).map(({ id, at, text }) => ({ id, at, text: text.slice(0, 2000) })), stops: claude ? taskStops(records) : new Map(), commands: claude ? backgroundCommands(records) : [] };
         this.cache.set(session.id, cached);
         if (this.cache.size > 25) this.cache.delete(this.cache.keys().next().value);
       }
       // Subagents write their own files, so the chat's transcript may be unchanged while they work.
       return session.agent === 'claude' ? { ...cached.value, ...await this.backgroundWork(files[0], session, cached).catch(() => ({ agents: [], commands: [] })) } : cached.value;
     } catch { return { supported: false, messages: [] }; }
+  }
+
+  // Every prompt the person sent in the part of the transcript read above, for the
+  // Session Rail's timeline. `shown` marks the prompts the Conversation view holds.
+  async prompts(session) {
+    const value = await this.read(session);
+    const shown = new Set(value.messages.map(item => item.id));
+    const prompts = (this.cache.get(session.id)?.prompts || []).map(item => ({ ...item, shown: shown.has(item.id) }));
+    return { supported: value.supported, truncated: !!value.truncated, prompts };
   }
 
   // OpenCode keeps chats in its SQLite store rather than a transcript file. The

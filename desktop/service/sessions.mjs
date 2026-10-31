@@ -13,6 +13,8 @@ import { englishTitle, groupLabel, restoredTitle } from './titles.mjs';
 import { defaultWorkerEffort, workerEfforts } from './effort.mjs';
 import { projectKey } from './recent-projects.mjs';
 import { ptyOptions } from './platform.mjs';
+import { activeRules } from './project-rules.mjs';
+import { planServer as startPlanServer, writeChatInstructions } from './chat-plan.mjs';
 import { rememberedChoice } from './chat-models.mjs';
 import { statusSettings } from './claude-status.mjs';
 import { composerText, terminalPrompt } from './terminal-prompt.mjs';
@@ -179,13 +181,18 @@ export class Sessions extends EventEmitter {
   async launch(session, resumeId, nativeWatch, first = {}) {
     let env = childEnvironment(this.repo);
     let opencodeMajor;
+    // The agents with a launch option for instructions get their plan file and the project's rules.
+    const rules = ['claude', 'codex', 'opencode'].includes(session.agent) ? await activeRules(session.cwd) : null;
+    // The Plan tool only while the owner keeps it on and the service can take its calls.
+    const tool = ['claude', 'codex', 'opencode'].includes(session.agent) && this.planTool?.enabled() && this.planTool.url() ? await startPlanServer(this.stateDir, session, { url: this.planTool.url(), secret: this.planTool.secret }).catch(() => null) : null;
+    const instructions = ['claude', 'codex', 'opencode'].includes(session.agent) ? await writeChatInstructions(this.stateDir, session, rules, !!tool, this.repo).catch(() => rules) : null;
     if (session.agent === 'opencode') {
       opencodeMajor = await opencodeVersion(env);
       // v2 explicitly accepts a new ID through --session. Assign it before
       // launch, so even a very early close retains an exact resume target.
       if (opencodeMajor === 2 && !session.nativeId) session.nativeId = `ses_${randomUUID().replaceAll('-', '')}`;
       if (opencodeMajor === 2) resumeId ||= session.nativeId;
-      env = opencodeEnvironment(env, { stateDir: this.stateDir, session, major: opencodeMajor });
+      env = opencodeEnvironment(env, { stateDir: this.stateDir, session, major: opencodeMajor, instructions, planServer: tool });
     }
     if (this.closed || !session.open) throw new Error('The chat was closed before its terminal started.');
     if (session.agent === 'antigravity' && resumeId && !validAntigravityId(resumeId)) throw new Error('Use the Antigravity conversation UUID from its /resume picker.');
@@ -194,7 +201,7 @@ export class Sessions extends EventEmitter {
     if (this.closed || !session.open) throw new Error('The chat was closed before its terminal started.');
     const settings = session.agent === 'claude' ? await statusSettings(this.stateDir, session, env).catch(() => null) : undefined;
     if (this.closed || !session.open) throw new Error('The chat was closed before its terminal started.');
-    const command = terminalCommand(session.agent, { bypass: session.bypass, resumeId, nativeId: session.nativeId, effort: session.effort, model: session.agent === 'claude' ? session.model : undefined, settings, opencodeMajor, antigravityLog, noDaemon, ...first });
+    const command = terminalCommand(session.agent, { bypass: session.bypass, resumeId, nativeId: session.nativeId, effort: session.effort, model: session.agent === 'claude' ? session.model : undefined, settings, opencodeMajor, antigravityLog, noDaemon, instructions: session.agent === 'opencode' ? null : instructions, planServer: session.agent === 'opencode' ? null : tool, ...first });
     if (session.agent === 'codex') env.CODEX_INTERNAL_ORIGINATOR_OVERRIDE = `mrmak_chat_${session.id}`;
     if (session.terminal) this.resetTerminal(session);
     const proc = pty.spawn(command.file, command.args, ptyOptions({ cwd: session.cwd, env, cols: session.cols, rows: session.rows }));

@@ -19,6 +19,9 @@ import { QuickActions } from './quick-actions.mjs';
 import { defaultVoiceStyle, voiceSession } from './voice-profile.mjs';
 import { NativeSettings } from './native-settings.mjs';
 import { McpInventory } from './mcp.mjs';
+import { editGlobalRules, editRules, globalRulesFile, readRules, readRulesAt } from './project-rules.mjs';
+import { RuleSuggestions } from './rule-suggestions.mjs';
+import { createSkill, discoverSkills } from './skill-discovery.mjs';
 import { body, equalSecret, json, publicError, readJson, realFile, saveJson, secret } from './util.mjs';
 import { ProjectAdapterRegistry } from './project-adapters/registry.mjs';
 import { KnowledgeManager, MarkdownKnowledgeProvider } from './knowledge/providers.mjs';
@@ -36,11 +39,20 @@ import { LocalReadAloud } from './local-read-aloud.mjs';
 import { Handoffs } from './handoff.mjs';
 import { CACHE_TTL_MINUTES, IDLE_CACHE_MINUTES, IDLE_CACHE_MIN_TOKENS } from './context-alerts.mjs';
 import { chatCommands } from './chat-commands.mjs';
+import { ClaudeSessions, sessionRail } from './claude-sessions.mjs';
+import { chatPlan, savePlan, validPlanKey } from './chat-plan.mjs';
 import { ColdGuard, cacheView } from './chat-cache.mjs';
 import { SideQuestions } from './side-questions.mjs';
 import { isThemePreference } from './appearance.mjs';
 
-const listen = server => new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', () => resolve(`http://127.0.0.1:${server.address().port}`)); });
+// A project folder named by the UI: an existing absolute directory.
+async function projectFolder(value) {
+  if (typeof value !== 'string' || !path.isAbsolute(value) || /[\x00-\x1f]/.test(value)) throw new Error('Choose a project folder.');
+  const folder = await realpath(value).catch(() => null);
+  if (!folder || !(await stat(folder)).isDirectory()) throw new Error('This project folder no longer exists.');
+  return folder;
+}
+const listen = server =>new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', () => resolve(`http://127.0.0.1:${server.address().port}`)); });
 
 export async function createService({ repo, uiDir, stateDir, token = secret(), native = () => {}, restoreSessions = false, mcpOptions, mobileOptions }) {
   repo = await realpath(repo);
@@ -57,8 +69,9 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
   const mcp = new McpInventory(repo, mcpOptions);
   const sessions = await new Sessions(repo, stateDir).init();
   const transcripts = new ConversationTranscripts();
-  const sideQuestions = new SideQuestions(sessions);
+  const claudeSessions = new ClaudeSessions(), sideQuestions = new SideQuestions(sessions);
   const coldGuard = new ColdGuard();
+  const ruleSuggestions = new RuleSuggestions(stateDir, transcripts);
   const conversationMedia = new ConversationMedia();
   const readAloud = mobileOptions?.readAloud || new LocalReadAloud(repo);
   const environment = parseEnv(await readFile(path.join(repo, '.env'), 'utf8').catch(() => ''));
@@ -217,6 +230,12 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
       // is issued only through an authorized messages request for this chat.
       const media = /^\/media\/([a-f0-9-]{36})\/([a-zA-Z0-9_-]{43})$/.exec(url.pathname);
       if (media && ['GET', 'HEAD'].includes(request.method)) return await conversationMedia.serve(request, response, media[1], media[2], 'desktop', url.searchParams.get('download') === '1');
+      // The coordinator's MCP bridge, authorized by its own per-process secret.
+      if (url.pathname === '/chat-plan/tool' && request.method === 'POST') {
+        const call = await body(request), session = sessions.items.get(call.chat);
+        if (!session || !validPlanKey(planSecret, call.chat, request.headers['x-mrmak-plan'])) return json(response, 403, { error: 'Not allowed' });
+        return json(response, 200, { text: await savePlan(session.cwd, session.id, call.plan) });
+      }
       if (url.pathname.startsWith('/api/')) {
         authorize(request);
         const method = request.method;
@@ -272,6 +291,11 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
         if (method === 'POST' && url.pathname === '/api/integrations/bind') return json(response, 200, await integrations.bind(data));
         if (method === 'GET' && url.pathname === '/api/native/settings') return json(response, 200, nativeSettings.value);
         if (method === 'GET' && url.pathname === '/api/mcp') return json(response, 200, await mcp.list());
+        if (method === 'POST' && url.pathname === '/api/skills/discover') return json(response, 200, await discoverSkills(await projectFolder(data.path)));
+        if (method === 'POST' && url.pathname === '/api/skills/create') return json(response, 200, await createSkill(await projectFolder(data.path), data.candidate));
+        // Rules for one project, or the global rules every chat gets.
+        if (method === 'GET' && url.pathname === '/api/rules') return json(response, 200, url.searchParams.get('scope') === 'global' ? await readRulesAt(globalRulesFile(repo)) : await readRules(await projectFolder(url.searchParams.get('path'))));
+        if (method === 'POST' && url.pathname === '/api/rules') return json(response, 200, data.scope === 'global' ? await editGlobalRules(repo, data) : await editRules(await projectFolder(data.path), data));
         if (method === 'POST' && url.pathname === '/api/mcp/check') return json(response, 200, await mcp.check(data.id));
         if (method === 'POST' && url.pathname === '/api/native/settings') return json(response, 200, await nativeSettings.set(data.winKey));
         if (method === 'GET' && url.pathname === '/api/recent-projects') return json(response, 200, await projectList());
@@ -337,6 +361,7 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
           if (isThemePreference(data.workspaceTheme)) settings.workspaceTheme = data.workspaceTheme;
           if (isThemePreference(data.chatTheme)) settings.chatTheme = data.chatTheme;
           if (['medium', 'high'].includes(data.coordinatorEffort)) settings.coordinatorEffort = data.coordinatorEffort;
+          if (typeof data.planTool === 'boolean') settings.planTool = data.planTool;
           if (EFFORT_ADVICE.includes(data.effortAdvice)) settings.effortAdvice = data.effortAdvice;
           if (['cedar', 'marin'].includes(data.voiceName)) settings.voiceName = data.voiceName;
           if (data.groupColors && typeof data.groupColors === 'object' && !Array.isArray(data.groupColors)) settings.groupColors = Object.fromEntries(Object.entries(data.groupColors).filter(([name, value]) => name.length <= 60 && typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)).slice(0, 200).map(([name, value]) => [name, value.toLowerCase()]));
@@ -381,6 +406,10 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
             // Mr. Mak answers Claude Code's cache warning itself while it applies a footer model change.
             return json(response, 200, { ...value, prompt: session.process && !switchingModel(id) ? await readPrompt(sessions, id) : null, btw: sideQuestions.list(id) });
           }
+          if (method === 'GET' && action === 'rules') return json(response, 200, await ruleSuggestions.list(sessions.get(id)));
+          if (method === 'POST' && action === 'rules') return json(response, 200, await ruleSuggestions.resolve(sessions.get(id), data, repo));
+          if (method === 'GET' && action === 'plan') return json(response, 200, await chatPlan(sessions.get(id), claudeSessions));
+          if (method === 'GET' && action === 'rail') return json(response, 200, await sessionRail(sessions.get(id), sessions.list(), claudeSessions, transcripts));
           if (method === 'POST' && action === 'btw') return json(response, 200, await sideQuestions.ask(id, data.text));
           if (method === 'GET' && action === 'commands') { const session = sessions.get(id); return json(response, 200, await chatCommands(session.agent, session.cwd, mcpOptions)); }
           if (method === 'GET' && action === 'stats') {
@@ -492,6 +521,9 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
   });
   const origin = await listen(server);
   files.uiOrigin = origin;
+  // The Plan tool's calls come back here with the chat's key; off unless the owner turns it on.
+  const planSecret = secret();
+  sessions.planTool = { enabled: () => !!settings.planTool, url: () => `${origin}/chat-plan/tool`, secret: planSecret };
   mobile = await new MobileGateway({ ...mobileOptions, transcripts, readAloud, dictation, chooseDictation, repo, uiDir, stateDir, sessions, attachments, closeChat, settings: () => settings, changed: state => broadcast('mobile-state', { mobile: state }) }).init();
   const wss = new WebSocketServer({ noServer: true, maxPayload: 128 * 1024 });
   server.on('upgrade', (request, socket, head) => {
