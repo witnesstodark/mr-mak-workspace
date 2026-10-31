@@ -5,7 +5,7 @@ import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { initialPromptArgument, terminalCommand } from '../agents.mjs';
-import { HANDOFF_REQUEST, Handoffs, handoffText } from '../handoff.mjs';
+import { HANDOFF_REQUEST, Handoffs, PAUSE_REQUEST, handoffText } from '../handoff.mjs';
 
 test('a handoff is the reply to the latest request, from its heading', () => {
   const messages = [
@@ -70,6 +70,65 @@ test('accepting a handoff asks the chat, saves its summary and opens a new chat 
   assert.equal(initialPromptArgument(created[0].initialPrompt), created[0].initialPrompt);
 });
 
+test('a pause saves the handoff and opens nothing until the owner chooses', async () => {
+  const repo = await mkdtemp(path.join(os.tmpdir(), 'mrmak-handoff-'));
+  const { sessions, inputs, created, opened, changes, transcripts } = fixture('# Handoff\n## Next\nTune the dash');
+  transcripts.read = async () => ({ messages: [{ role: 'user', text: PAUSE_REQUEST }, { role: 'assistant', text: '# Handoff\n## Next\nTune the dash' }] });
+  const handoffs = new Handoffs({ repo, sessions, transcripts, opened: id => opened.push(id), changed: (id, job) => changes.push(job?.status ?? null) });
+  assert.equal(handoffs.pause('old').pause, true);
+  assert.equal(inputs[0].text, PAUSE_REQUEST);
+  assert.ok(PAUSE_REQUEST.startsWith('Mr. Mak handoff request: ') && PAUSE_REQUEST.includes('# Handoff'));
+  sessions.emit('session', { id: 'old', status: 'running', completionVersion: 4 });
+  await new Promise(resolve => setTimeout(resolve, 50));
+  assert.deepEqual(changes, ['summarizing', 'paused']);
+  const file = handoffs.state('old').file;
+  assert.match(await readFile(file, 'utf8'), /Tune the dash/);
+  assert.equal(created.length, 0); assert.deepEqual(opened, []);
+  // Keep this chat clears the pause; a new chat from it opens only on request.
+  assert.equal(handoffs.dismiss('old'), null); assert.equal(handoffs.state('old'), null);
+  await assert.rejects(handoffs.continueFromPause('old'), /no paused handoff/);
+  handoffs.pause('old'); sessions.emit('session', { id: 'old', status: 'running', completionVersion: 5 });
+  await new Promise(resolve => setTimeout(resolve, 50));
+  await handoffs.continueFromPause('old');
+  assert.equal(handoffs.state('old').status, 'done'); assert.deepEqual(opened, ['new']);
+  assert.ok(created[0].initialPrompt.includes(handoffs.state('old').file));
+});
+
+test('a paused handoff survives a service restart until it is used or dismissed', async () => {
+  const repo = await mkdtemp(path.join(os.tmpdir(), 'mrmak-handoff-')), stateDir = await mkdtemp(path.join(os.tmpdir(), 'mrmak-state-'));
+  const { sessions, transcripts } = fixture('# Handoff\n## Next\nTune the dash');
+  transcripts.read = async () => ({ messages: [{ role: 'user', text: PAUSE_REQUEST }, { role: 'assistant', text: '# Handoff\n## Next\nTune the dash' }] });
+  const savedFile = path.join(stateDir, 'paused-handoffs.json');
+  const saved = async () => JSON.parse(await readFile(savedFile, 'utf8').catch(() => '{}'));
+  // Saves run in the background; wait for the state the step expects instead of a fixed delay.
+  const until = async check => { for (let i = 0; i < 500 && !(await check()); i++) await new Promise(resolve => setTimeout(resolve, 10)); assert.ok(await check()); };
+  const empty = async () => Object.keys(await saved()).length === 0;
+  const first = await new Handoffs({ repo, stateDir, sessions, transcripts, opened: () => {}, changed: () => {} }).init();
+  first.pause('old'); sessions.emit('session', { id: 'old', status: 'running', completionVersion: 4 });
+  await until(async () => first.state('old')?.status === 'paused' && !!(await saved()).old);
+  const file = first.state('old').file;
+  // After a restart the chat still offers its pause, with the same handoff file.
+  const second = await new Handoffs({ repo, stateDir, sessions, transcripts, opened: () => {}, changed: () => {} }).init();
+  assert.deepEqual([second.state('old').status, second.state('old').file], ['paused', file]);
+  // A chat that no longer exists, or a deleted handoff file, is dropped.
+  const gone = { ...sessions, get: () => { throw new Error('Chat no longer exists'); } };
+  const dropped = await new Handoffs({ repo, stateDir, sessions: gone, transcripts, opened: () => {}, changed: () => {} }).init();
+  assert.equal(dropped.state('old'), null);
+  await dropped.saved; assert.ok(await empty());
+  await writeFile(savedFile, JSON.stringify({ old: { file: path.join(repo, 'missing.md'), at: 'x' } }));
+  const missing = await new Handoffs({ repo, stateDir, sessions, transcripts, opened: () => {}, changed: () => {} }).init();
+  assert.equal(missing.state('old'), null);
+  await missing.saved; assert.ok(await empty());
+  // Keep this chat and a new chat from the pause both clear the saved state.
+  await writeFile(savedFile, JSON.stringify({ old: { file, at: 'x' } }));
+  const third = await new Handoffs({ repo, stateDir, sessions, transcripts, opened: () => {}, changed: () => {} }).init();
+  third.dismiss('old'); await third.saved; assert.ok(await empty());
+  await writeFile(savedFile, JSON.stringify({ old: { file, at: 'x' } }));
+  const fourth = await new Handoffs({ repo, stateDir, sessions, transcripts, opened: () => {}, changed: () => {} }).init();
+  await fourth.continueFromPause('old'); await fourth.saved; assert.ok(await empty());
+  assert.equal(fourth.state('old').status, 'done');
+});
+
 test('a handoff fails clearly when the chat stops or the reply has no summary', async () => {
   const repo = await mkdtemp(path.join(os.tmpdir(), 'mrmak-handoff-'));
   const stopped = fixture('# Handoff');
@@ -85,4 +144,30 @@ test('a handoff fails clearly when the chat stops or the reply has no summary', 
   assert.equal(vague.created.length, 0);
   vague.session.activity = 'working';
   assert.throws(() => new Handoffs({ repo, ...vague, opened: () => {}, changed: () => {} }).start('old'), /current turn/);
+});
+
+test('compacting sends the CLI\'s own /compact only to an idle chat without an open menu', async () => {
+  const repo = await mkdtemp(path.join(os.tmpdir(), 'mrmak-compact-'));
+  const chat = fixture('# Handoff');
+  let screen = 'Welcome back\n> ';
+  chat.sessions.read = async () => ({ screen });
+  const handoffs = new Handoffs({ repo, ...chat, opened: () => {}, changed: () => {} });
+  assert.deepEqual(await handoffs.compact('old'), { command: '/compact' });
+  assert.deepEqual(chat.inputs, [{ id: 'old', text: '/compact', options: { coordinator: true, submit: true } }]);
+  screen = 'Do you want to make this edit?\n❯ 1. Yes\n  2. No, and tell Claude what to do differently\n';
+  await assert.rejects(handoffs.compact('old'), /Answer the question/);
+  screen = 'Welcome back\n> ';
+  for (const activity of ['working', 'waiting']) { chat.session.activity = activity; await assert.rejects(handoffs.compact('old'), /current turn/); }
+  chat.session.activity = 'idle';
+  handoffs.jobs.set('old', { status: 'summarizing' });
+  await assert.rejects(handoffs.compact('old'), /writing a handoff/);
+  handoffs.jobs.clear();
+  chat.session.process = null;
+  await assert.rejects(handoffs.compact('old'), /Reconnect/);
+  chat.session.process = {}; chat.session.agent = 'kimi';
+  await assert.rejects(handoffs.compact('old'), /no compact command/);
+  chat.session.agent = 'codex';
+  await handoffs.compact('old');
+  assert.equal(chat.inputs.length, 2);
+  assert.equal(chat.inputs[1].text, '/compact');
 });

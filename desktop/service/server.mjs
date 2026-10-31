@@ -19,6 +19,10 @@ import { QuickActions } from './quick-actions.mjs';
 import { defaultVoiceStyle, voiceSession } from './voice-profile.mjs';
 import { NativeSettings } from './native-settings.mjs';
 import { McpInventory } from './mcp.mjs';
+import { editGlobalRules, editRules, globalRulesFile, readRules, readRulesAt } from './project-rules.mjs';
+import { RuleSuggestions } from './rule-suggestions.mjs';
+import { createSkill, discoverSkills } from './skill-discovery.mjs';
+import { GameRunner, gameSetupPrompt, readGame, saveGame } from './game-run.mjs';
 import { body, equalSecret, json, publicError, readJson, realFile, saveJson, secret } from './util.mjs';
 import { ProjectAdapterRegistry } from './project-adapters/registry.mjs';
 import { KnowledgeManager, MarkdownKnowledgeProvider } from './knowledge/providers.mjs';
@@ -29,13 +33,28 @@ import { ConversationTranscripts } from './mobile-transcript.mjs';
 import { ConversationMedia } from './conversation-media.mjs';
 import { projectKey, recentProjects } from './recent-projects.mjs';
 import { answerPrompt, readPrompt } from './terminal-prompt.mjs';
+import { applyChoice, liveStats, modelOptions, switchingModel } from './chat-models.mjs';
+import { EFFORT_ADVICE, EffortAdvisor } from './effort-advice.mjs';
 import { rewindToMessage } from './message-edit.mjs';
 import { LocalReadAloud } from './local-read-aloud.mjs';
 import { Handoffs } from './handoff.mjs';
+import { CACHE_TTL_MINUTES, IDLE_CACHE_MINUTES, IDLE_CACHE_MIN_TOKENS } from './context-alerts.mjs';
 import { chatCommands } from './chat-commands.mjs';
+import { ClaudeSessions, sessionRail } from './claude-sessions.mjs';
+import { chatPlan, savePlan, validPlanKey } from './chat-plan.mjs';
+import { FileInsights, folderMap } from './file-insights.mjs';
+import { ColdGuard, cacheView } from './chat-cache.mjs';
+import { SideQuestions } from './side-questions.mjs';
 import { isThemePreference } from './appearance.mjs';
 
-const listen = server => new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', () => resolve(`http://127.0.0.1:${server.address().port}`)); });
+// A project folder named by the UI: an existing absolute directory.
+async function projectFolder(value) {
+  if (typeof value !== 'string' || !path.isAbsolute(value) || /[\x00-\x1f]/.test(value)) throw new Error('Choose a project folder.');
+  const folder = await realpath(value).catch(() => null);
+  if (!folder || !(await stat(folder)).isDirectory()) throw new Error('This project folder no longer exists.');
+  return folder;
+}
+const listen = server =>new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', () => resolve(`http://127.0.0.1:${server.address().port}`)); });
 
 export async function createService({ repo, uiDir, stateDir, token = secret(), native = () => {}, restoreSessions = false, mcpOptions, mobileOptions }) {
   repo = await realpath(repo);
@@ -52,12 +71,21 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
   const mcp = new McpInventory(repo, mcpOptions);
   const sessions = await new Sessions(repo, stateDir).init();
   const transcripts = new ConversationTranscripts();
+  const claudeSessions = new ClaudeSessions(), sideQuestions = new SideQuestions(sessions);
+  const coldGuard = new ColdGuard();
+  const fileInsights = new FileInsights(), ruleSuggestions = new RuleSuggestions(stateDir, transcripts);
   const conversationMedia = new ConversationMedia();
   const readAloud = mobileOptions?.readAloud || new LocalReadAloud(repo);
   const environment = parseEnv(await readFile(path.join(repo, '.env'), 'utf8').catch(() => ''));
   const settingsPath = path.join(stateDir, 'settings.json');
   const savedSettings = await readJson(settingsPath, null);
-  let settings = { defaultAgent: 'codex', defaultBypass: false, coordinatorModel: environment.MRMAK_COORDINATOR_MODEL?.trim() || null, terminalFontSize: 13, terminalAppearance: 'original', workspaceTheme: 'dark', coordinatorEffort: 'medium', voiceName: 'cedar', voiceStyle: defaultVoiceStyle, handoffAfter: 40, groupTabsByProject: false, systemEvents: 'compact', ...savedSettings };
+  let settings = { defaultAgent: 'codex', defaultBypass: false, coordinatorModel: environment.MRMAK_COORDINATOR_MODEL?.trim() || null, terminalFontSize: 13, terminalAppearance: 'original', workspaceTheme: 'dark', coordinatorEffort: 'medium', voiceName: 'cedar', voiceStyle: defaultVoiceStyle, handoffAfter: 40, idleCacheMinutes: IDLE_CACHE_MINUTES, idleCacheMinTokens: IDLE_CACHE_MIN_TOKENS, groupTabsByProject: false, projectOrder: [], usageLimitMode: 'all', usageDirection: 'used', systemEvents: 'compact', ...savedSettings };
+  const effortAdvisor = new EffortAdvisor({ sessions, stateDir, transcripts, mode: () => settings.effortAdvice || 'off' });
+  if (settings.groupTabsByProject === true) {
+    await sessions.groupByProject(settings.projectOrder);
+    settings.groupTabsByProject = false;
+    await saveJson(settingsPath, settings);
+  }
   if (await dictation.initializeProvider?.(settings, savedSettings !== null)) await saveJson(settingsPath, settings);
   dictation.providerChoice = () => settings.transcribeProvider || null;
   const chooseDictation = async provider => {
@@ -85,6 +113,9 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
   const notices = [];
   const send = (ws, type, value) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type, ...value })); };
   const broadcast = (type, value) => { for (const ws of clients) send(ws, type, value); };
+  const games = new GameRunner();
+  games.on('changed', cwd => broadcast('game', { path: cwd, status: games.status(cwd) }));
+  const gameState = async cwd => ({ ...await readGame(cwd), status: games.status(cwd) });
   const nativeSettings = new NativeSettings(native, value => broadcast('native-settings', value));
   const show = (window, extra = {}) => { native({ type: 'window', action: 'show', window }); broadcast('navigate', { window, ...extra }); };
   const focus = id => { sessions.get(id); selectedId = id; settings.selectedId = id; scheduleSettings(); show('chats', { sessionId: id }); return { selectedId: id }; };
@@ -97,7 +128,7 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
     if (selectedId === id) { selectedId = sessions.active()[0]?.id || null; settings.selectedId = selectedId; scheduleSettings(); broadcast('selection', { selectedId }); }
     return { closed: true, savedInHistory: true };
   };
-  const handoffs = new Handoffs({ repo, sessions, transcripts, opened: id => focus(id), changed: (id, handoff) => broadcast('handoff', { id, handoff }) });
+  const handoffs = await new Handoffs({ repo, stateDir, sessions, transcripts, opened: id => focus(id), changed: (id, handoff) => broadcast('handoff', { id, handoff }) }).init();
   const attach = async (id, paths, coordinator = false) => {
     const session = sessions.get(id);
     const verified = await attachments.paths(paths);
@@ -204,6 +235,12 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
       // is issued only through an authorized messages request for this chat.
       const media = /^\/media\/([a-f0-9-]{36})\/([a-zA-Z0-9_-]{43})$/.exec(url.pathname);
       if (media && ['GET', 'HEAD'].includes(request.method)) return await conversationMedia.serve(request, response, media[1], media[2], 'desktop', url.searchParams.get('download') === '1');
+      // The coordinator's MCP bridge, authorized by its own per-process secret.
+      if (url.pathname === '/chat-plan/tool' && request.method === 'POST') {
+        const call = await body(request), session = sessions.items.get(call.chat);
+        if (!session || !validPlanKey(planSecret, call.chat, request.headers['x-mrmak-plan'])) return json(response, 403, { error: 'Not allowed' });
+        return json(response, 200, { text: await savePlan(session.cwd, session.id, call.plan) });
+      }
       if (url.pathname.startsWith('/api/')) {
         authorize(request);
         const method = request.method;
@@ -259,6 +296,16 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
         if (method === 'POST' && url.pathname === '/api/integrations/bind') return json(response, 200, await integrations.bind(data));
         if (method === 'GET' && url.pathname === '/api/native/settings') return json(response, 200, nativeSettings.value);
         if (method === 'GET' && url.pathname === '/api/mcp') return json(response, 200, await mcp.list());
+        if (method === 'POST' && url.pathname === '/api/skills/discover') return json(response, 200, await discoverSkills(await projectFolder(data.path)));
+        if (method === 'POST' && url.pathname === '/api/skills/create') return json(response, 200, await createSkill(await projectFolder(data.path), data.candidate));
+        // Rules for one project, or the global rules every chat gets.
+        if (method === 'GET' && url.pathname === '/api/rules') return json(response, 200, url.searchParams.get('scope') === 'global' ? await readRulesAt(globalRulesFile(repo)) : await readRules(await projectFolder(url.searchParams.get('path'))));
+        if (method === 'POST' && url.pathname === '/api/rules') return json(response, 200, data.scope === 'global' ? await editGlobalRules(repo, data) : await editRules(await projectFolder(data.path), data));
+        if (method === 'GET' && url.pathname === '/api/game') return json(response, 200, await gameState(await projectFolder(url.searchParams.get('path'))));
+        if (method === 'POST' && url.pathname === '/api/game') { const cwd = await projectFolder(data.path); await saveGame(cwd, data.config); return json(response, 200, await gameState(cwd)); }
+        if (method === 'POST' && url.pathname === '/api/game/run') { const cwd = await projectFolder(data.path); await games.run(cwd); return json(response, 200, await gameState(cwd)); }
+        if (method === 'POST' && url.pathname === '/api/game/stop') { const cwd = await projectFolder(data.path); await games.stop(cwd); return json(response, 200, await gameState(cwd)); }
+        if (method === 'POST' && url.pathname === '/api/game/setup') { const session = sessions.get(data.id), cwd = await projectFolder(session.gameFolder || session.cwd); return json(response, 200, sessions.input(session.id, gameSetupPrompt((await readGame(cwd)).path, cwd), { coordinator: true, submit: true })); }
         if (method === 'POST' && url.pathname === '/api/mcp/check') return json(response, 200, await mcp.check(data.id));
         if (method === 'POST' && url.pathname === '/api/native/settings') return json(response, 200, await nativeSettings.set(data.winKey));
         if (method === 'GET' && url.pathname === '/api/recent-projects') return json(response, 200, await projectList());
@@ -303,6 +350,11 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
           native({ type: 'recycle-file', path: file });
           return json(response, 200, { requested: true, path: file });
         }
+        if (method === 'GET' && url.pathname === '/api/files/git') return json(response, 200, await fileInsights.status(url.searchParams.get('path') || repo));
+        if (method === 'GET' && url.pathname === '/api/files/diff') return json(response, 200, await fileInsights.diff(url.searchParams.get('path') || ''));
+        if (method === 'GET' && url.pathname === '/api/files/map') return json(response, 200, await folderMap(url.searchParams.get('path') || repo));
+        // What the chosen chat's agent read and wrote, for the Files tab.
+        if (method === 'GET' && url.pathname === '/api/files/activity') { const id = url.searchParams.get('id'); const session = id && sessions.items.get(id); return json(response, 200, { id: session?.id || null, cwd: session?.cwd || null, files: session ? (await transcripts.read(session)).files || [] : [] }); }
         if (method === 'GET' && url.pathname === '/api/preview') return json(response, 200, await files.preview(url.searchParams.get('path') || ''));
         if (method === 'POST' && url.pathname === '/api/files/markdown') {
           const preview = await files.saveMarkdown(data); await integrations.publish('artifact', { kind: 'updated', path: preview.path, name: preview.name }); broadcast('workspace-changed', {});
@@ -315,16 +367,24 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
           if (['focus', 'original'].includes(data.terminalAppearance)) settings.terminalAppearance = data.terminalAppearance;
           if (typeof data.terminalOptionMeta === 'boolean') settings.terminalOptionMeta = data.terminalOptionMeta;
           if (Number.isInteger(data.handoffAfter) && (data.handoffAfter === 0 || (data.handoffAfter >= 10 && data.handoffAfter <= 500))) settings.handoffAfter = data.handoffAfter;
+          // The idle-cache alert must come before the prompt cache expires; 0 turns it off.
+          if (Number.isInteger(data.idleCacheMinutes) && (data.idleCacheMinutes === 0 || (data.idleCacheMinutes >= 5 && data.idleCacheMinutes < CACHE_TTL_MINUTES))) settings.idleCacheMinutes = data.idleCacheMinutes;
+          if (Number.isInteger(data.idleCacheMinTokens) && data.idleCacheMinTokens >= 10000 && data.idleCacheMinTokens <= 1000000) settings.idleCacheMinTokens = data.idleCacheMinTokens;
+          if (['all', 'general'].includes(data.usageLimitMode)) settings.usageLimitMode = data.usageLimitMode;
+          if (['used', 'remaining'].includes(data.usageDirection)) settings.usageDirection = data.usageDirection;
           if (['full', 'compact', 'hidden'].includes(data.systemEvents)) settings.systemEvents = data.systemEvents;
           if (isThemePreference(data.workspaceTheme)) settings.workspaceTheme = data.workspaceTheme;
           if (isThemePreference(data.chatTheme)) settings.chatTheme = data.chatTheme;
           if (['medium', 'high'].includes(data.coordinatorEffort)) settings.coordinatorEffort = data.coordinatorEffort;
+          if (typeof data.planTool === 'boolean') settings.planTool = data.planTool;
+          if (EFFORT_ADVICE.includes(data.effortAdvice)) settings.effortAdvice = data.effortAdvice;
           if (['cedar', 'marin'].includes(data.voiceName)) settings.voiceName = data.voiceName;
           if (data.groupColors && typeof data.groupColors === 'object' && !Array.isArray(data.groupColors)) settings.groupColors = Object.fromEntries(Object.entries(data.groupColors).filter(([name, value]) => name.length <= 60 && typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)).slice(0, 200).map(([name, value]) => [name, value.toLowerCase()]));
           if (Array.isArray(data.collapsedGroups)) settings.collapsedGroups = [...new Set(data.collapsedGroups.filter(item => typeof item === 'string' && item.length <= 60))].slice(0, 200);
           await saveSettings(); broadcast('settings', { settings }); return json(response, 200, settings);
         }
         if (method === 'POST' && url.pathname === '/api/sessions') { const session = await sessions.create({ ...data, bypass: data.bypass ?? settings.defaultBypass }); await integrations.publish('session', { event: 'started', session }); focus(session.id); return json(response, 201, session); }
+        if (method === 'POST' && url.pathname === '/api/groups/by-project') return json(response, 200, await sessions.toggleProjectGroups());
         if (method === 'POST' && url.pathname === '/api/groups/move') return json(response, 200, await sessions.moveGroup(data.group, data.pinned, data.targetId, data.position));
         if (method === 'POST' && url.pathname === '/api/groups/rename') {
           // A renamed group keeps its color and collapsed state; merging into an
@@ -358,14 +418,30 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
           if (method === 'GET' && action === 'messages') {
             const session = sessions.get(id);
             const value = await conversationMedia.present(await transcripts.read(session), session, 'desktop', grant => `/media/${session.id}/${grant}`);
-            return json(response, 200, { ...value, prompt: session.process ? await readPrompt(sessions, id) : null });
+            // Mr. Mak answers Claude Code's cache warning itself while it applies a footer model change.
+            return json(response, 200, { ...value, prompt: session.process && !switchingModel(id) ? await readPrompt(sessions, id) : null, btw: sideQuestions.list(id) });
           }
+          if (method === 'GET' && action === 'rules') return json(response, 200, await ruleSuggestions.list(sessions.get(id)));
+          if (method === 'POST' && action === 'rules') return json(response, 200, await ruleSuggestions.resolve(sessions.get(id), data, repo));
+          if (method === 'GET' && action === 'plan') return json(response, 200, await chatPlan(sessions.get(id), claudeSessions));
+          if (method === 'GET' && action === 'rail') return json(response, 200, await sessionRail(sessions.get(id), sessions.list(), claudeSessions, transcripts));
+          if (method === 'POST' && action === 'btw') return json(response, 200, await sideQuestions.ask(id, data.text));
           if (method === 'GET' && action === 'commands') { const session = sessions.get(id); return json(response, 200, await chatCommands(session.agent, session.cwd, mcpOptions)); }
           if (method === 'GET' && action === 'stats') {
-            const { supported, userMessages = 0, truncated = false, model = null } = await transcripts.read(sessions.get(id));
-            return json(response, 200, { supported, userMessages, truncated, model, handoff: handoffs.state(id) });
+            const session = sessions.get(id);
+            const { supported, userMessages = 0, truncated = false, model = null, effort = null, usage = null, modelName = null, cache = null, cacheStats = null } = await liveStats(session, await transcripts.read(session), stateDir);
+            return json(response, 200, { supported, userMessages, truncated, model, ...(modelName && { modelName }), effort, usage, ...(cache && { cache: cacheView(cache) }), ...(cacheStats && { cacheStats }), handoff: handoffs.state(id) });
           }
+          if (method === 'GET' && action === 'models') return json(response, 200, await modelOptions(sessions.get(id)));
+          if (method === 'POST' && action === 'model') return json(response, 200, await applyChoice(sessions, stateDir, id, { model: data.model ?? undefined, effort: data.effort ?? undefined }));
           if (method === 'POST' && action === 'handoff') return json(response, 200, handoffs.start(id));
+          // Pause with a summary; on return `then` is "new-chat" (open one from the handoff) or "keep".
+          if (method === 'POST' && action === 'pause') {
+            if (data.then === 'new-chat') { await handoffs.continueFromPause(id); return json(response, 200, handoffs.state(id)); }
+            if (data.then === 'keep') return json(response, 200, handoffs.dismiss(id));
+            return json(response, 200, handoffs.pause(id));
+          }
+          if (method === 'POST' && action === 'compact') return json(response, 200, await handoffs.compact(id));
           if (method === 'POST' && action === 'prompt') return json(response, 200, await answerPrompt(sessions, id, data.id, data.choice));
           if (method === 'POST' && action === 'rewind') return json(response, 200, await rewindToMessage(sessions, transcripts, id, String(data.messageId || '')));
           if (method === 'POST' && action === 'speak') {
@@ -381,6 +457,18 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
             const session = sessions.get(id), text = typeof data.text === 'string' ? data.text : '';
             const paths = Array.isArray(data.paths) && data.paths.length ? await attachments.paths(data.paths) : [];
             if (!text.trim() && !paths.length) throw new Error('Write a message or attach a file.');
+            await sideQuestions.guard(id);
+            // A large cold Claude chat holds the first message once, with what it would cost.
+            // Slash commands do not reach the model, so they are never held.
+            // The desktop answers the hold with Send anyway, Compact first or Summarize and continue.
+            if (session.agent === 'claude' && !text.trimStart().startsWith('/')) {
+              try { coldGuard.check(session, (await transcripts.read(session)).cache); }
+              catch (error) { if (error.cold) return json(response, 409, { error: error.message, coldCache: error.cold }); throw error; }
+            }
+            // Effort advice holds the message once with the level it needs; the resend carries the answer.
+            const { advice } = await effortAdvisor.check(session, text, { choice: data.effort });
+            if (advice) return json(response, 409, { error: advice.message, effortAdvice: advice });
+            if (data.effort?.action === 'auto' && settings.effortAdvice !== 'auto') { settings.effortAdvice = 'auto'; await saveSettings(); broadcast('settings', { settings }); }
             return json(response, 200, sessions.input(id, `${text}${paths.length ? `${text ? '\n' : ''}${attachmentText(paths, session.agent)}` : ''}`, { coordinator: true, submit: true }));
           }
           if (method === 'POST' && action === 'focus') return json(response, 200, focus(id));
@@ -390,7 +478,7 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
           if (method === 'POST' && action === 'clear') return json(response, 200, await sessions.clearScreen(id));
           if (method === 'POST' && action === 'reorder') return json(response, 200, await sessions.reorder(id, data.targetId, data.position));
           if (method === 'POST' && action === 'input') return json(response, 200, sessions.input(id, data.text, { coordinator: data.paste !== false, submit: data.submit !== false }));
-          if (method === 'PATCH' && !action) return json(response, 200, typeof data.pinned === 'boolean' ? sessions.pin(id, data.pinned) : 'tabColor' in data ? sessions.color(id, data.tabColor) : 'group' in data ? await sessions.assign(id, data.group) : sessions.rename(id, data.name));
+          if (method === 'PATCH' && !action) return json(response, 200, typeof data.pinned === 'boolean' ? sessions.pin(id, data.pinned) : 'tabColor' in data ? sessions.color(id, data.tabColor) : 'gameFolder' in data ? sessions.setGameFolder(id, data.gameFolder === null ? null : await projectFolder(data.gameFolder)) : 'group' in data ? await sessions.assign(id, data.group) : sessions.rename(id, data.name));
           if (method === 'DELETE' && !action) return json(response, 200, await closeChat(id));
         }
         if (method === 'POST' && url.pathname === '/api/window') {
@@ -442,12 +530,15 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
       if (!info.isFile()) throw new Error('File not found');
       await serveFile(request, response, file, info, {
         'Referrer-Policy': 'no-referrer', 'X-Frame-Options': 'DENY',
-        'Content-Security-Policy': `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: ${files.origin}; media-src 'self' blob: ${files.origin}; connect-src 'self' ws://127.0.0.1:* ${files.origin}; frame-src http://127.0.0.1:*; object-src 'none'; base-uri 'self'; frame-ancestors 'none'`,
+        'Content-Security-Policy': `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: ${files.origin}; media-src 'self' blob: ${files.origin}; connect-src 'self' ws://127.0.0.1:* ${files.origin}; frame-src http://localhost:* http://127.0.0.1:* http://[::1]:*; object-src 'none'; base-uri 'self'; frame-ancestors 'none'`,
       });
     } catch (error) { if (!response.headersSent) json(response, error.status || 400, { error: publicError(error) }); }
   });
   const origin = await listen(server);
   files.uiOrigin = origin;
+  // The Plan tool's calls come back here with the chat's key; off unless the owner turns it on.
+  const planSecret = secret();
+  sessions.planTool = { enabled: () => !!settings.planTool, url: () => `${origin}/chat-plan/tool`, secret: planSecret };
   mobile = await new MobileGateway({ ...mobileOptions, transcripts, readAloud, dictation, chooseDictation, repo, uiDir, stateDir, sessions, attachments, closeChat, settings: () => settings, changed: state => broadcast('mobile-state', { mobile: state }) }).init();
   const wss = new WebSocketServer({ noServer: true, maxPayload: 128 * 1024 });
   server.on('upgrade', (request, socket, head) => {
@@ -485,13 +576,13 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
   try { watcher = watch(path.join(repo, 'workspace', 'workspace.json'), () => broadcast('workspace-changed', {})); watcher.on('error', () => {}); } catch { /* Registry may be created after first setup. */ }
   const restoreTimer = restoreSessions ? setTimeout(() => sessions.restore().catch(error => sessions.emit('service-error', error)), 100) : null;
   return {
-    origin, contentOrigin: files.origin, token, sessions, coordinator, quick, workspace, cards, files, projects, knowledge, integrations, mobile,
+    origin, contentOrigin: files.origin, token, sessions, handoffs, coordinator, quick, workspace, cards, files, projects, knowledge, integrations, mobile,
     urls: { workspace: `${origin}/?desktop=1&surface=workspace&token=${token}`, chats: `${origin}/?desktop=1&surface=chats&token=${token}` },
       nativeMessage: event => nativeSettings.receive(event),
       async close() {
         if (closing) return; closing = true; mcp.close(); nativeSettings.close(); await files.writes.catch(() => {});
       watcher?.close(); clearTimeout(restoreTimer); coordinator.close(); clearTimeout(settingsTimer); await saveSettings(); await transcriptSave; await quick.saves; await workspace.writes;
-      dictation.close(); await mobile.close();
+      dictation.close(); await mobile.close(); await games.close();
       for (const ws of wss.clients) ws.terminate();
       wss.close(); await sessions.close();
       server.closeAllConnections(); contentServer.closeAllConnections();
