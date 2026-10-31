@@ -77,8 +77,11 @@ Git). The new chat uses the same agent, folder, permission and effort settings a
 receives one first-message argument naming that file. Claude also receives
 `--add-dir` for the handoff folder. Nothing changes in the original chat.
 
-`settings.groupTabsByProject` groups open tabs by working folder. A group keeps
-the position of its first tab; tabs reorder only within their project.
+
+**Group tabs by project** in the Chat header organises open tabs into named
+groups by working folder. Existing project grouping and its saved order migrate
+automatically to the 0.5.2 group model. Drag a group or use Alt+Left/Right on its
+header to reorder it; right-click offers the native group controls.
 
 Fullscreen Claude scrolls its own conversation. Terminal snapshots preserve
 both mouse tracking and the requested SGR encoding, including saved screens,
