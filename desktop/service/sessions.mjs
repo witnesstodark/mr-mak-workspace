@@ -11,7 +11,9 @@ import { claudeTranscript, codexTranscript, tailNativeFile } from './native-even
 import { findCodexChat, newerCodexRollout } from './codex-history.mjs';
 import { englishTitle, groupLabel, restoredTitle } from './titles.mjs';
 import { defaultWorkerEffort, workerEfforts } from './effort.mjs';
+import { projectKey } from './recent-projects.mjs';
 import { ptyOptions } from './platform.mjs';
+import { composerText, terminalPrompt } from './terminal-prompt.mjs';
 import { opencodeVersion, opencodeEnvironment, readOpencodeState, watchOpencode } from './opencode.mjs';
 import { prepareAntigravityLog, readAntigravityConversation, validAntigravityId, watchAntigravity } from './antigravity.mjs';
 
@@ -39,6 +41,13 @@ export const groupRanks = items => {
   }
   return item => (item.group ? ranks.get(`${item.pinned}:${item.group}`) : undefined) ?? item.tabOrder;
 };
+
+// What a terminal sends by itself: device and mode replies, focus in and out,
+// OSC colour answers, and mouse reports while the CLI tracks the mouse (moving
+// the pointer over a fullscreen Claude chat sends them continuously).
+// eslint-disable-next-line no-control-regex
+const REPORT = /^(?:\x1b\[[?>0-9;]*[RcnIO]|\x1b\[\?[0-9;]*\$y|\x1b\[<\d+;\d+;\d+[Mm]|\x1b\[M[\s\S]{3}|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\))+$/;
+export const terminalReport = data => REPORT.test(data);
 
 export class Sessions extends EventEmitter {
   constructor(repo, stateDir) {
@@ -390,11 +399,17 @@ export class Sessions extends EventEmitter {
       target.write(`\x1b[200~${clean}\x1b[201~`);
       // The native CLI finishes handling a paste asynchronously. A quick Enter
       // can be swallowed by a paste guard, especially after resume.
-      if (submit) setTimeout(() => { if (session.process === target) target.write('\r'); }, 500);
+      const typedAt = session.lastInputAt;
+      if (submit) setTimeout(() => {
+        if (session.process !== target) return;
+        target.write('\r');
+        // Right after a slash command, such as an effort switch, Claude Code can
+        // swallow that Enter too. One more submits a message left in its composer.
+        if (session.agent === 'claude') setTimeout(() => void this.resubmit(session, target, typedAt).catch(() => {}), 1500);
+      }, 500);
     } else session.process.write(data);
-    if (!coordinator && !/^\x1b\[[?>0-9;]*[RcnIO]$/.test(data)) session.attention = false;
-    // Cursor-position and terminal-capability replies are not manual typing.
-    if (!coordinator && !/^\x1b\[[?>0-9;]*[RcnIO]$/.test(data)) session.lastInputAt = new Date().toISOString();
+    // Terminal replies, focus changes and mouse reports are not manual typing.
+    if (!coordinator && !terminalReport(data)) { session.attention = false; session.lastInputAt = new Date().toISOString(); }
     if (data.includes('\r') || submit) {
       this.beginDiscovery(session);
       // Antigravity's first Enter can be login, theme or workspace-trust setup.
@@ -404,6 +419,16 @@ export class Sessions extends EventEmitter {
     }
     this.changed(session);
     return { delivered: true, sessionId: id, name: session.name, note: 'Text delivered to the terminal. Check the screen for CLI readiness or permission prompts; delivery does not confirm the agent accepted the task.' };
+  }
+
+  // A long paste can still be settling, so it is checked up to three times.
+  async resubmit(session, target, typedAt, tries = 3) {
+    // Text the person typed in the terminal since then is theirs to send.
+    if (session.process !== target || session.lastInputAt !== typedAt) return;
+    const { screen } = await this.read(session.id, 150);
+    if (terminalPrompt(screen) || !composerText(screen)) return;
+    target.write('\r');
+    if (tries > 1) setTimeout(() => void this.resubmit(session, target, typedAt, tries - 1).catch(() => {}), 1500);
   }
 
   // Keys Mr. Mak presses on the user's behalf, such as menu navigation. They are
@@ -440,6 +465,71 @@ export class Sessions extends EventEmitter {
     if (value !== null && (typeof value !== 'string' || !/^#[0-9a-f]{6}$/i.test(value))) throw new Error('Choose a valid tab color.');
     const session = this.get(id); session.tabColor = value?.toLowerCase() || null; this.changed(session);
     return publicSession(session);
+  }
+  // Convert project-based ordering into ordinary named groups. The same action
+  // is used for the old settings migration and the header's project shortcut.
+  async groupByProject(projectOrder = []) {
+    const open = [...this.items.values()].filter(item => item.open).sort((a, b) => Number(b.pinned) - Number(a.pinned) || a.tabOrder - b.tabOrder);
+    const projects = new Map();
+    for (const item of open) {
+      const key = projectKey(item.cwd);
+      if (!projects.has(key)) projects.set(key, []);
+      projects.get(key).push(item);
+    }
+    const reserved = new Map();
+    for (const item of this.items.values()) {
+      if (!item.group) continue;
+      if (!reserved.has(item.group)) reserved.set(item.group, new Set());
+      reserved.get(item.group).add(projectKey(item.cwd));
+    }
+    const names = new Map();
+    for (const [key, members] of projects) {
+      const existing = [...reserved].find(([, folders]) => folders.size === 1 && folders.has(key));
+      if (existing) { names.set(key, existing[0]); continue; }
+      let base = members[0].cwd.split(/[\\/]/).filter(Boolean).at(-1)?.slice(0, 50) || 'Project';
+      try { base = groupLabel(base) || 'Project'; } catch { base = 'Project'; }
+      if (Object.hasOwn(Object.prototype, base)) base += ' project';
+      let name = base, suffix = 2;
+      while (reserved.has(name)) name = `${base} (${suffix++})`;
+      reserved.set(name, new Set([key])); names.set(key, name);
+    }
+    const rank = new Map();
+    if (Array.isArray(projectOrder)) for (const [index, folder] of projectOrder.entries()) {
+      if (typeof folder === 'string' && !rank.has(projectKey(folder))) rank.set(projectKey(folder), index);
+    }
+    let order = 0;
+    for (const pinned of [true, false]) {
+      const keys = [...new Set(open.filter(item => !!item.pinned === pinned).map(item => projectKey(item.cwd)))];
+      keys.sort((a, b) => (rank.get(a) ?? Infinity) - (rank.get(b) ?? Infinity));
+      for (const key of keys) for (const item of projects.get(key).filter(item => !!item.pinned === pinned)) {
+        const group = names.get(key), tabOrder = order++;
+        if (item.group !== group || item.tabOrder !== tabOrder) { item.group = group; item.tabOrder = tabOrder; this.changed(item); }
+      }
+    }
+    await this.persist();
+    return { grouped: open.length, groups: projects.size };
+  }
+  // Open tabs are grouped by project when each folder's tabs share one group that
+  // holds only that folder. The frontend (chatOrder.ts) mirrors this.
+  projectGrouped() {
+    const open = this.active(), groups = new Map(), folders = new Map();
+    for (const item of open) {
+      const key = projectKey(item.cwd);
+      if (!item.group || (groups.get(key) ?? item.group) !== item.group || (folders.get(item.group) ?? key) !== key) return false;
+      groups.set(key, item.group); folders.set(item.group, key);
+    }
+    return open.length > 0;
+  }
+  // The header's project button. Ungrouping keeps the visible order, and closed
+  // chats keep their group, so grouping again restores the same names.
+  async toggleProjectGroups() {
+    if (!this.projectGrouped()) return this.groupByProject();
+    for (const [tabOrder, { id }] of this.active().entries()) {
+      const item = this.items.get(id);
+      if (item.group || item.tabOrder !== tabOrder) { item.group = null; item.tabOrder = tabOrder; this.changed(item); }
+    }
+    await this.persist();
+    return { grouped: 0, groups: 0 };
   }
   async assign(id, value) {
     const session = this.get(id);

@@ -20,7 +20,9 @@ export function nativeActivity(record, agent) {
     if (record.payload?.type === 'turn_aborted') return { kind: 'turn-interrupted' };
   }
   if (agent === 'claude' && !record.isSidechain) {
-    if (record.type === 'user' && !record.isMeta) {
+    // A compaction summary is written as a user record, also by the idle compaction
+    // that runs while no turn is open; it neither starts nor continues a turn.
+    if (record.type === 'user' && !record.isMeta && !record.isCompactSummary) {
       const content = record.message?.content;
       const interrupted = value => typeof value === 'string' && value.startsWith('[Request interrupted by user');
       if (interrupted(content) || Array.isArray(content) && content.some(item => item.type === 'text' && interrupted(item.text))) return { kind: 'turn-interrupted' };

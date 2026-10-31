@@ -57,7 +57,12 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
   const environment = parseEnv(await readFile(path.join(repo, '.env'), 'utf8').catch(() => ''));
   const settingsPath = path.join(stateDir, 'settings.json');
   const savedSettings = await readJson(settingsPath, null);
-  let settings = { defaultAgent: 'codex', defaultBypass: false, coordinatorModel: environment.MRMAK_COORDINATOR_MODEL?.trim() || null, terminalFontSize: 13, terminalAppearance: 'original', workspaceTheme: 'dark', coordinatorEffort: 'medium', voiceName: 'cedar', voiceStyle: defaultVoiceStyle, handoffAfter: 40, groupTabsByProject: false, systemEvents: 'compact', ...savedSettings };
+  let settings = { defaultAgent: 'codex', defaultBypass: false, coordinatorModel: environment.MRMAK_COORDINATOR_MODEL?.trim() || null, terminalFontSize: 13, terminalAppearance: 'original', workspaceTheme: 'dark', coordinatorEffort: 'medium', voiceName: 'cedar', voiceStyle: defaultVoiceStyle, handoffAfter: 40, groupTabsByProject: false, projectOrder: [], systemEvents: 'compact', ...savedSettings };
+  if (settings.groupTabsByProject === true) {
+    await sessions.groupByProject(settings.projectOrder);
+    settings.groupTabsByProject = false;
+    await saveJson(settingsPath, settings);
+  }
   if (await dictation.initializeProvider?.(settings, savedSettings !== null)) await saveJson(settingsPath, settings);
   dictation.providerChoice = () => settings.transcribeProvider || null;
   const chooseDictation = async provider => {
@@ -325,6 +330,7 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
           await saveSettings(); broadcast('settings', { settings }); return json(response, 200, settings);
         }
         if (method === 'POST' && url.pathname === '/api/sessions') { const session = await sessions.create({ ...data, bypass: data.bypass ?? settings.defaultBypass }); await integrations.publish('session', { event: 'started', session }); focus(session.id); return json(response, 201, session); }
+        if (method === 'POST' && url.pathname === '/api/groups/by-project') return json(response, 200, await sessions.toggleProjectGroups());
         if (method === 'POST' && url.pathname === '/api/groups/move') return json(response, 200, await sessions.moveGroup(data.group, data.pinned, data.targetId, data.position));
         if (method === 'POST' && url.pathname === '/api/groups/rename') {
           // A renamed group keeps its color and collapsed state; merging into an
