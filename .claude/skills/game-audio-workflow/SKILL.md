@@ -17,6 +17,10 @@ desired length and review state. Reuse the user's chosen provider, voice and
 references. Inspect current tool capabilities instead of copying a stale model
 identifier. Keep generation IDs to recover pending jobs without duplicating them.
 
+For a project using local ComfyUI/MMAudio, read
+[the resumable local pipeline](references/comfyui-mmaudio.md). Other projects keep
+their selected provider; this reference does not change that choice.
+
 Use stable take IDs and direct local playback. Keep source, audition edit and
 runtime file distinct. Record cut points, fades, gain/pitch/time changes and
 source hashes. A compressed preview is not a lossless production master.

@@ -1,6 +1,6 @@
 # Project skills
 
-Twenty-two skills live in this project. `.agents/skills` is the maintained source
+Twenty-three skills live in this project. `.agents/skills` is the maintained source
 for Codex; `.claude/skills` contains complete, identical copies for Claude Code,
 including scripts and references. Both Skills sections open the full instructions.
 These are local project files, not global installations.
@@ -22,6 +22,7 @@ maintained source. `npm run test:template` checks that the two copies agree.
 | [fal-ai-generation](../.agents/skills/fal-ai-generation/SKILL.md) | Generate and edit images, create video, audio, 3D assets or material maps through fal.ai MCP or the Python queue client. Use for fal model discovery, reference uploads, generation, recovery and local delivery. |
 | [feature-handoff](../.agents/skills/feature-handoff/SKILL.md) | Prepare a precise handoff for an agent or developer implementing a feature, continuing a task or reviewing a finished change. |
 | [game-animation-integration](../.agents/skills/game-animation-integration/SKILL.md) | Bring approved animation into a game, including clip mapping, turn exits, locomotion phase and gameplay event timing. |
+| [game-architecture-foundation](../.agents/skills/game-architecture-foundation/SKILL.md) | Set up or audit a game's core architecture so tuning, new content and testing stay cheap: data-driven numbers, modular entity definitions, simulation apart from presentation, one command path, in-game development tools, data scenarios and versioned saves. |
 | [game-audio-workflow](../.agents/skills/game-audio-workflow/SKILL.md) | Audition, select and integrate sounds with stable asset IDs, contact events, mixer rules and native listening checks. |
 | [game-level-design](../.agents/skills/game-level-design/SKILL.md) | Build reviewable level drafts, validate scale and traversal, and apply accepted changes to the actual scene. |
 | [game-ui-studio](../.agents/skills/game-ui-studio/SKILL.md) | Work as the Game UI Studio Copilot: answer with `gameui-edit` blocks, bring a project's UI art into the studio and load the game's existing screens as studio screens. |
