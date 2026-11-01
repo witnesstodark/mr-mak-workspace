@@ -12,6 +12,9 @@ the event, camera distance or crowd mix.
 
 ## Prepare and select material
 
+For sourcing, generator prompts, editing and loudness preparation, see
+`sound-effects-workflow`.
+
 For each event, record its meaning, motion anchor, source or generation route,
 desired length and review state. Reuse the user's chosen provider, voice and
 references. Inspect current tool capabilities instead of copying a stale model

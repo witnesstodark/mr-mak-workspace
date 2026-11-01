@@ -2,6 +2,7 @@ import { open, stat, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { StringDecoder } from 'node:string_decoder';
+import { questionItems, questionKey } from './claude-questions.mjs';
 
 export function completedTurn(record, agent) {
   if (agent === 'codex' && record.type === 'event_msg' && record.payload?.type === 'task_complete') return { kind: 'turn-completed', id: record.payload.turn_id, text: 'The agent finished its turn. Review the result.', preview: String(record.payload.last_agent_message || '').slice(-350) };
@@ -20,14 +21,22 @@ export function nativeActivity(record, agent) {
     if (record.payload?.type === 'turn_aborted') return { kind: 'turn-interrupted' };
   }
   if (agent === 'claude' && !record.isSidechain) {
+    const content = record.message?.content;
+    const parts = Array.isArray(content) ? content : [];
     if (record.type === 'user' && !record.isMeta) {
-      const content = record.message?.content;
       const interrupted = value => typeof value === 'string' && value.startsWith('[Request interrupted by user');
-      if (interrupted(content) || Array.isArray(content) && content.some(item => item.type === 'text' && interrupted(item.text))) return { kind: 'turn-interrupted' };
+      const toolResults = parts.filter(item => item.type === 'tool_result' && typeof item.tool_use_id === 'string').map(item => item.tool_use_id);
+      if (interrupted(content) || parts.some(item => item.type === 'text' && interrupted(item.text))) return { kind: 'turn-interrupted', ...(toolResults.length ? { toolResults } : {}) };
       // Tool results also confirm ongoing work; file snapshots and metadata do not.
-      if (content) return { kind: 'turn-started' };
+      if (content) return { kind: 'turn-started', ...(toolResults.length ? { toolResults } : {}) };
     }
-    if (record.type === 'assistant' && record.message?.stop_reason !== 'end_turn') return { kind: 'turn-started' };
+    if (record.type === 'assistant' && record.message?.stop_reason !== 'end_turn') {
+      // The question dialog waits for the user, so the chat needs an answer.
+      const ask = parts.find(item => item.type === 'tool_use' && item.name === 'AskUserQuestion');
+      const items = ask ? questionItems(ask.input) : [];
+      if (items.length) return { kind: 'question', toolUseId: ask.id, key: questionKey(items), text: 'Claude is asking you a question.' };
+      return { kind: 'turn-started' };
+    }
   }
   return null;
 }

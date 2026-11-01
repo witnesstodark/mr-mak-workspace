@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import TerminalColors from './TerminalColors'
 import { api, onServiceEvent, useDesktop } from './client'
 import type { Settings } from './types'
 import { Icon } from './Icons'
@@ -14,6 +15,8 @@ export default function WorkspaceSettings({ onClose }: { onClose: () => void }) 
   const [native, setNative] = useState<NativeSettings>({ available: false, winKey: false })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [colorsOpen, setColorsOpen] = useState(false)
+  const closeColors = useCallback(() => setColorsOpen(false), [])
   useEffect(() => {
     const refresh = () => api<NativeSettings>('/native/settings').then(setNative).catch(error => setError(String(error.message || error)))
     void refresh()
@@ -34,10 +37,11 @@ export default function WorkspaceSettings({ onClose }: { onClose: () => void }) 
     <div className="settings-scroll"><section><h3>Appearance</h3><ThemePicker /></section><section><h3>{isMac ? 'Shortcut' : 'Windows'}</h3><label className="setting-toggle"><span>{native.label || (isMac ? '⌃⌥Space' : 'Win key')} shows Iaar<small>{isMac ? 'Bring back open windows from any app.' : 'Bring back open windows. Win shortcuts keep working; Ctrl+Esc opens Start.'}</small></span><input type="checkbox" checked={native.winKey} disabled={busy || !native.available} onChange={event => void winKey(event.target.checked)} /></label>{!native.available && <p>{native.error || 'Available in the Windows and macOS desktop app.'}</p>}</section>
     <section><h3>Chats</h3><label>Default agent<select disabled={busy} value={settings.defaultAgent} onChange={event => void change({ defaultAgent: event.target.value as Settings['defaultAgent'] })}><option value="codex">Codex</option><option value="claude">Claude</option><option value="antigravity">Antigravity</option><option value="opencode">OpenCode</option><option value="kimi">Kimi</option><option value="cursor">Cursor</option><option value="shell">{shellName}</option></select></label>
       <label>Terminal text size<select disabled={busy} value={settings.terminalFontSize || 13} onChange={event => void change({ terminalFontSize: Number(event.target.value) })}>{Array.from({ length: 15 }, (_, i) => i + 10).map(size => <option key={size} value={size}>{size} px</option>)}</select></label>
-      <label>Terminal appearance<select disabled={busy} value={settings.terminalAppearance || 'original'} onChange={event => void change({ terminalAppearance: event.target.value as Settings['terminalAppearance'] })}><option value="original">Original CLI colors</option><option value="focus">Iaar Focus · muted colors</option></select></label><p>Original preserves CLI colors, including added and removed lines. Focus uses muted colors. Your choice is saved for all chats and applies immediately without restarting them.</p>
+      <label>Terminal appearance<select disabled={busy} value={settings.terminalAppearance || 'original'} onChange={event => void change({ terminalAppearance: event.target.value as Settings['terminalAppearance'] })}><option value="original">Original CLI colors</option><option value="focus">Iaar Focus · muted colors</option></select></label><p>Original preserves CLI colors, including added and removed lines. Focus uses muted colors. Both show blocks that ask for your decision or review in amber. Your choice is saved for all chats and applies immediately without restarting them.</p>
+      <button type="button" className="terminal-colors-open" onClick={() => setColorsOpen(true)}>Change terminal colors<small>{Object.keys(settings.terminalColors || {}).length ? `${Object.keys(settings.terminalColors || {}).length} custom` : 'Default'}</small></button>
       <label className="setting-toggle"><span>Bypass CLI permissions<small>Default for new chats.</small></span><input type="checkbox" checked={settings.defaultBypass} disabled={busy} onChange={event => void change({ defaultBypass: event.target.checked })} /></label>
     </section><DictationSettings info={dictation.info} onChange={dictation.choose} /><section><h3>Iaar</h3><label>Voice<select disabled={busy} value={settings.voiceName || 'cedar'} onChange={event => void change({ voiceName: event.target.value })}><option value="cedar">Cedar</option><option value="marin">Marin</option></select></label><label>Coordinator reasoning<select disabled={busy} value={settings.coordinatorEffort || 'medium'} onChange={event => void change({ coordinatorEffort: event.target.value as Settings['coordinatorEffort'] })}><option value="medium">Medium</option><option value="high">High</option></select></label><p>Voice changes apply to your next conversation.</p></section>
       <section><h3>Project</h3><p className="settings-repo">{repo}</p><p>Skills, knowledge and processes belong to this repository.</p></section>
       {error && <p className="desk-error-inline" role="alert">{error}</p>}
-    </div></div>
+    </div>{colorsOpen && <TerminalColors onClose={closeColors} />}</div>
 }

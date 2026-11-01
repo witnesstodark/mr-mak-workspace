@@ -24,6 +24,8 @@ import { KnowledgeManager, MarkdownKnowledgeProvider } from './knowledge/provide
 import { IntegrationManager } from './integrations/manager.mjs';
 import { MobileDictation } from './mobile-dictation.mjs';
 import { MobileGateway } from './mobile.mjs';
+import { ClaudeQuestions } from './claude-questions.mjs';
+import { phoneName, terminalColors } from './display-settings.mjs';
 
 const listen = server => new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', () => resolve(`http://127.0.0.1:${server.address().port}`)); });
 
@@ -41,6 +43,7 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
   const integrations = await new IntegrationManager(stateDir).init();
   const mcp = new McpInventory(repo, mcpOptions);
   const sessions = await new Sessions(repo, stateDir).init();
+  const questions = sessions.questions = new ClaudeQuestions({ stateDir });
   const environment = parseEnv(await readFile(path.join(repo, '.env'), 'utf8').catch(() => ''));
   const settingsPath = path.join(stateDir, 'settings.json');
   const savedSettings = await readJson(settingsPath, null);
@@ -178,6 +181,8 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
       const url = new URL(request.url, origin);
       if (request.headers.host !== new URL(origin).host) throw Object.assign(new Error('Unexpected host'), { status: 403 });
       if (url.pathname === '/health') return json(response, 200, { service: 'iaar', version: '0.5.1' });
+      // Claude's question hook authenticates with its own per-terminal token.
+      if (url.pathname === '/hooks/claude-question') return await questions.handle(request, response);
       if (url.pathname.startsWith('/api/')) {
         authorize(request);
         const method = request.method;
@@ -271,6 +276,8 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
           return json(response, 200, preview);
         }
         if (method === 'POST' && url.pathname === '/api/settings') {
+          // Validated before anything changes: an invalid color or name refuses the whole request.
+          const display = { ...('terminalColors' in data ? { terminalColors: terminalColors(data.terminalColors) } : {}), ...('phoneName' in data ? { phoneName: phoneName(data.phoneName) } : {}) };
           if (inventory().some(item => item.id === data.defaultAgent)) settings.defaultAgent = data.defaultAgent;
           if (typeof data.defaultBypass === 'boolean') settings.defaultBypass = data.defaultBypass;
           if (Number.isInteger(data.terminalFontSize) && data.terminalFontSize >= 10 && data.terminalFontSize <= 24) settings.terminalFontSize = data.terminalFontSize;
@@ -278,7 +285,10 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
           if (['dark', 'light', 'system'].includes(data.workspaceTheme)) settings.workspaceTheme = data.workspaceTheme;
           if (['medium', 'high'].includes(data.coordinatorEffort)) settings.coordinatorEffort = data.coordinatorEffort;
           if (['cedar', 'marin'].includes(data.voiceName)) settings.voiceName = data.voiceName;
-          await saveSettings(); broadcast('settings', { settings }); return json(response, 200, settings);
+          Object.assign(settings, display);
+          await saveSettings(); broadcast('settings', { settings });
+          if (Object.keys(display).length) mobile.broadcast({ type: 'display', ...mobile.display() });
+          return json(response, 200, settings);
         }
         if (method === 'POST' && url.pathname === '/api/sessions') { const session = await sessions.create({ ...data, bypass: data.bypass ?? settings.defaultBypass }); await integrations.publish('session', { event: 'started', session }); focus(session.id); return json(response, 201, session); }
         const sessionRoute = /^\/api\/sessions\/([\w-]+)(?:\/(\w+))?$/.exec(url.pathname);
@@ -350,7 +360,13 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
   });
   const origin = await listen(server);
   files.uiOrigin = origin;
-  mobile = await new MobileGateway({ ...mobileOptions, dictation, chooseDictation, repo, uiDir, stateDir, sessions, attachments, closeChat, settings: () => settings, changed: state => broadcast('mobile-state', { mobile: state }) }).init();
+  questions.origin = origin;
+  mobile = await new MobileGateway({ ...mobileOptions, dictation, chooseDictation, repo, uiDir, stateDir, sessions, attachments, closeChat, questions, settings: () => settings, changed: state => broadcast('mobile-state', { mobile: state }) }).init();
+  const questionSession = id => { try { return sessions.get(id); } catch { return null; } };
+  // A subagent's question reaches Iaar only through its hook.
+  questions.on('asked', item => { const session = questionSession(item.sessionId); if (session) sessions.nativeEvent(session, { kind: 'question', text: 'Claude is asking you a question.' }); });
+  questions.on('delivered', item => { const session = questionSession(item.sessionId); if (session) sessions.nativeEvent(session, { kind: 'turn-started' }); });
+  questions.on('changed', id => mobile.broadcast({ type: 'transcript-changed', id }));
   const wss = new WebSocketServer({ noServer: true, maxPayload: 128 * 1024 });
   server.on('upgrade', (request, socket, head) => {
     const url = new URL(request.url, origin);
@@ -393,7 +409,7 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
       async close() {
         if (closing) return; closing = true; mcp.close(); nativeSettings.close(); await files.writes.catch(() => {});
       watcher?.close(); clearTimeout(restoreTimer); coordinator.close(); clearTimeout(settingsTimer); await saveSettings(); await transcriptSave; await quick.saves; await workspace.writes;
-      dictation.close(); await mobile.close();
+      dictation.close(); await mobile.close(); questions.close();
       for (const ws of wss.clients) ws.terminate();
       wss.close(); await sessions.close();
       server.closeAllConnections(); contentServer.closeAllConnections();

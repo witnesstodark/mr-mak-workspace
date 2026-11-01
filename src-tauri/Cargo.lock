@@ -1662,6 +1662,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "iaar-workspace"
+version = "0.5.1"
+dependencies = [
+ "drag",
+ "libc",
+ "rfd",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-global-shortcut",
+ "tauri-plugin-single-instance",
+ "tauri-plugin-window-state",
+ "trash",
+ "windows 0.61.3",
+ "windows-sys 0.60.2",
+]
+
+[[package]]
 name = "iana-time-zone"
 version = "0.1.65"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2202,25 +2221,6 @@ checksum = "bb85c154ba489f01b25c0d36ae69a87e4a1c73a72631fc6c0eb6dde34a73e44b"
 dependencies = [
  "num-traits",
  "pxfm",
-]
-
-[[package]]
-name = "iaar-workspace"
-version = "0.5.1"
-dependencies = [
- "drag",
- "libc",
- "rfd",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-global-shortcut",
- "tauri-plugin-single-instance",
- "tauri-plugin-window-state",
- "trash",
- "windows 0.61.3",
- "windows-sys 0.60.2",
 ]
 
 [[package]]

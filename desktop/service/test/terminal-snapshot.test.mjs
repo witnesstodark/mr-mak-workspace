@@ -48,6 +48,22 @@ test('mouse encoding follows resets, parameter order and pixel mode without pars
   } finally { terminal.dispose(); }
 });
 
+test('a subscriber receives all retained scrollback, not only the last 1500 lines', async () => {
+  const repo = await mkdtemp(path.join(os.tmpdir(), 'iaar-scrollback-'));
+  const sessions = await new Sessions(repo, path.join(repo, 'state')).init();
+  const copy = new headless.Terminal({ cols: 80, rows: 24, scrollback: 5000, allowProposedApi: true });
+  try {
+    const session = sessions.make({ id: 'long-chat', agent: 'codex', name: 'Long chat', open: true, cols: 80, rows: 24 });
+    sessions.items.set(session.id, session); await sessions.hydrate(session);
+    await write(session.terminal, Array.from({ length: 2600 }, (_, line) => `Line ${line + 1}\r\n`).join(''));
+    // The phone re-subscribes whenever it returns; it must get what the desktop holds.
+    await write(copy, (await sessions.snapshot(session.id)).data);
+    const buffer = copy.buffer.active, lines = [];
+    for (let index = 0; index < buffer.length; index++) lines.push(buffer.getLine(index).translateToString(true));
+    assert.ok(lines.includes('Line 1') && lines.includes('Line 2600'));
+  } finally { copy.dispose(); await sessions.close(); }
+});
+
 test('saved session screens retain the fullscreen mouse protocol after service reload', async () => {
   const repo = await mkdtemp(path.join(os.tmpdir(), 'iaar-snapshot-'));
   const state = path.join(repo, 'state');

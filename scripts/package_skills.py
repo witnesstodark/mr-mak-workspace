@@ -11,13 +11,15 @@ from urllib.parse import unquote
 
 ROOT = Path(__file__).resolve().parent.parent
 SKILLS = (
-    '3d-production-routing', 'blender-game-animation', 'character-sheet-pipeline',
+    '2d-asset-prep', '2d-production-routing', '3d-production-routing', 'blender-game-animation', 'character-sheet-pipeline',
     'fal-ai-generation', 'feature-handoff', 'game-animation-integration',
     'game-audio-workflow', 'game-level-design', 'game-ui-workflow',
-    'game-vfx-workflow', 'gameplay-visual-review', 'higgsfield-workflow',
+    'game-vfx-workflow', 'gameplay-visual-review', 'godot-2d-integration',
+    'higgsfield-workflow',
     'image-reference-workflow', 'img2threejs', 'materials-to-game',
-    'motion-reference-workflow', 'plan', 'video-watch', 'voice-dictation-setup',
-    'workspace-authoring',
+    'motion-reference-workflow', 'pixel-art-workflow', 'pixel-text-sprites', 'plan',
+    'sound-effects-workflow', 'sprite-animation-workflow', 'tileset-workflow', 'vector-graphics-workflow',
+    'video-watch', 'voice-dictation-setup', 'workspace-authoring',
 )
 SUPPORT = (
     'docs/skills.md', 'processes/creative-production.md',

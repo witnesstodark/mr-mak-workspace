@@ -1,0 +1,75 @@
+# Example .pxt file: a spinning coin and a bobbing slime with a recolour.
+# Render: python scripts/pxt.py render references/example.pxt --out <folder> --scale 8
+
+palette base
+  . transparent
+  k #1a1c2c
+  o #b86f50
+  y #f7c95a
+  w #fff6d3
+  g #38b764
+  G #a7f070
+  d #257179
+
+palette poison          # variant: same keys, new colours for the slime
+  g #8a3f9a
+  G #d48ce8
+  d #4a2560
+
+sprite coin 8x8
+  pivot 4,7
+  anim spin 0-3 fps=10
+  frame face
+    ..kkkk..
+    .kyyyyk.
+    kywyyyok
+    kywyyyok
+    kyyyyyok
+    kyyyyyok
+    .kooook.
+    ..kkkk..
+  frame turn
+    ..kkkk..
+    ..kyyk..
+    .kwyyok.
+    .kwyyok.
+    .kyyyok.
+    .kyyyok.
+    ..kook..
+    ..kkkk..
+  frame edge
+    ...kk...
+    ...kk...
+    ...kk...
+    ...kk...
+    ...kk...
+    ...kk...
+    ...kk...
+    ...kk...
+  frame back from=turn flip=h
+
+sprite slime 12x10
+  pivot 6,9
+  anim idle 0,1 fps=3
+  frame
+    ............
+    ............
+    ....kkkk....
+    ..kkGGGgkk..
+    .kGGwGggggk.
+    .kGgkggkggk.
+    kggggggggddk
+    kgggggggdddk
+    kddddddddddk
+    .kkkkkkkkkk.
+  frame squash
+    ............
+    ............
+    ............
+    ....kkkk....
+    .kkGGGGggkk.
+    kGGwkggkgggk
+    kGggggggggdk
+    kgggggggdddk
+    kddddddddddk
+    .kkkkkkkkkk.

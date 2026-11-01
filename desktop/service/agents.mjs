@@ -84,7 +84,7 @@ export function nativeConversationId(value) {
   return value;
 }
 
-export function terminalCommand(agent, { bypass = false, resumeId, nativeId, effort, opencodeMajor = 1, antigravityLog } = {}) {
+export function terminalCommand(agent, { bypass = false, resumeId, nativeId, effort, opencodeMajor = 1, antigravityLog, settings } = {}) {
   if (!AGENTS.some(item => item.id === agent)) throw new Error('Unknown agent');
   resumeId = nativeConversationId(resumeId); nativeId = nativeConversationId(nativeId);
   const command = agent === 'shell' ? shellCommand() : agent === 'cursor' ? { file: cursorBinary(), args: [] } : { file: commandPath(AGENTS.find(item => item.id === agent).command), args: [] };
@@ -102,6 +102,8 @@ export function terminalCommand(agent, { bypass = false, resumeId, nativeId, eff
     else if (nativeId) args.push('--session-id', nativeId);
     if (bypass) args.push('--dangerously-skip-permissions');
     if (effort) args.push('--effort', effort);
+    // Iaar's question hook: hooks from --settings are added to the user's own.
+    if (settings) args.push('--settings', settings);
   } else if (agent === 'antigravity') {
     if (resumeId && !validAntigravityId(resumeId)) throw new Error('Use the Antigravity conversation UUID from its /resume picker.');
     if (resumeId) args.push('--conversation', resumeId);
@@ -135,7 +137,8 @@ export function childEnvironment(repo) {
   }
   // Drop host-agent identity from the parent so every terminal is an independent CLI.
   for (const key of Object.keys(env)) {
-    if (/^(CLAUDECODE|CLAUDE_CODE_ENTRYPOINT|CODEX_THREAD_ID|CODEX_TURN_ID|CODEX_SHELL|ANTIGRAVITY_AGENT|IAAR_TOKEN|IAAR_PARENT_PID|CURSOR_AGENT|CURSOR_CONVERSATION_ID|CURSOR_REQUEST_ID|CURSOR_LAYOUT|CURSOR_WORKSPACE_LABEL|CURSOR_RIPGREP_PATH|AGENT_TRANSCRIPTS)$/.test(key) || key.startsWith('IAAR_OPENCODE_') || key.startsWith('CURSOR_AGENT_STORE_') || key.startsWith('__CURSOR_')) delete env[key];
+    // A Claude child-session marker would also turn off the chat's transcript.
+    if (/^(CLAUDECODE|CLAUDE_CODE_ENTRYPOINT|CLAUDE_CODE_CHILD_SESSION|CLAUDE_CODE_SESSION_ID|CLAUDE_CODE_SESSION_ATTENDED|CLAUDE_CODE_MESSAGING_SOCKET|CLAUDE_CODE_MESSAGING_TOKEN|CLAUDE_PID|CODEX_THREAD_ID|CODEX_TURN_ID|CODEX_SHELL|ANTIGRAVITY_AGENT|IAAR_TOKEN|IAAR_PARENT_PID|CURSOR_AGENT|CURSOR_CONVERSATION_ID|CURSOR_REQUEST_ID|CURSOR_LAYOUT|CURSOR_WORKSPACE_LABEL|CURSOR_RIPGREP_PATH|AGENT_TRANSCRIPTS)$/.test(key) || key.startsWith('IAAR_OPENCODE_') || key.startsWith('CURSOR_AGENT_STORE_') || key.startsWith('__CURSOR_')) delete env[key];
   }
   return env;
 }

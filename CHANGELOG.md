@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- Show blocks that flag a problem, ask for a decision or ask for review in amber in agent chats, in both terminal appearances. Agents start them with a label such as `Needs your decision:` (see AGENTS.md).
+- Darken the chat background slightly.
+- Answer a Claude chat's questions from a paired phone. Mobile Conversation shows each question with its options and descriptions, one or several choices and an Other answer; the terminal dialog stays open and the first answer wins. A chat with an open question shows Needs your answer. Chats started before this update take phone answers from their next start.
+- Show tool calls in mobile Conversation, one line each with the command or file; open one to see its input and the start of its result.
+- Give the phone's Terminal view all of the retained scrollback, and Page up and Page down for a fullscreen CLI such as Claude's fullscreen view.
+- Rename a chat on the phone by tapping its name, or on the desktop by double-clicking its tab. Names stay English and update in every window and phone at once.
+- Add Settings → Change terminal colors: background, text, cursor, selection, the You, Agent, Details and Attention role colours, and the 16 ANSI colours, each with a picker, hex field and reset, a live preview and a contrast note. Open terminals and the phone's Terminal view change at once, without restarting chats.
+- Name this computer on the phone: Phone settings → Name on your phone sets the Home Screen icon name and the phone app's title. An icon already on the Home Screen keeps its old name until it is added again.
+- Keep a chat's transcript saved when Iaar itself was started from a Claude Code session.
+
 ## 0.5.1 - 2026-10-14
 
 - Add Antigravity CLI chats with Google sign-in, reasoning effort, per-chat native history recovery and MCP inventory. Install `agy` separately, then choose it in New chat. Model access remains controlled by Google.

@@ -1,6 +1,6 @@
 # Project skills
 
-Twenty skills live in this project. `.agents/skills` is the maintained source
+Twenty-nine skills live in this project. `.agents/skills` is the maintained source
 for Codex; `.claude/skills` contains complete, identical copies for Claude Code,
 including scripts and references. Both Skills sections open the full instructions.
 These are local project files, not global installations.
@@ -16,6 +16,8 @@ maintained source. `npm run test:template` checks that the two copies agree.
 
 | Skill | Use it for |
 | --- | --- |
+| [2d-asset-prep](../.agents/skills/2d-asset-prep/SKILL.md) | Batch-prepare 2D images: remove backgrounds, trim with shared bounds, place art on fixed canvases with pivots, clean alpha, pack and slice sheets, build previews and generate normal maps. |
+| [2d-production-routing](../.agents/skills/2d-production-routing/SKILL.md) | Set up a 2D game's art contract and choose the workflow for pixel art, sprites, animation, tilesets, cutouts, SVG graphics, UI, effects and engine import. |
 | [3d-production-routing](../.agents/skills/3d-production-routing/SKILL.md) | Choose a practical workflow for 3D concepts, generated meshes, material maps, procedural Three.js reconstruction and game animation. |
 | [blender-game-animation](../.agents/skills/blender-game-animation/SKILL.md) | Rig and animate supplied characters in Blender, revise motion from references, and deliver editable sources plus a verified game export. |
 | [character-sheet-pipeline](../.agents/skills/character-sheet-pipeline/SKILL.md) | Prepare strict-front character sheets, isolated parts and optional multiview references for 3D modeling from an approved image. |
@@ -27,15 +29,41 @@ maintained source. `npm run test:template` checks that the two copies agree.
 | [game-ui-workflow](../.agents/skills/game-ui-workflow/SKILL.md) | Take a HUD or menu from a visual study to live game data, input behavior and native review. |
 | [game-vfx-workflow](../.agents/skills/game-vfx-workflow/SKILL.md) | Develop effect layers, event timing, attachment, cleanup and in-game visual comparisons. |
 | [gameplay-visual-review](../.agents/skills/gameplay-visual-review/SKILL.md) | Verify game changes with controlled native captures and separate implementation, visual review and acceptance. |
+| [godot-2d-integration](../.agents/skills/godot-2d-integration/SKILL.md) | Bring 2D art into Godot 4 with pixel-safe imports, SpriteFrames and AnimationPlayer clips, TileSet terrains and metadata, 2D lights with normal maps, palette shaders and headless checks. |
 | [higgsfield-workflow](../.agents/skills/higgsfield-workflow/SKILL.md) | Use the official Higgsfield CLI or its Blender integration to discover models, generate requested assets and resume recorded jobs. |
 | [image-reference-workflow](../.agents/skills/image-reference-workflow/SKILL.md) | Explore image concepts and make faithful edits of accepted references for 3D or creative production, with explicit model choices and visual review. |
 | [img2threejs](../.agents/skills/img2threejs/SKILL.md) | Turn an object or character reference image into a quality-gated, animation-ready procedural Three.js model built in code. Use for image-to-3D reconstruction, detail-accurate object rebuilds, stylized/likeness-maximized human characters, sculpt specs, and staged code generation. |
 | [materials-to-game](../.agents/skills/materials-to-game/SKILL.md) | Create or apply material maps and bake a textured high-poly mesh onto a game mesh, with channel, UV and export checks. |
 | [motion-reference-workflow](../.agents/skills/motion-reference-workflow/SKILL.md) | Prepare and select character motion references, or transfer approved motion to a human reference for a later mocap workflow. |
+| [pixel-art-workflow](../.agents/skills/pixel-art-workflow/SKILL.md) | Make grid-true, palette-locked pixel art from generated or painted sources, design hue-shifted palettes and ramps, and produce recolour variants with review at game scale. |
+| [pixel-text-sprites](../.agents/skills/pixel-text-sprites/SKILL.md) | Author pixel art directly as text grids (.pxt) with palettes, frames and animations, and render 1x sheets, manifests, recolour variants and previews headlessly. |
 | [plan](../.agents/skills/plan/SKILL.md) | Turn a broad project request into a small actionable plan with concrete deliverables, dependencies and acceptance checks. |
+| [sound-effects-workflow](../.agents/skills/sound-effects-workflow/SKILL.md) | Source, generate and prepare game sound effects: library and generator choices, prompt patterns, splitting, trimming, loudness normalisation, loops, visual review and Godot import. |
+| [sprite-animation-workflow](../.agents/skills/sprite-animation-workflow/SKILL.md) | Plan and produce 2D sprite animation: directions, mirroring, frame timing, pivots, gameplay event frames, layered equipment and flipbook effects. |
+| [tileset-workflow](../.agents/skills/tileset-workflow/SKILL.md) | Build 2D tilesets: terrain autotiles, top-down 3/4 walls, variants, grid props and destructible states with collision, occlusion and navigation metadata. |
+| [vector-graphics-workflow](../.agents/skills/vector-graphics-workflow/SKILL.md) | Author, optimise and rasterise SVG icons, logos and menu shapes with exact export sizes, engine-matched rendering and pixel-art-safe conversion. |
 | [video-watch](../.agents/skills/video-watch/SKILL.md) | Inspect a local or publicly accessible video through sampled scene frames, timestamps and a visual report, especially for motion and 3D reference analysis. |
 | [voice-dictation-setup](../.agents/skills/voice-dictation-setup/SKILL.md) | Help configure optional local Whisper dictation into terminals and other apps, with language, hotkey and CPU or GPU checks. |
 | [workspace-authoring](../.agents/skills/workspace-authoring/SKILL.md) | Create or maintain Workspace cards, report tabs and Markdown deliverables with consistent styling, working media previews and clear project organization. |
+
+## 2D production
+
+Eight skills cover 2D games, pixel art in particular. `2d-production-routing`
+starts every task from a per-project art contract (view, grid, palette,
+canvases, pivots, timing) and points to the right workflow. Pixel art, sprite
+animation, tilesets, asset preparation and vector graphics include small
+Python helpers (Pillow and numpy) for grid fitting, palette checks and swaps,
+background removal, shared-bounds trimming, sheet packing, previews, normal
+maps, seam checks and 47-tile blob composition. Godot 2D integration covers
+pixel-safe imports, TileSet terrains, 2D lighting and a tested palette-swap
+shader, with an import audit and headless checks. Generators are optional; the
+skills work with any provider and with hand-made art.
+
+`sound-effects-workflow` prepares sounds before `game-audio-workflow` maps them
+to events: library or generator sourcing, prompt patterns, and a helper that
+splits takes, trims, normalises loudness (BS.1770) under a true-peak ceiling,
+makes loops and draws waveform and spectrogram sheets so an agent can review
+what it cannot hear.
 
 ## Game production in 0.4.14
 
