@@ -67,6 +67,9 @@ affected action, not just a single pose.
 Read [export and integration checks](references/engine-handoff.md) for separate
 model/clip files, bind-basis failures and turn-to-locomotion handoff.
 
+For a 2D game, the clips become sprites instead of a mesh export: lay them out
+on the timeline and render them with `blender-sprite-render`.
+
 Deliver editable source, runtime export, source references, review evidence and
 a short engine guide. Distinguish source approval, export verification and actual
 engine integration. A valid FBX does not wire a gameplay event or Animator.

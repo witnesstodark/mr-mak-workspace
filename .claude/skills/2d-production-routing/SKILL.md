@@ -21,6 +21,7 @@ proposal, and get the proposals accepted before producing more than a test set.
 | Pixel art written directly as text grids, with frames and recolours, when no generator or editor is used | `pixel-text-sprites` |
 | Directions, frames, timing, pivots, layered equipment, flipbook effects | `sprite-animation-workflow` |
 | Terrain autotiles, walls, grid props, destructible states, tile metadata | `tileset-workflow` |
+| Realistic, painted, toon or pixel sprites rendered from a 3D model in Blender, in every direction and clip with fixed light and pivot | `blender-sprite-render` |
 | Background removal, trimming, canvases, sheets, previews, normal maps | `2d-asset-prep` |
 | Icons, logos, menu shapes and other vector art as SVG | `vector-graphics-workflow` |
 | HUD, menus, icon sets and portraits as one system | `game-ui-workflow` |
@@ -59,5 +60,7 @@ need the project's engine version; record its executable path the same way.
 Example request: "We need goblin enemies for the Warrens." Read the contract;
 use `image-reference-workflow` for two silhouettes, `pixel-art-workflow` to turn
 the chosen one into game pixels, `sprite-animation-workflow` for idle and walk,
-then `godot-2d-integration` to import it and check it in a room. Success is an
+then `godot-2d-integration` to import it and check it in a room. For a
+realistic or painted look in eight directions, model and animate the enemy
+in Blender instead and render it with `blender-sprite-render`. Success is an
 approved sprite moving in the game, not a generated image.

@@ -1,6 +1,6 @@
 # Project skills
 
-Twenty-nine skills live in this project. `.agents/skills` is the maintained source
+Thirty-two skills live in this project. `.agents/skills` is the maintained source
 for Codex; `.claude/skills` contains complete, identical copies for Claude Code,
 including scripts and references. Both Skills sections open the full instructions.
 These are local project files, not global installations.
@@ -20,7 +20,9 @@ maintained source. `npm run test:template` checks that the two copies agree.
 | [2d-production-routing](../.agents/skills/2d-production-routing/SKILL.md) | Set up a 2D game's art contract and choose the workflow for pixel art, sprites, animation, tilesets, cutouts, SVG graphics, UI, effects and engine import. |
 | [3d-production-routing](../.agents/skills/3d-production-routing/SKILL.md) | Choose a practical workflow for 3D concepts, generated meshes, material maps, procedural Three.js reconstruction and game animation. |
 | [blender-game-animation](../.agents/skills/blender-game-animation/SKILL.md) | Rig and animate supplied characters in Blender, revise motion from references, and deliver editable sources plus a verified game export. |
+| [blender-sprite-render](../.agents/skills/blender-sprite-render/SKILL.md) | Render a modelled and animated 3D character or prop in Blender into 2D sprites (realistic, toon or pixel look) with a fixed orthographic camera, scale, pivot and light, 4 or 8 directions, clip and event frames, normal, depth and shadow passes, sheets and a manifest. |
 | [character-sheet-pipeline](../.agents/skills/character-sheet-pipeline/SKILL.md) | Prepare strict-front character sheets, isolated parts and optional multiview references for 3D modeling from an approved image. |
+| [elevenlabs-voices](../.agents/skills/elevenlabs-voices/SKILL.md) | Design character voices with ElevenLabs, compare candidates, and speak barks, gibberish and lines in seeded takes, with credit checks, a manifest that makes reruns safe, cleanup and a listening page. |
 | [fal-ai-generation](../.agents/skills/fal-ai-generation/SKILL.md) | Generate and edit images, create video, audio, 3D assets or material maps through fal.ai MCP or the Python queue client. Use for fal model discovery, reference uploads, generation, recovery and local delivery. |
 | [feature-handoff](../.agents/skills/feature-handoff/SKILL.md) | Prepare a precise handoff for an agent or developer implementing a feature, continuing a task or reviewing a finished change. |
 | [game-animation-integration](../.agents/skills/game-animation-integration/SKILL.md) | Bring approved animation into a game, including clip mapping, turn exits, locomotion phase and gameplay event timing. |
@@ -38,7 +40,8 @@ maintained source. `npm run test:template` checks that the two copies agree.
 | [pixel-art-workflow](../.agents/skills/pixel-art-workflow/SKILL.md) | Make grid-true, palette-locked pixel art from generated or painted sources, design hue-shifted palettes and ramps, and produce recolour variants with review at game scale. |
 | [pixel-text-sprites](../.agents/skills/pixel-text-sprites/SKILL.md) | Author pixel art directly as text grids (.pxt) with palettes, frames and animations, and render 1x sheets, manifests, recolour variants and previews headlessly. |
 | [plan](../.agents/skills/plan/SKILL.md) | Turn a broad project request into a small actionable plan with concrete deliverables, dependencies and acceptance checks. |
-| [sound-effects-workflow](../.agents/skills/sound-effects-workflow/SKILL.md) | Source, generate and prepare game sound effects: library and generator choices, prompt patterns, splitting, trimming, loudness normalisation, loops, visual review and Godot import. |
+| [procedural-audio](../.agents/skills/procedural-audio/SKILL.md) | Model sound effects, seamless loops and short musical cues in Python from how real things sound, rendered from seeds through a catalogue and mastered to loudness targets without limiting. |
+| [sound-effects-workflow](../.agents/skills/sound-effects-workflow/SKILL.md) | Source, generate and prepare game sound effects: library, generator, procedural and voice routes, prompt patterns, splitting, trimming, loudness normalisation, loops, visual review and Godot import. |
 | [sprite-animation-workflow](../.agents/skills/sprite-animation-workflow/SKILL.md) | Plan and produce 2D sprite animation: directions, mirroring, frame timing, pivots, gameplay event frames, layered equipment and flipbook effects. |
 | [tileset-workflow](../.agents/skills/tileset-workflow/SKILL.md) | Build 2D tilesets: terrain autotiles, top-down 3/4 walls, variants, grid props and destructible states with collision, occlusion and navigation metadata. |
 | [vector-graphics-workflow](../.agents/skills/vector-graphics-workflow/SKILL.md) | Author, optimise and rasterise SVG icons, logos and menu shapes with exact export sizes, engine-matched rendering and pixel-art-safe conversion. |
@@ -48,7 +51,7 @@ maintained source. `npm run test:template` checks that the two copies agree.
 
 ## 2D production
 
-Eight skills cover 2D games, pixel art in particular. `2d-production-routing`
+Nine skills cover 2D games, pixel art in particular. `2d-production-routing`
 starts every task from a per-project art contract (view, grid, palette,
 canvases, pivots, timing) and points to the right workflow. Pixel art, sprite
 animation, tilesets, asset preparation and vector graphics include small
@@ -57,13 +60,26 @@ background removal, shared-bounds trimming, sheet packing, previews, normal
 maps, seam checks and 47-tile blob composition. Godot 2D integration covers
 pixel-safe imports, TileSet terrains, 2D lighting and a tested palette-swap
 shader, with an import audit and headless checks. Generators are optional; the
-skills work with any provider and with hand-made art.
+skills work with any provider and with hand-made art. `blender-sprite-render`
+adds a 3D route for realistic, painted, toon or pixel sprites: a model rigged
+and animated in Blender is rendered headlessly at the game's view angle and
+pixel scale in every direction and clip, with one light, a fixed pivot and
+normal, depth and shadow passes, then packed into sheets.
 
 `sound-effects-workflow` prepares sounds before `game-audio-workflow` maps them
 to events: library or generator sourcing, prompt patterns, and a helper that
 splits takes, trims, normalises loudness (BS.1770) under a true-peak ceiling,
 makes loops and draws waveform and spectrogram sheets so an agent can review
 what it cannot hear.
+
+Two more audio skills share that tool. `procedural-audio` models each sound
+from its physics (a contact, the modes that ring, what falls afterwards) in
+Python, renders every take from a seed to identical bytes, and adds modelled
+instruments and a small score format for stings, fanfares and short loops.
+`elevenlabs-voices` designs voices from descriptions and speaks barks,
+gibberish and lines, checking credits and voice slots first and recording each
+paid step so a rerun never pays twice. Both end on a listening page; only the
+owner's listening accepts a take.
 
 ## Game production in 0.4.14
 

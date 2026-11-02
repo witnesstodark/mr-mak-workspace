@@ -12,8 +12,14 @@ the event, camera distance or crowd mix.
 
 ## Prepare and select material
 
-For sourcing, generator prompts, editing and loudness preparation, see
-`sound-effects-workflow`.
+Choose a source per sound before producing it:
+
+- `sound-effects-workflow`: libraries, generators and recordings; prompts,
+  splitting, trimming, loudness and loops for every route.
+- `procedural-audio`: sound effects, ambience loops, interface sounds and short
+  musical cues modelled in Python and rendered from seeds.
+- `elevenlabs-voices`: unit voices, barks, gibberish and lines from designed
+  voices, with every paid step recorded.
 
 For each event, record its meaning, motion anchor, source or generation route,
 desired length and review state. Reuse the user's chosen provider, voice and
