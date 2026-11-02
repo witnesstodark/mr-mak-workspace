@@ -52,7 +52,8 @@ For short nonsense voice lines, either:
   faction, then speak nonsense syllables with punctuation that sets the emotion
   ("Hrm? Bah-dum wekka?" for suspicion). Keep the syllables fixed per voice so
   each speaker sounds consistent, and vary the emotion by punctuation and
-  delivery settings.
+  delivery settings. [elevenlabs-voices](../../elevenlabs-voices/SKILL.md)
+  covers this route end to end, with a client that records every paid step.
 - **Syllable synthesis:** record or generate a small set of vowel and syllable
   sounds per voice, then build lines in the engine by playing random syllables
   at the voice's pitch with small variations. This is cheap, has no length

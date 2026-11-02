@@ -12,12 +12,12 @@ from urllib.parse import unquote
 ROOT = Path(__file__).resolve().parent.parent
 SKILLS = (
     '2d-asset-prep', '2d-production-routing', '3d-production-routing', 'blender-game-animation', 'character-sheet-pipeline',
-    'fal-ai-generation', 'feature-handoff', 'game-animation-integration',
+    'elevenlabs-voices', 'fal-ai-generation', 'feature-handoff', 'game-animation-integration',
     'game-audio-workflow', 'game-level-design', 'game-ui-workflow',
     'game-vfx-workflow', 'gameplay-visual-review', 'godot-2d-integration',
     'higgsfield-workflow',
     'image-reference-workflow', 'img2threejs', 'materials-to-game',
-    'motion-reference-workflow', 'pixel-art-workflow', 'pixel-text-sprites', 'plan',
+    'motion-reference-workflow', 'pixel-art-workflow', 'pixel-text-sprites', 'plan', 'procedural-audio',
     'sound-effects-workflow', 'sprite-animation-workflow', 'tileset-workflow', 'vector-graphics-workflow',
     'video-watch', 'voice-dictation-setup', 'workspace-authoring',
 )

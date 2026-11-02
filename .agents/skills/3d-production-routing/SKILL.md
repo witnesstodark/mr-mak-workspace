@@ -24,6 +24,8 @@ Inspect the supplied assets and the target engine before selecting a route.
 | Develop a HUD or menu from concept through live game state | `game-ui-workflow` |
 | Design and validate a playable level | `game-level-design` |
 | Source, generate and prepare sound effects | `sound-effects-workflow` |
+| Model sound effects, loops and short music cues in Python | `procedural-audio` |
+| Design character voices and speak barks or lines | `elevenlabs-voices` |
 | Select and integrate game sounds | `game-audio-workflow` |
 | Verify the result in the actual game | `gameplay-visual-review` |
 | 2D sprites, pixel art, tilesets, cutouts, SVG or Godot 2D import | `2d-production-routing` |

@@ -1,6 +1,6 @@
 ---
 name: sound-effects-workflow
-description: Source, generate, edit and deliver game sound effects, from libraries, generators or recordings, with prompt patterns, splitting, trimming, loudness normalisation, loops, visual review for agents and Godot import, before event integration with game-audio-workflow.
+description: Source, generate, edit and deliver game sound effects, from libraries, generators, procedural models or recordings, with prompt patterns, splitting, trimming, loudness normalisation, loops, visual review for agents and Godot import, before event integration with game-audio-workflow.
 ---
 
 # Sound effects workflow
@@ -18,11 +18,21 @@ repetition limits and the mix.
 - **Libraries first** for common foley, impacts and ambience: free bundles and
   CC0 packs are recorded well and cost nothing. Record the source, licence and
   attribution requirement per file. Exclude non-commercial licences.
+- **Procedural models** for impacts, breaks, footsteps, swings, mechanisms,
+  ambience loops, interface sounds and short musical cues when the project wants
+  a consistent, grounded set, unlimited variations and no licences or credits:
+  each sound is Python code imitating its source's physics, rendered from a
+  seed. See [procedural-audio](../procedural-audio/SKILL.md).
 - **Generators** for specific or stylised sounds, many variations and gaps in
   the library. Use the project's provider, read its live schema and price, and
   request uncompressed output (WAV or raw PCM) at the contract sample rate.
+- **Voices** (barks, gibberish, lines, efforts) from a designed voice with
+  [elevenlabs-voices](../elevenlabs-voices/SKILL.md); a voice synthesised in
+  code rarely convinces as a person.
 - **Recording or synthesis** for UI tones, glitch effects and anything that
   must match exactly; layer and process it like any other source.
+
+Several routes can serve one project: record per event which one made it.
 
 ## Prompt a generator
 
