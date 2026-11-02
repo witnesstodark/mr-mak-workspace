@@ -1,6 +1,6 @@
 # Project skills
 
-Thirty-one skills live in this project. `.agents/skills` is the maintained source
+Thirty-two skills live in this project. `.agents/skills` is the maintained source
 for Codex; `.claude/skills` contains complete, identical copies for Claude Code,
 including scripts and references. Both Skills sections open the full instructions.
 These are local project files, not global installations.
@@ -20,6 +20,7 @@ maintained source. `npm run test:template` checks that the two copies agree.
 | [2d-production-routing](../.agents/skills/2d-production-routing/SKILL.md) | Set up a 2D game's art contract and choose the workflow for pixel art, sprites, animation, tilesets, cutouts, SVG graphics, UI, effects and engine import. |
 | [3d-production-routing](../.agents/skills/3d-production-routing/SKILL.md) | Choose a practical workflow for 3D concepts, generated meshes, material maps, procedural Three.js reconstruction and game animation. |
 | [blender-game-animation](../.agents/skills/blender-game-animation/SKILL.md) | Rig and animate supplied characters in Blender, revise motion from references, and deliver editable sources plus a verified game export. |
+| [blender-sprite-render](../.agents/skills/blender-sprite-render/SKILL.md) | Render a modelled and animated 3D character or prop in Blender into 2D sprites (realistic, toon or pixel look) with a fixed orthographic camera, scale, pivot and light, 4 or 8 directions, clip and event frames, normal, depth and shadow passes, sheets and a manifest. |
 | [character-sheet-pipeline](../.agents/skills/character-sheet-pipeline/SKILL.md) | Prepare strict-front character sheets, isolated parts and optional multiview references for 3D modeling from an approved image. |
 | [elevenlabs-voices](../.agents/skills/elevenlabs-voices/SKILL.md) | Design character voices with ElevenLabs, compare candidates, and speak barks, gibberish and lines in seeded takes, with credit checks, a manifest that makes reruns safe, cleanup and a listening page. |
 | [fal-ai-generation](../.agents/skills/fal-ai-generation/SKILL.md) | Generate and edit images, create video, audio, 3D assets or material maps through fal.ai MCP or the Python queue client. Use for fal model discovery, reference uploads, generation, recovery and local delivery. |
@@ -50,7 +51,7 @@ maintained source. `npm run test:template` checks that the two copies agree.
 
 ## 2D production
 
-Eight skills cover 2D games, pixel art in particular. `2d-production-routing`
+Nine skills cover 2D games, pixel art in particular. `2d-production-routing`
 starts every task from a per-project art contract (view, grid, palette,
 canvases, pivots, timing) and points to the right workflow. Pixel art, sprite
 animation, tilesets, asset preparation and vector graphics include small
@@ -59,7 +60,11 @@ background removal, shared-bounds trimming, sheet packing, previews, normal
 maps, seam checks and 47-tile blob composition. Godot 2D integration covers
 pixel-safe imports, TileSet terrains, 2D lighting and a tested palette-swap
 shader, with an import audit and headless checks. Generators are optional; the
-skills work with any provider and with hand-made art.
+skills work with any provider and with hand-made art. `blender-sprite-render`
+adds a 3D route for realistic, painted, toon or pixel sprites: a model rigged
+and animated in Blender is rendered headlessly at the game's view angle and
+pixel scale in every direction and clip, with one light, a fixed pivot and
+normal, depth and shadow passes, then packed into sheets.
 
 `sound-effects-workflow` prepares sounds before `game-audio-workflow` maps them
 to events: library or generator sourcing, prompt patterns, and a helper that

@@ -11,7 +11,8 @@ from urllib.parse import unquote
 
 ROOT = Path(__file__).resolve().parent.parent
 SKILLS = (
-    '2d-asset-prep', '2d-production-routing', '3d-production-routing', 'blender-game-animation', 'character-sheet-pipeline',
+    '2d-asset-prep', '2d-production-routing', '3d-production-routing', 'blender-game-animation',
+    'blender-sprite-render', 'character-sheet-pipeline',
     'elevenlabs-voices', 'fal-ai-generation', 'feature-handoff', 'game-animation-integration',
     'game-audio-workflow', 'game-level-design', 'game-ui-workflow',
     'game-vfx-workflow', 'gameplay-visual-review', 'godot-2d-integration',

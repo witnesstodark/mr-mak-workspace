@@ -59,7 +59,9 @@ attachment and cleanup.
 ## Produce and review
 
 Approve one key pose per direction first, then derive frames from it by faithful
-edits or hand work. Whole sheets from an image model are rarely consistent;
+edits or hand work. For realistic, painted or toon characters, a model animated
+in Blender and rendered with [blender-sprite-render](../blender-sprite-render/SKILL.md)
+gives every direction and frame the same canvas, pivot and light. Whole sheets from an image model are rarely consistent;
 check identity, proportions and pixel density across frames. Clean frames as in
 [pixel-art-workflow](../pixel-art-workflow/SKILL.md).
 

@@ -1,0 +1,20 @@
+{
+  "subject": "Knight",
+  "canvas": [64, 72],
+  "pixels_per_unit": 24.0,
+  "anchor": [32, 64],
+  "view": "three-quarter",
+  "directions": 8,
+  "engine": "eevee",
+  "look": "toon",
+  "samples": 16,
+  "toon": {"bands": 3, "shadow": 0.45, "outline": "hull", "outline_px": 1.0, "outline_color": "#1a1c2c"},
+  "light": {"azimuth": -40.0, "elevation": 60.0, "strength": 3.0, "ambient": 0.3, "soft": 2.0},
+  "passes": ["color", "normal", "shadow"],
+  "shadow_opacity": 0.5,
+  "clips": {
+    "idle": {"start": 1, "end": 24, "step": 6, "fps": 6, "loop": true},
+    "walk": {"start": 30, "end": 53, "step": 3, "fps": 12, "loop": true, "events": {"contact": [30, 42]}},
+    "attack": {"start": 60, "end": 77, "step": 2, "fps": 15, "loop": false, "events": {"hit": [68]}}
+  }
+}

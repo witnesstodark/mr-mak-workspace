@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add `blender-sprite-render`, a 3D route to 2D sprites. A character or prop modelled, rigged and animated in Blender is rendered headlessly into realistic, toon or pixel-look frames with an orthographic camera at the game's view angle and pixel scale, 4 or 8 directions, clip and event frames, one fixed light and a fixed pivot, plus normal, depth and shadow passes; frames are packed into sheets with a JSON manifest. Tested on Blender 5.2.3. The 2D and 3D routing, Blender animation and sprite animation skills point to it.
 - Add two audio skills. `procedural-audio` models sound effects, seamless loops and short musical cues in Python from how real things sound, renders each take from a seed to identical bytes, and masters to loudness targets under a true-peak ceiling without limiting, with a manifest, review sheets and a listening page; an example catalogue has 25 generic sounds, cues and loops. `elevenlabs-voices` designs voices from descriptions and speaks barks, gibberish and lines in takes through a standard-library client that checks credits and voice slots first and records every paid step, so a rerun never pays twice. `sound-effects-workflow`, `game-audio-workflow` and the 3D routing skill point to both.
 - Show blocks that flag a problem, ask for a decision or ask for review in amber in agent chats, in both terminal appearances. Agents start them with a label such as `Needs your decision:` (see AGENTS.md).
 - Darken the chat background slightly.
