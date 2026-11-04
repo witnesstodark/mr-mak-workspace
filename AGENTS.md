@@ -29,6 +29,11 @@ working. Ask for missing personal preferences; do not invent a biography.
   something to review) in its own block that starts with a label and a colon:
   `Needs your decision:`, `For your review:`, `Questions for you:` or `Flag:`.
   Iaar shows these blocks in amber, so keep other content out of them.
+- Every project card has a `Need Decision` tab (`need-decision.md`) that lists
+  everything waiting on the owner: decisions, questions, items to review or
+  listen to. Add each new item in the same turn you raise it in chat. When the
+  owner answers one, record the answer where it belongs in the card and remove
+  the item from the tab. See the workspace-authoring workflow for the format.
 - Never restart an application or terminate an active agent session merely to
   apply an update. Prepare and verify changes, then obtain restart permission.
 - Before committing or publishing, review the selected files for personal data,

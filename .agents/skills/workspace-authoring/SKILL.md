@@ -28,6 +28,12 @@ Update `workspace/workspace.json` with a stable ID, category, folder, readable
 title, creation date, last updated date and steps. `sample: true` is reserved for
 starter examples; ordinary work uses normal archiving behavior.
 
+Every project card has a `Need Decision` tab (`need-decision.md`), listed right
+after its first tab, with everything waiting on the owner. Add an item when you
+raise it; when the owner answers, record the answer in the card and remove the
+item. Follow the format in the workflow: `### N.` headings, never a Markdown
+numbered list, and numbers that are never reused.
+
 Open every changed tab at wide and narrow sizes. Check media and links, Markdown
 rendering and image close/download controls. Preserve the selected surface during
 loading. Report actual verification and any remaining limitations. Prepare
