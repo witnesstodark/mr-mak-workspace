@@ -107,6 +107,13 @@ export default function ChatTabs({ items, selectedId, agents, groups, collapsed,
     else if ('group' in destination) api(`/sessions/${current.id}`, { group: destination.group }, 'PATCH').catch(reportError)
     else if ('id' in destination) api(`/sessions/${current.id}/reorder`, { targetId: destination.id, position: destination.position }).catch(reportError)
   }
+  function shiftGroup(event: React.KeyboardEvent<HTMLButtonElement>, group: TabGroup) {
+    if (!event.altKey || !['ArrowLeft', 'ArrowRight'].includes(event.key)) return
+    event.preventDefault()
+    const siblings = grouped.filter(item => item.pinned === group.pinned)
+    const next = siblings[siblings.indexOf(group) + (event.key === 'ArrowLeft' ? -1 : 1)]
+    if (next) api('/groups/move', { group: group.name, pinned: group.pinned, targetId: next.items[0].id, position: event.key === 'ArrowLeft' ? 'before' : 'after' }).catch(reportError)
+  }
   const dragged = dragging?.group ? undefined : items.find(item => item.id === dragging?.id)
   const draggedGroup = dragging?.group ? grouped.find(group => group.name === dragging.group && group.pinned === dragging.pinned) : undefined
   const renderTab = (item: ChatSession) => <div key={item.id} data-chat-tab={item.id} className={`chat-tab ${selectedId === item.id ? 'selected' : ''} ${item.tabColor ? 'has-color' : ''} ${!dragging?.group && dragging?.id === item.id ? 'dragging' : ''} ${target && 'id' in target && target.id === item.id ? `drop-${target.position}` : ''}`} style={{ '--tab-accent': item.tabColor || 'var(--pink)' } as React.CSSProperties} onContextMenu={event => openMenu(event, { kind: 'tab', item, x: event.clientX, y: event.clientY })}>
@@ -131,7 +138,7 @@ export default function ChatTabs({ items, selectedId, agents, groups, collapsed,
       const beside = target && 'beside' in target && target.beside === group.name && target.pinned === group.pinned ? `drop-${target.position}` : ''
       return <div key={run > 1 ? `${key}:${run}` : key} data-chat-group={group.name} className={`chat-tab-group ${folded ? 'collapsed' : ''} ${group.working ? 'working' : ''} ${moving ? 'dragging' : ''} ${beside} ${target && 'group' in target && target.group === group.name ? 'drop-into' : ''}`} style={{ '--tab-accent': group.color } as React.CSSProperties}>
         <button type="button" className="chat-group-chip" aria-expanded={!folded} aria-label={`${group.name} group · ${group.items.length} tabs${group.unread ? ' · unread result' : ''}`} title={`${group.name} · ${group.items.length} tabs\nClick to ${folded ? 'expand' : 'collapse'} · drag to move the group · right-click to rename, color and more · drop a tab here to add it`}
-          onClick={event => { if (!suppressClick.current || event.detail === 0) toggleGroup(group.name!) }} onPointerDown={event => begin(event, group.items[0], group.name!)} onPointerMove={move} onPointerUp={finish} onPointerCancel={clear} onLostPointerCapture={clear} onContextMenu={event => openMenu(event, { kind: 'group', group, x: event.clientX, y: event.clientY })}>
+          onClick={event => { if (!suppressClick.current || event.detail === 0) toggleGroup(group.name!) }} onKeyDown={event => shiftGroup(event, group)} onPointerDown={event => begin(event, group.items[0], group.name!)} onPointerMove={move} onPointerUp={finish} onPointerCancel={clear} onLostPointerCapture={clear} onContextMenu={event => openMenu(event, { kind: 'group', group, x: event.clientX, y: event.clientY })}>
           <span className="chip-caret" aria-hidden="true">{folded ? '▸' : '▾'}</span><span className="chip-name">{group.name}</span><small>{group.items.length}</small>{group.unread && <i className="chip-unread" title="Unread result" />}{group.working && <i className="chip-working" title="Working" />}
         </button>
         {group.items.filter(item => !folded || item.id === selectedId).map(renderTab)}

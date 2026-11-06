@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, writeFile, appendFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocket } from 'ws';
-import { Sessions } from '../sessions.mjs';
+import { Sessions, terminalReport } from '../sessions.mjs';
 import { createService } from '../server.mjs';
 import { nativeActivity, tailNativeFile } from '../native-events.mjs';
 import { sleep } from '../util.mjs';
@@ -160,4 +160,10 @@ test('only the subscribed Chats view can acknowledge the exact answer; navigatio
     assert.equal(item.unread, true);
     await send(chats.ws, seen, chats.messages); assert.equal(item.unread, false);
   } finally { sockets.forEach(ws => ws.terminate()); await service.close(); }
+});
+
+test('terminal replies and mouse reports do not count as typing, keys do', () => {
+  // Moving the pointer over a fullscreen Claude chat sends SGR mouse reports.
+  for (const report of ['\x1b[<35;40;12M', '\x1b[<0;10;5M\x1b[<0;10;5m', '\x1b[I', '\x1b[O', '\x1b[12;40R', '\x1b[?2026;2$y', '\x1b]11;rgb:1e1e/1e1e/1e1e\x1b\\','\x1b[M #!']) assert.equal(terminalReport(report), true, JSON.stringify(report));
+  for (const key of ['a', 'hello', '\r', '\x1b[A', '\x7f', '\x1b[<35;40;12Mx']) assert.equal(terminalReport(key), false, JSON.stringify(key));
 });

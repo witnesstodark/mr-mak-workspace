@@ -115,8 +115,8 @@ Nothing is downloaded automatically by opening the app.
 
 Desktop chats offer a microphone in the chat toolbar. Transcription pastes
 directly into the terminal input without pressing Enter. The Workspace's Mak composer
-also supports dictation; its Send button remains a separate action. No hotkeys
-are rebound. This feature is separate from conversational Talk to Mak.
+also supports dictation; its Send button remains a separate action. Double-tap Ctrl to start or stop the visible microphone; Ctrl with any other key is
+ignored and no existing shortcut is rebound. This feature is separate from conversational Talk to Mak.
 
 Local transcription preserves the detected language; it does not translate.
 Test names and mixed-language phrases on your own microphone before relying on

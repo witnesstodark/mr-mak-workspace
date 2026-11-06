@@ -81,6 +81,9 @@ export function systemEvent(text, origin) {
   return null;
 }
 
+// Claude Code continues a compacted chat with its summary as a user turn.
+const compactSummary = text => ({ kind: 'notice', title: 'Conversation compacted · summary of earlier messages', detail: text.replace(/<tools-used-before-summary>[\s\S]*?<\/tools-used-before-summary>\s*/, '').trim().slice(0, 60000) });
+
 // The model the chat last used: Codex records it per turn; Claude Code on each reply
 // and when /model changes it.
 export function transcriptModel(records, agent) {
@@ -142,7 +145,7 @@ export function transcriptMessages(records, agent, limit = 100) {
     text = typeof text === 'string' ? text : '';
     // Codex chats imported from Claude Code keep its paste tags too.
     if (role === 'user') text = unwrapPastes(text);
-    const event = role === 'user' ? systemEvent(text, item.origin) : null;
+    const event = role !== 'user' ? null : item.isCompactSummary ? compactSummary(text) : systemEvent(text, item.origin);
     if (event === 'skip') continue;
     if (event) { role = 'system'; text = event.title; content = undefined; imageRefs = []; }
     imageRefs = [...new Set([...imageRefs, ...imageReferences(content, text || '')])].slice(0, 12);
