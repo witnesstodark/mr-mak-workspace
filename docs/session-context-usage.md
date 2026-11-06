@@ -9,7 +9,7 @@ quota usage.
 | Provider | Data | Display |
 | --- | --- | --- |
 | Codex | `token_count.info.last_token_usage.total_tokens`, `model_context_window` | Percent and used/limit tokens; missing fields stay unknown |
-| Claude Code | Latest main assistant message: input + cache read + cache creation; window of its `message.model` | Percent and used/limit tokens; an unknown model leaves the limit unknown |
+| Claude Code | Latest main assistant message: input + cache read + cache creation; window estimated from `message.model` | Percent and used/limit tokens labelled "estimated limit"; an unknown model leaves the limit unknown |
 | OpenCode | Latest completed main assistant message: input + output + reasoning + cache read/write | Tokens; limit unknown |
 | Antigravity | Latest `gen_metadata` row of `~/.gemini/antigravity-cli/conversations/<id>.db`: `context_window_metadata.estimated_tokens_used`, `max_context_tokens` | Percent and used/limit tokens (CLI estimate) |
 | Kimi, shell | No context telemetry in the current integration | Unavailable |
@@ -37,13 +37,12 @@ describes the source and shows the native timestamp when present.
 - Transcript truncation or read failure clears counts. Clear terminal scrollback
   preserves context. A disconnected UI hides its old counts.
 
-Claude transcripts do not report a context-window limit. The limit comes from
-Anthropic's model table (`claudeContextWindow` in `native-context.mjs`): 1M for
-Opus and Sonnet 4.6 and later, Haiku 5.5 and later, Fable and Mythos; 200K for
-older models. A count above that window, such as Sonnet 4.5 with the 1M option,
-hides the limit. `<synthetic>` messages are ignored. Update the table when a new
-model family ships. This change does not replace user status-line settings or
-hooks.
+Claude transcripts do not report a context-window limit. The displayed limit is
+an estimate from the model-name table (`claudeContextWindow` in
+`native-context.mjs`), labelled in the row and explained in its tooltip. Account
+or configuration limits can differ. A count above the estimated window hides
+the limit; unknown model families keep it unknown. `<synthetic>` messages are
+ignored. This change does not replace user status-line settings or hooks.
 
 Antigravity (agy 1.4.7) stores each conversation as SQLite in WAL mode with
 protobuf rows. The service opens the bound conversation read-only with

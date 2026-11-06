@@ -503,10 +503,12 @@ export class Sessions extends EventEmitter {
       projects.get(key).push(item);
     }
     const reserved = new Map();
-    for (const item of this.items.values()) {
-      if (!item.group) continue;
-      if (!reserved.has(item.group)) reserved.set(item.group, new Set());
-      reserved.get(item.group).add(projectKey(item.cwd));
+    // Current groups take precedence over names remembered by the project toggle.
+    for (const field of ['group', 'projectGroup']) for (const item of this.items.values()) {
+      const name = item[field];
+      if (!name) continue;
+      if (!reserved.has(name)) reserved.set(name, new Set());
+      reserved.get(name).add(projectKey(item.cwd));
     }
     const names = new Map();
     for (const [key, members] of projects) {
@@ -529,7 +531,9 @@ export class Sessions extends EventEmitter {
       keys.sort((a, b) => (rank.get(a) ?? Infinity) - (rank.get(b) ?? Infinity));
       for (const key of keys) for (const item of projects.get(key).filter(item => !!item.pinned === pinned)) {
         const group = names.get(key), tabOrder = order++;
-        if (item.group !== group || item.tabOrder !== tabOrder) { item.group = group; item.tabOrder = tabOrder; this.changed(item); }
+        if (item.group !== group || item.tabOrder !== tabOrder || item.projectGroup) {
+          item.group = group; item.tabOrder = tabOrder; delete item.projectGroup; this.changed(item);
+        }
       }
     }
     await this.persist();
@@ -546,13 +550,13 @@ export class Sessions extends EventEmitter {
     }
     return open.length > 0;
   }
-  // The header's project button. Ungrouping keeps the visible order, and closed
-  // chats keep their group, so grouping again restores the same names.
+  // The header's project button. Remember names even when every member is open;
+  // persisting them separately from the visible group also survives a restart.
   async toggleProjectGroups() {
     if (!this.projectGrouped()) return this.groupByProject();
     for (const [tabOrder, { id }] of this.active().entries()) {
       const item = this.items.get(id);
-      if (item.group || item.tabOrder !== tabOrder) { item.group = null; item.tabOrder = tabOrder; this.changed(item); }
+      if (item.group || item.tabOrder !== tabOrder) { item.projectGroup = item.group; item.group = null; item.tabOrder = tabOrder; this.changed(item); }
     }
     await this.persist();
     return { grouped: 0, groups: 0 };
@@ -560,8 +564,8 @@ export class Sessions extends EventEmitter {
   async assign(id, value) {
     const session = this.get(id);
     const group = groupLabel(value);
-    if (session.group === group) return publicSession(session);
-    session.group = group;
+    if (session.group === group && !session.projectGroup) return publicSession(session);
+    session.group = group; delete session.projectGroup;
     this.changed(session);
     // Joining a group places the tab after that group's last open member, as a
     // drag there would. Leaving a group keeps the tab where it is.
@@ -578,7 +582,7 @@ export class Sessions extends EventEmitter {
     if (id === targetId) return this.active();
     // Dropping beside a tab of another group joins that group; dropping beside an
     // ungrouped tab leaves the current group.
-    if (session.group !== target.group) { session.group = target.group; this.changed(session); }
+    if (session.group !== target.group) { session.group = target.group; delete session.projectGroup; this.changed(session); }
     // Retain closed chats between their neighbours so reopening History keeps
     // their place. Reordering pinned tabs cannot affect unpinned tabs.
     const siblings = this.list().filter(item => item.pinned === session.pinned && item.id !== id);
@@ -614,6 +618,7 @@ export class Sessions extends EventEmitter {
     if (!members.length) throw Object.assign(new Error('That group no longer exists.'), { status: 404 });
     if (name !== source) {
       for (const session of members) { session.group = name; this.changed(session); }
+      for (const session of this.items.values()) if (session.projectGroup === source) { session.projectGroup = name; this.changed(session); }
       await this.persist();
     }
     return this.active();
@@ -624,8 +629,8 @@ export class Sessions extends EventEmitter {
   async deleteGroup(name) {
     const label = groupLabel(name);
     if (!label) throw new Error('Name the group.');
-    const members = [...this.items.values()].filter(item => item.group === label);
-    for (const session of members) { session.group = null; this.changed(session); }
+    const members = [...this.items.values()].filter(item => item.group === label || item.projectGroup === label);
+    for (const session of members) { if (session.group === label) session.group = null; delete session.projectGroup; this.changed(session); }
     if (members.length) await this.persist();
     return { removed: members.length, history: members.filter(item => !item.open).length };
   }
@@ -717,7 +722,7 @@ export class Sessions extends EventEmitter {
   async persist() {
     this.saveChain = this.saveChain.catch(() => {}).then(async () => {
       this.dirty = false;
-      await saveJson(path.join(this.stateDir, 'sessions.json'), this.list());
+      await saveJson(path.join(this.stateDir, 'sessions.json'), this.list().map(item => ({ ...item, projectGroup: this.items.get(item.id).projectGroup || undefined })));
       let screenError;
       for (const session of this.items.values()) {
         if (!session.terminal) continue;

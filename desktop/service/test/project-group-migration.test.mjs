@@ -17,6 +17,37 @@ async function fixture(settings, sessions) {
 const tab=(id,cwd,tabOrder,extra={})=>({id,cwd,tabOrder,name:id,agent:'shell',open:true,pinned:false,status:'stopped',createdAt:'2026-10-20T12:00:00Z',...extra});
 const service=repo=>createService({repo,mcpOptions:{home:repo,env:{}}});
 
+test('custom project names survive ungrouping with no History members and restarting', async () => {
+  const game = path.resolve('.cache/Game'), tools = path.resolve('.cache/Tools');
+  const repo = await fixture({ groupColors: { Campaign: '#123456' }, collapsedGroups: ['Campaign'] }, [
+    tab('Game one', game, 0, { group: 'Campaign', pinned: true }),
+    tab('Game two', game, 1, { group: 'Campaign' }),
+    tab('Tools one', tools, 2, { group: 'Workshop' }),
+  ]);
+  let app = await service(repo);
+  try {
+    const ids = app.sessions.active().map(x => x.id);
+    await app.sessions.toggleProjectGroups();
+    assert.ok(app.sessions.active().every(x => x.group === null));
+    await app.close(); app = await service(repo);
+    await app.sessions.toggleProjectGroups();
+    assert.deepEqual(app.sessions.active().map(x => x.id), ids);
+    assert.deepEqual(app.sessions.active().map(x => x.group), ['Campaign', 'Campaign', 'Workshop']);
+    assert.equal(app.sessions.get('Game one').pinned, true);
+    const saved = JSON.parse(await readFile(path.join(repo, '.mrmak/settings.json'), 'utf8'));
+    assert.equal(saved.groupColors.Campaign, '#123456');
+    assert.deepEqual(saved.collapsedGroups, ['Campaign']);
+    await app.sessions.renameGroup('Campaign', 'New campaign');
+    await app.sessions.toggleProjectGroups();
+    await app.sessions.toggleProjectGroups();
+    assert.equal(app.sessions.get('Game one').group, 'New campaign');
+    await app.sessions.toggleProjectGroups();
+    await app.sessions.deleteGroup('New campaign');
+    await app.sessions.toggleProjectGroups();
+    assert.equal(app.sessions.get('Game one').group, 'Game', 'deleting a remembered group does not restore its name');
+  } finally { await app.close(); }
+});
+
 test('legacy project groups retain saved project order, chat IDs, preferences and native group edits after restart',async()=>{
   const tools=path.resolve('.cache/Tools'),game=path.resolve('.cache/Game');
   const repo=await fixture({groupTabsByProject:true,projectOrder:[tools,game],workspaceTheme:'antigravity',chatTheme:'plum',usageDirection:'remaining',selectedId:'Game one'},[

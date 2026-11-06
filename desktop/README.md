@@ -34,8 +34,9 @@ delayed first prompts, and reads bounded metadata records larger than one small
 buffer. Closing or resuming a tab can recover a missing ID from its exact Mr. Mak
 origin marker. Shared working directories alone are not proof of ownership.
 
-New Codex and Claude chats default to `xhigh`; explicit saved effort choices are
-preserved. Terminal URLs and OSC 8 links use xterm link handlers. New-window
+New Codex, Claude and Antigravity chats default to `xhigh`; explicit saved effort
+choices are preserved. Settings and New chat offer a default reasoning-effort
+picker for subsequent chats. Terminal URLs and OSC 8 links use xterm link handlers. New-window
 requests from both app windows open HTTP(S) links in the system default browser
 (the Windows shell association, `open` on macOS, `xdg-open` on Linux), while the
 current app view stays open.
@@ -51,7 +52,7 @@ missing folders are skipped. Pins are saved in `settings.pinnedProjects`. A phon
 may start a chat only in a listed folder. The voice coordinator uses the same list
 through `list_projects`.
 
-Claude and Codex chats can switch between Terminal and Conversation. Conversation
+Claude, Codex, Antigravity and OpenCode chats can switch between Terminal and Conversation. Conversation
 reads the same native transcript as the phone, sends a prompt through the PTY with
 bracketed paste and Enter, and serves media through short-lived `/media/` grants
 bound to one chat. A new chat opens in Terminal until it has a conversation, since

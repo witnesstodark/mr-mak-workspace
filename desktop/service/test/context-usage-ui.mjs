@@ -41,6 +41,12 @@ try {
   service.sessions.nativeEvent(service.sessions.get('context-claude'), nativeContext({ type: 'assistant', message: { usage: { input_tokens: 10, cache_read_input_tokens: 20000, cache_creation_input_tokens: 1000 } } }, 'claude'));
   await expect(display).toContainText('21,010 tokens · limit unknown');
   await expect(display.getByRole('meter')).toHaveCount(0);
+  service.sessions.nativeEvent(service.sessions.get('context-claude'), nativeContext({ type: 'assistant', message: { model: 'claude-opus-5-5', usage: { input_tokens: 10, cache_read_input_tokens: 20000, cache_creation_input_tokens: 1000 } } }, 'claude'));
+  await expect(display).toContainText('estimated limit');
+  await expect(display).toHaveAttribute('title', /not reported by the CLI/);
+  await page.setViewportSize({ width: 320, height: 760 });
+  assert.equal(await display.evaluate(node => node.scrollWidth > node.clientWidth + 1), false, 'estimated label fits a narrow chat');
+  await page.setViewportSize({ width: 900, height: 760 });
   await choose('kimi'); await expect(display).toContainText('Unavailable');
   await choose('codex'); await expect(display).toContainText('30,000');
   service.sessions.nativeEvent(codex, nativeContext({ type: 'compacted' }, 'codex'));

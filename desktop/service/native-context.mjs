@@ -9,8 +9,8 @@ export function unknownContext(agent, reason) {
   return { usedTokens: null, limitTokens: null, source: agent, updatedAt: null, reason: reason || (['codex', 'claude', 'opencode', 'antigravity'].includes(agent) ? 'waiting' : 'unavailable') };
 }
 
-// Context windows from Anthropic's model table (2026-10). A transcript names
-// the model of each response, not its window. Unknown models stay unknown.
+// Model-based window estimates. A transcript names the responding model, not
+// its configured window. The UI labels estimates; unknown families stay unknown.
 export function claudeContextWindow(model) {
   const id = String(model || '').toLowerCase();
   if (/claude-(?:fable|mythos)-\d/.test(id)) return 1_000_000;

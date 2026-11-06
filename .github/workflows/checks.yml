@@ -28,6 +28,8 @@ jobs:
       - run: powershell -NoProfile -File scripts/test-update-helpers.ps1
       - run: node desktop/service/test/groups-ui.mjs
       - run: node desktop/service/test/conversation-ui.mjs
+      - run: node desktop/service/test/unread-ui.mjs
+      - run: node desktop/service/test/context-usage-ui.mjs
       - run: node desktop/service/test/mobile-ui.mjs
       - run: node desktop/service/test/workspace-edit-ui.mjs
       - run: node desktop/service/test/cards-ui.mjs
@@ -108,6 +110,8 @@ jobs:
       - run: node desktop/service/test/voice-ui.mjs
       - run: node desktop/service/test/groups-ui.mjs
       - run: node desktop/service/test/conversation-ui.mjs
+      - run: node desktop/service/test/unread-ui.mjs
+      - run: node desktop/service/test/context-usage-ui.mjs
       - run: node desktop/service/test/mobile-ui.mjs
       - run: node desktop/service/test/workspace-edit-ui.mjs
       - run: node desktop/service/test/cards-ui.mjs
