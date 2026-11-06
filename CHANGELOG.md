@@ -9,6 +9,7 @@
 - Group tabs by project with one button. Custom names survive ungrouping, regrouping and app restart, including groups whose members are all open.
 - Remove inherited Claude parent-session identity from new terminal chats while preserving user configuration. Recognize Antigravity 1.4.7 log suffixes and its print/streaming lifecycle messages without accepting arbitrary trailing text.
 - Update the pinned setup-python action and add context/unread browser checks on Windows and macOS.
+- Patch the bundled `@hono/node-server` dependency to 2.1.3 for [GHSA-rmxm-3fg6-px4f](https://github.com/advisories/GHSA-rmxm-3fg6-px4f).
 
 Thanks to @vladimirstempel and @vanderleitelesjr for the contributions. This release includes #61, #62, #63, #64, #68, #70 and #71. The remaining feature stack is being split for separate review.
 
