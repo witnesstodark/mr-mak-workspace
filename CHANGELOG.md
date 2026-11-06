@@ -3,7 +3,7 @@
 ## 0.6.3 - 2026-11-06
 
 - Answer CLI questions in Conversation and on the phone, including multiple selections, typed answers and long option descriptions. Keep unread indicators and compaction messages current, and ignore terminal device replies when deciding whether you are typing.
-- Read Antigravity and OpenCode conversations alongside Codex and Claude, with tool activity and media previews. Native history is read without changing the provider's database.
+- Read Antigravity and OpenCode conversations alongside Codex and Claude, with tool activity and media previews. Native history is read without changing the provider's database. Antigravity session discovery and context updates keep running while its transcript is attached.
 - Show each chat's latest context occupancy, with unknown states when native data is missing or stale. Claude's model-based window is labelled as an estimate; OpenCode reports tokens without inventing a limit.
 - Choose the default reasoning effort in Settings or New chat. Extra high remains the initial default, and existing chats and explicit choices keep their effort.
 - Group tabs by project with one button. Custom names survive ungrouping, regrouping and app restart, including groups whose members are all open.

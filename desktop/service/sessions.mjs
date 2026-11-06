@@ -253,7 +253,9 @@ export class Sessions extends EventEmitter {
       const stopContext = watchAntigravityContext(() => session.nativeId, usage => {
         if (session.process === proc) this.nativeEvent(session, { kind: 'context-usage', usage });
       });
-      session.stopNativeWatch = () => { stopLog(); stopContext(); };
+      session.stopNativeWatch = () => {
+        stopLog(); stopContext(); session.stopTranscriptWatch?.(); session.stopTranscriptWatch = null;
+      };
     }
     if (session.agent === 'opencode') session.stopNativeWatch = watchOpencode(this.stateDir, session, env.MRMAK_OPENCODE_LAUNCH_ID, state => {
       this.bindNative(session, { id: state.nativeId });
@@ -268,9 +270,7 @@ export class Sessions extends EventEmitter {
     else if (session.agent === 'claude' && session.nativeId) claudeTranscript(session.cwd, session.nativeId).then(file => {
       if (session.process === proc) this.watchNative(session, file);
     }).catch(() => {});
-    else if (session.agent === 'antigravity' && session.nativeId) antigravityTranscript(session.nativeId).then(file => {
-      if (session.process === proc) this.watchNative(session, file);
-    }).catch(() => {});
+    else if (session.agent === 'antigravity' && session.nativeId) this.watchAntigravityTranscript(session, session.nativeId, proc);
   }
 
   beginDiscovery(session) {
@@ -281,6 +281,13 @@ export class Sessions extends EventEmitter {
 
   watchNative(session, file, offset = 0) {
     if (!session.process) return;
+    if (session.agent === 'antigravity') {
+      // The lifecycle log and SQLite usage observer must keep running when a
+      // readable transcript attaches or switches to another native conversation.
+      session.stopTranscriptWatch?.();
+      session.stopTranscriptWatch = tailNativeFile(file, session.agent, event => this.nativeEvent(session, event), offset);
+      return;
+    }
     session.stopNativeWatch?.();
     session.contextUsage = unknownContext(session.agent);
     this.changed(session);
@@ -369,9 +376,14 @@ export class Sessions extends EventEmitter {
   bindAntigravity(session, id) {
     if (!id || id === session.nativeId || [...this.items.values()].some(item => item !== session && item.agent === 'antigravity' && item.nativeId === id)) return;
     session.nativeId = id; session.hasConversation = true; session.restoreError = null;
+    session.contextUsage = unknownContext(session.agent);
     this.changed(session);
-    if (session.process) antigravityTranscript(id).then(file => {
-      if (session.process && session.agent === 'antigravity') this.watchNative(session, file);
+    if (session.process) this.watchAntigravityTranscript(session, id, session.process);
+  }
+
+  watchAntigravityTranscript(session, id, proc) {
+    antigravityTranscript(id).then(file => {
+      if (session.process === proc && session.nativeId === id) this.watchNative(session, file);
     }).catch(() => {});
   }
 
