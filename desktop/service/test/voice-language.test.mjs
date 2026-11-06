@@ -39,6 +39,6 @@ test('quick command confirmations and empty results are English without a model'
   }
   chats = [];
   assert.equal((await actions.ask({ id: 'empty', text: 'list chats' })).result, 'There are no open chats.');
-  assert.ok(calls.some(call => call.name === 'open_chat' && call.args.effort === 'xhigh'));
+  assert.ok(calls.some(call => call.name === 'open_chat' && call.args.effort === 'medium'));
   assert.ok(calls.some(call => call.name === 'open_chat' && call.args.agent === 'opencode' && call.args.name === 'Scene Review'));
 });

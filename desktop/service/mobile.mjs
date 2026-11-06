@@ -313,7 +313,7 @@ export class MobileGateway {
           // A phone can only choose a folder already used on this computer, never type a path.
           const project = data.cwd === undefined ? null : (await this.projects()).find(item => typeof data.cwd === 'string' && projectKey(item.path) === projectKey(data.cwd));
           if (data.cwd !== undefined && !project) fail('Choose a project from the list.');
-          return json(response, 201, await this.sessions.create({ agent: data.agent, name: data.name, cwd: project?.path || this.repo, bypass: this.settings().defaultBypass === true }));
+          return json(response, 201, await this.sessions.create({ agent: data.agent, name: data.name, cwd: project?.path || this.repo, bypass: this.settings().defaultBypass === true, effort: this.settings().defaultEffort }));
         }
         const match = /^\/mobile\/api\/sessions\/([a-f0-9-]{36})\/(messages|send|resume|close|key|read-aloud)$/.exec(route);
         if (match) {
