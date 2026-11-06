@@ -2,6 +2,7 @@ import { open, stat, readdir, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { StringDecoder } from 'node:string_decoder';
+import { nativeContext, unknownContext } from './native-context.mjs';
 
 export function completedTurn(record, agent) {
   if (agent === 'codex' && record.type === 'event_msg' && record.payload?.type === 'task_complete') return { kind: 'turn-completed', id: record.payload.turn_id, text: 'The agent finished its turn. Review the result.', preview: String(record.payload.last_agent_message || '').slice(-350) };
@@ -36,14 +37,34 @@ export function nativeActivity(record, agent) {
 // to the native CLI; MR-MAK never modifies them or replaces the user's hooks.
 export function tailNativeFile(file, agent, onEvent, from = 0) {
   let offset = from, partial = '', closed = false, reading = false, decoder = new StringDecoder('utf8');
+  let hydrate = from > 0, unavailable = false;
+  const reset = reason => { if (!closed) onEvent({ kind: 'context-usage', usage: unknownContext(agent, reason) }); };
   const tick = async () => {
     if (closed || reading) return;
     reading = true;
     try {
       const info = await stat(file);
-      if (info.size < offset) { offset = 0; partial = ''; decoder = new StringDecoder('utf8'); }
+      unavailable = false;
+      if (info.size < offset) { offset = 0; partial = ''; decoder = new StringDecoder('utf8'); hydrate = false; reset('waiting'); }
+      if (hydrate) {
+        // Restore only context before the launch boundary. Historic activity must
+        // not become an unread completion on resume. Keep the read bounded.
+        const start = Math.max(0, offset - 4 * 1024 * 1024);
+        const handle = await open(file, 'r');
+        let latest = null;
+        try {
+          const buffer = Buffer.alloc(offset - start);
+          const { bytesRead } = await handle.read(buffer, 0, buffer.length, start);
+          const lines = buffer.subarray(0, bytesRead).toString('utf8').split('\n');
+          if (start) lines.shift();
+          lines.pop(); // Ignore a partial record at the launch boundary.
+          for (const line of lines) { try { latest = nativeContext(JSON.parse(line), agent) || latest; } catch { /* Ignore invalid records. */ } }
+        } finally { await handle.close(); }
+        if (latest && !closed) onEvent(latest);
+        hydrate = false;
+      }
       if (info.size === offset) return;
-      if (info.size - offset > 4 * 1024 * 1024) { offset = info.size - 4 * 1024 * 1024; partial = ''; decoder = new StringDecoder('utf8'); }
+      if (info.size - offset > 4 * 1024 * 1024) { offset = info.size - 4 * 1024 * 1024; partial = ''; decoder = new StringDecoder('utf8'); reset('waiting'); }
       const handle = await open(file, 'r');
       try {
         const buffer = Buffer.alloc(info.size - offset);
@@ -52,10 +73,16 @@ export function tailNativeFile(file, agent, onEvent, from = 0) {
         const lines = (partial + decoder.write(buffer.subarray(0, bytesRead))).split('\n');
         partial = lines.pop() || '';
         for (const line of lines) {
-          try { const event = nativeActivity(JSON.parse(line), agent); if (event && !closed) onEvent(event); } catch { /* Partial records are ignored, never guessed. */ }
+          try {
+            const record = JSON.parse(line);
+            const context = nativeContext(record, agent);
+            if (context && !closed) onEvent(context);
+            const event = nativeActivity(record, agent);
+            if (event && !closed) onEvent(event);
+          } catch { /* Partial records are ignored, never guessed. */ }
         }
       } finally { await handle.close(); }
-    } catch { /* CLI may not have created its transcript yet. */ }
+    } catch { if (!unavailable) reset('unavailable'); unavailable = true; /* CLI may not have created its transcript yet. */ }
     finally { reading = false; }
   };
   const timer = setInterval(tick, 400); timer.unref(); tick();
