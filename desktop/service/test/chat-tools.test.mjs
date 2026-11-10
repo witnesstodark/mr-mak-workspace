@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, readFile } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, rm, writeFile, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -18,6 +18,11 @@ test('Codex and Claude chats start with the chat tool server; other agents do no
   assert.deepEqual(chatToolArguments('claude', { claudeConfig: '/state/claude-mcp.json' }), ['--mcp-config', '/state/claude-mcp.json']);
   for (const agent of ['antigravity', 'opencode', 'kimi', 'shell']) assert.deepEqual(chatToolArguments(agent, { claudeConfig: '/x' }), []);
   if (process.platform === 'win32') return;
+  // CI computers have no Claude or Codex CLI, so stand-in commands go first on PATH.
+  const bin = await mkdtemp(path.join(os.tmpdir(), 'mak-chat-tools-bin-')), savedPath = process.env.PATH;
+  for (const name of ['claude', 'codex']) { await writeFile(path.join(bin, name), '#!/bin/sh\n'); await chmod(path.join(bin, name), 0o755); }
+  process.env.PATH = `${bin}${path.delimiter}${savedPath}`;
+  try {
   // The first prompt stays a positional argument, and Claude's variadic
   // --mcp-config is followed by an option, never by a value it would swallow.
   const claude = terminalCommand('claude', { initialPrompt: 'Review the plan', nativeId: 'abc', chatTools: ['--mcp-config', '/c.json'] }).args;
@@ -25,6 +30,7 @@ test('Codex and Claude chats start with the chat tool server; other agents do no
   const resumed = terminalCommand('codex', { resumeId: 'abc', initialPrompt: undefined, chatTools: codex }).args;
   assert.deepEqual(resumed.slice(0, 2), ['resume', 'abc']);
   assert.throws(() => terminalCommand('codex', { chatTools: [1] }), /strings/);
+  } finally { process.env.PATH = savedPath; await rm(bin, { recursive: true, force: true }); }
 });
 
 test('OpenCode gets the chat tool server with its environment and keeps its own configuration', () => {
