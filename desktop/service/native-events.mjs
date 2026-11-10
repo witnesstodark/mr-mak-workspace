@@ -28,6 +28,8 @@ export function nativeActivity(record, agent) {
       const content = record.message?.content;
       const interrupted = value => typeof value === 'string' && value.startsWith('[Request interrupted by user');
       if (interrupted(content) || Array.isArray(content) && content.some(item => item.type === 'text' && interrupted(item.text))) return { kind: 'turn-interrupted' };
+      // A local command such as /model or /effort ends with its output; no model turn follows.
+      if (typeof content === 'string' && /^\s*<local-command-(?:stdout|stderr)>/.test(content)) return { kind: 'turn-interrupted' };
       // Tool results also confirm ongoing work; file snapshots and metadata do not.
       if (content) return { kind: 'turn-started' };
     }
