@@ -145,3 +145,6 @@
 .mobile-pull-refresh.ready, .mobile-pull-refresh.refreshing { color: var(--m-accent); border-color: #896076; }
 .mobile-pull-refresh.refreshing svg { animation: mobile-pull-spin .8s linear infinite; }
 @keyframes mobile-pull-spin { to { transform: rotate(360deg); } }
+
+/* The chat bell sits between the view switch and the activity figure. */
+.mobile-chat-tools .mobile-chat-mute { flex: 0 0 38px; width: 38px; height: 32px; padding: 0; display: grid; place-items: center; color: var(--m-muted); }.mobile-chat-tools .mobile-chat-mute.muted { color: #e6c591; }
