@@ -10,7 +10,8 @@ working. Ask for missing personal preferences; do not invent a biography.
   requested for that output. A conversation in another language does not change
   the default language of stored work.
 - Check `processes/` for an existing workflow and `knowledge/` for prior decisions.
-- Follow `knowledge/game-ui-guidelines.md` and use the Game UI Studio (sidebar → Game UI Studio)
+- Follow the Game UI Guidelines (`guidelines.md` beside the studio code named in
+  `.mrmak/ui-studio/studio.json`) and use the Game UI Studio (sidebar → Game UI Studio)
   when designing, auditing or implementing any game UI (HUDs, menus, options, dialogues).
 - Use the project skills in `.agents/skills/`. Claude entries in
   `.claude/skills/` are complete distribution copies. After editing a shared skill,

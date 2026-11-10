@@ -1,6 +1,6 @@
 /**
  * Game UI Studio - Local Guideline Checks
- * Measurable rules from knowledge/game-ui-guidelines.md, run on every change without an agent.
+ * Measurable rules from guidelines.md (beside this file), run on every change without an agent.
  * Each issue can be located on the canvas; fixes are offered only where they are safe and undoable.
  */
 

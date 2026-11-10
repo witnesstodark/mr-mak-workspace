@@ -689,7 +689,7 @@ export function createCopilot(host) {
       const found = local.length
         ? `\n\nThe studio's local checks already report:\n${local.map(i => `- ${i.title}${i.nodeName ? ` (${i.nodeName})` : ''}: ${i.message}`).join('\n')}`
         : '\n\nThe studio\'s local checks report no issues.';
-      send(`Audit the active screen "${activeScreen().name}" against knowledge/game-ui-guidelines.md (input sinking, safe zones, keyboard and gamepad navigation, readable text sizes, chip-damage gauges, the required options tabs). Say what is missing or can be improved, and propose the layout fixes as a gameui-edit block.${found}`, { display: 'Review this screen against the Game UI Guidelines.' });
+      send(`Audit the active screen "${activeScreen().name}" against the Game UI Guidelines (the guidelines file named in Mr. Mak's .mrmak/ui-studio/studio.json, as the game-ui-studio skill says; input sinking, safe zones, keyboard and gamepad navigation, readable text sizes, chip-damage gauges, the required options tabs). Say what is missing or can be improved, and propose the layout fixes as a gameui-edit block.${found}`, { display: 'Review this screen against the Game UI Guidelines.' });
     };
 
     link.ready.then(mode => {

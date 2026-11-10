@@ -10,15 +10,15 @@ Mak app (sidebar → **Game UI Studio**). `<mrmak>` is the repository Mr. Mak ha
 open. The studio keeps what belongs to that repository in its data folder,
 `<mrmak>/.mrmak/ui-studio/`: `state.json` (project list, draft, preferences),
 `assets/` (game kits and copied UI art) and `studio.json`, whose `code` names
-the folder of the studio's code; `guide.md` there describes every panel.
+the folder of the studio's code and `guidelines` its Game UI Guidelines;
+`guide.md` in that folder describes every panel.
 Its Copilot drawer starts a chat named "UI Studio <project>" in the project
 chosen in the studio's top bar, so this chat's folder is usually the game, not
 the studio. The owner confirms each message in Mr. Mak before it reaches this
 chat. The studio pastes each message with the active screen as compact JSON,
 the selected element, the failing guideline checks and the edit protocol, then
 reads the reply from the transcript. Follow
-`<mrmak>/knowledge/game-ui-guidelines.md` in every proposal when the repository
-has it.
+the Game UI Guidelines (`guidelines` in `studio.json`) in every proposal.
 
 ## Answering a studio message
 

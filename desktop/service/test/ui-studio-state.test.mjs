@@ -66,6 +66,8 @@ test('the UI Studio state is validated, saved atomically in the repository and s
     // The skill scripts find the studio's code and data folder through studio.json.
     const pointer = JSON.parse(await readFile(path.join(repo, '.mrmak/ui-studio/studio.json'), 'utf8'));
     assert.equal(pointer.code, STUDIO_CODE);
+    assert.equal(pointer.guidelines, path.join(STUDIO_CODE, 'guidelines.md'));
+    await readFile(pointer.guidelines, 'utf8');
     assert.equal(pointer.assets, path.join(repo, '.mrmak/ui-studio/assets'));
   } finally { await service.close(); }
 });

@@ -63,7 +63,7 @@ export class StudioState {
         if (plainObject(saved)) this.state = { projects: projectsOf(saved.projects), draft: draftOf(saved.draft), prefs: prefsOf(saved.prefs) };
       } catch { /* Not JSON: start empty and replace it on the next save. */ }
     }
-    await saveJson(path.join(this.dir, 'studio.json'), { code: this.code, assets: path.join(this.dir, 'assets') }).catch(() => {});
+    await saveJson(path.join(this.dir, 'studio.json'), { code: this.code, guidelines: path.join(this.code, 'guidelines.md'), assets: path.join(this.dir, 'assets') }).catch(() => {});
     return this;
   }
 

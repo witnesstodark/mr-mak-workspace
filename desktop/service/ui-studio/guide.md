@@ -3,7 +3,7 @@
 **Game UI Studio** is a visual layout and handoff tool for game interfaces in the
 Mr. Mak Workspace. You place widgets on a screen, set engine anchors, states,
 navigation and focus, check the layout against the Game UI Guidelines
-(`knowledge/game-ui-guidelines.md` in the Mr. Mak template), and hand an
+(`guidelines.md` beside this guide, shipped with the app), and hand an
 agent-ready specification to the engine (Godot, Unreal UMG, Unity, Three.js).
 Open it from the Mr. Mak sidebar (**Game UI Studio**) or the **UI Studio**
 button in the top bar.
