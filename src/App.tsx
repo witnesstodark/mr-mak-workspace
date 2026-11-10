@@ -195,7 +195,7 @@ export default function App() {
               baseUrl={reportUrl.slice(0, reportUrl.lastIndexOf('/'))}
             /></Suspense>
           ) : entity && reportUrl ? (
-            <Suspense fallback={<div className="boot"><MakLogo size={56} animated={false} /></div>}><ReportViewer key={reportUrl} url={reportUrl} title={step?.name ?? entity.title} relativePath={`workspace/${entity.folder}/${step?.path}`} /></Suspense>
+            <Suspense fallback={<div className="boot"><MakLogo size={56} animated={false} /></div>}><ReportViewer key={reportUrl} url={reportUrl} title={step?.name ?? entity.title} relativePath={`workspace/${entity.folder}/${step?.path}`} card={entity} /></Suspense>
           ) : (
             <HomeGrid
               entities={entities}

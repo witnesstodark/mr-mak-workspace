@@ -1,37 +1,39 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import ReportFrame from './ReportFrame'
+import ConfirmLayer from './ConfirmSend'
+import { createConfirmQueue, type ConfirmView } from '../lib/confirm-queue'
 import { api, desktopState, isDesktop } from '../desktop/client'
 import { createStudioBridge, type StudioConfirmation } from '../desktop/studioBridge'
 import './ui-studio.css'
 
 // Requests waiting for the owner, shown one at a time in the Workspace window.
-interface Pending { id: number; request: StudioConfirmation; resolve: (value: boolean) => void }
-const MAX_PENDING = 3
 // The studio waits up to ten minutes for a confirmation (agent-link.mjs).
-const PENDING_MS = 9 * 60 * 1000
-let pending: Pending[] = []
-let mounted = 0
-let nextId = 0
-const listeners = new Set<() => void>()
-const changed = () => listeners.forEach(listener => listener())
-function settle(id: number, value: boolean) {
-  const item = pending.find(entry => entry.id === id)
-  if (!item) return
-  pending = pending.filter(entry => entry !== item)
-  item.resolve(value)
-  changed()
+const queue = createConfirmQueue({ max: 3, timeoutMs: 9 * 60 * 1000 })
+
+const HEADINGS: Record<StudioConfirmation['kind'], string> = {
+  start: 'Start a studio chat',
+  send: 'Send to the studio chat',
+  answer: 'Answer the chat’s menu',
 }
-function confirm(request: StudioConfirmation): Promise<boolean> {
-  // Nothing is sent while the studio is closed or when requests pile up.
-  if (!mounted || pending.length >= MAX_PENDING) return Promise.resolve(false)
-  return new Promise(resolve => {
-    const id = ++nextId
-    pending = [...pending, { id, request, resolve }]
-    setTimeout(() => settle(id, false), PENDING_MS)
-    changed()
-  })
+
+// What the owner reads before a studio request reaches a chat.
+function studioView(request: StudioConfirmation): ConfirmView {
+  const text = request.kind === 'answer' ? null : request.text
+  const asked = request.kind === 'start' ? (text ? 'start this chat and send it the message below' : 'start this chat') : request.kind === 'send' ? 'send the message below to this chat' : 'answer this chat’s menu'
+  const action = request.kind === 'answer' ? 'Answer' : 'Send'
+  return {
+    title: HEADINGS[request.kind],
+    lead: `The Game UI Studio asks to ${asked}. Nothing reaches the chat unless you choose ${action}.`,
+    facts: [
+      { label: 'Chat', value: request.chat },
+      { label: 'Agent', value: `${request.agent}${request.kind === 'start' ? ` · ${request.effort} effort · permissions not bypassed` : ''}` },
+      { label: 'Folder', value: request.folder },
+    ],
+    details: request.kind === 'answer' ? [{ label: 'Menu', value: request.question || '(no question)' }, { label: 'Answer', value: request.answer, strong: true }] : undefined,
+    text,
+    action,
+  }
 }
-const usePending = () => useSyncExternalStore(listener => { listeners.add(listener); return () => { listeners.delete(listener) } }, () => pending)
 
 // One bridge for the whole Workspace window, so a studio chat survives leaving
 // and reopening the UI Studio.
@@ -41,66 +43,9 @@ function studioBridge() {
     api: (path, data, method) => api(path, data, method),
     repo: () => desktopState().repo,
     agents: () => desktopState().agents,
-    confirm,
+    confirm: request => queue.confirm(studioView(request)),
   })
   return bridge
-}
-
-const HEADINGS: Record<StudioConfirmation['kind'], string> = {
-  start: 'Start a studio chat',
-  send: 'Send to the studio chat',
-  answer: 'Answer the chat’s menu',
-}
-
-// Drawn by the Workspace window, outside the studio frame, which cannot draw
-// over it or press its buttons. Send is armed after a short pause so a click
-// meant for the studio cannot land on it.
-function Confirmation({ item }: { item: Pending }) {
-  const { request } = item
-  const [armed, setArmed] = useState(false)
-  const box = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    box.current?.focus()
-    const timer = setTimeout(() => setArmed(true), 600)
-    return () => clearTimeout(timer)
-  }, [])
-  const text = request.kind === 'answer' ? null : request.text
-  return (
-    <div className="studio-confirm-layer">
-      <div
-        ref={box}
-        className="studio-confirm"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="studio-confirm-title"
-        tabIndex={-1}
-        onKeyDown={event => { if (event.key === 'Escape') settle(item.id, false) }}
-      >
-        <h2 id="studio-confirm-title">{HEADINGS[request.kind]}</h2>
-        <p className="studio-confirm-lead">The Game UI Studio asks to {request.kind === 'start' ? (text ? 'start this chat and send it the message below' : 'start this chat') : request.kind === 'send' ? 'send the message below to this chat' : 'answer this chat’s menu'}. Nothing reaches the chat unless you choose {request.kind === 'answer' ? 'Answer' : 'Send'}.</p>
-        <dl className="studio-confirm-facts">
-          <dt>Chat</dt><dd>{request.chat}</dd>
-          <dt>Agent</dt><dd>{request.agent}{request.kind === 'start' ? ` · ${request.effort} effort · permissions not bypassed` : ''}</dd>
-          <dt>Folder</dt><dd>{request.folder}</dd>
-        </dl>
-        {request.kind === 'answer' ? (
-          <dl className="studio-confirm-facts">
-            <dt>Menu</dt><dd>{request.question || '(no question)'}</dd>
-            <dt>Answer</dt><dd className="studio-confirm-answer">{request.answer}</dd>
-          </dl>
-        ) : text !== null && (
-          <>
-            <div className="studio-confirm-size">Message: {text.length.toLocaleString()} characters</div>
-            <pre className="studio-confirm-text" aria-label="Message to send" tabIndex={0}>{text}</pre>
-          </>
-        )}
-        <div className="studio-confirm-actions">
-          <button type="button" onClick={() => settle(item.id, false)}>Cancel</button>
-          <button type="button" className="primary" disabled={!armed} onClick={() => settle(item.id, true)}>{request.kind === 'answer' ? 'Answer' : 'Send'}</button>
-        </div>
-      </div>
-    </div>
-  )
 }
 
 interface Site { url: string; origin: string }
@@ -114,7 +59,6 @@ export default function UIStudioFrame() {
   const frame = useRef<HTMLIFrameElement>(null)
   const [site, setSite] = useState<Site | null>(null)
   const [error, setError] = useState('')
-  const queue = usePending()
 
   useEffect(() => {
     if (!isDesktop) return
@@ -125,7 +69,8 @@ export default function UIStudioFrame() {
 
   useEffect(() => {
     if (!site) return
-    mounted++
+    // Leaving the studio cancels what it was waiting to send.
+    const detach = queue.attach()
     const { origin } = site
     const onMessage = (event: MessageEvent) => {
       const target = frame.current?.contentWindow
@@ -142,9 +87,7 @@ export default function UIStudioFrame() {
     window.addEventListener('message', onMessage)
     return () => {
       window.removeEventListener('message', onMessage)
-      mounted--
-      // Leaving the studio cancels what it was waiting to send.
-      if (!mounted) for (const item of [...pending]) settle(item.id, false)
+      detach()
     }
   }, [site])
 
@@ -160,7 +103,7 @@ export default function UIStudioFrame() {
         className="report-frame loaded"
         sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads allow-modals"
       />
-      {queue[0] && <Confirmation key={queue[0].id} item={queue[0]} />}
+      <ConfirmLayer queue={queue} />
     </div>
   )
 }

@@ -115,7 +115,7 @@ try {
   // The frame cannot answer the confirmation itself: Send is outside it.
   const approved = ask(studio, 'start', { agent: 'claude', cwd: 'projects/Sample Game', effort: 'high', name: 'UI Studio Sample Game', text: message }, 40000);
   await expect(dialog).toBeVisible();
-  assert.equal(await studio.evaluate(() => document.querySelector('[role="dialog"][aria-labelledby="studio-confirm-title"]')), null);
+  assert.equal(await studio.evaluate(() => document.querySelector('.confirm-send')), null);
   await dialog.getByRole('button', { name: 'Send' }).click();
   const chat = await approved;
   assert.equal(chat?.ok, true, chat?.error);
