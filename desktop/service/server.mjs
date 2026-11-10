@@ -34,6 +34,15 @@ import { LocalReadAloud } from './local-read-aloud.mjs';
 import { Handoffs } from './handoff.mjs';
 import { chatCommands } from './chat-commands.mjs';
 import { isThemePreference } from './appearance.mjs';
+import { GameApprovals, GameRunner, describeGame, gameSetupPrompt, readGame, saveGame } from './game-run.mjs';
+
+// A project folder named by the UI: an existing absolute directory.
+async function projectFolder(value) {
+  if (typeof value !== 'string' || !path.isAbsolute(value) || /[\x00-\x1f]/.test(value)) throw new Error('Choose a project folder.');
+  const folder = await realpath(value).catch(() => null);
+  if (!folder || !(await stat(folder)).isDirectory()) throw new Error('This project folder no longer exists.');
+  return folder;
+}
 
 const listen = server => new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', () => resolve(`http://127.0.0.1:${server.address().port}`)); });
 
@@ -90,6 +99,11 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
   const notices = [];
   const send = (ws, type, value) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type, ...value })); };
   const broadcast = (type, value) => { for (const ws of clients) send(ws, type, value); };
+  // A chat's game: its own folder unless the owner chose another project in its panel.
+  const games = new GameRunner({ approvals: new GameApprovals(path.join(stateDir, 'game-approvals.json')) });
+  games.on('changed', cwd => broadcast('game', { path: cwd, status: games.status(cwd) }));
+  const chatGame = async id => { const session = sessions.get(id); return { session, cwd: await projectFolder(session.gameFolder || session.cwd) }; };
+  const gameState = async cwd => ({ ...await describeGame(cwd, games.approvals), folder: cwd, status: games.status(cwd) });
   const nativeSettings = new NativeSettings(native, value => broadcast('native-settings', value));
   const show = (window, extra = {}) => { native({ type: 'window', action: 'show', window }); broadcast('navigate', { window, ...extra }); };
   const focus = id => { sessions.get(id); selectedId = id; settings.selectedId = id; scheduleSettings(); show('chats', { sessionId: id }); return { selectedId: id }; };
@@ -98,7 +112,8 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
   const cards = new CardDocuments(workspace);
   const history = query => sessions.list().filter(item => !query || `${item.name} ${item.agent} ${item.cwd} ${item.preview || ''}`.normalize('NFC').toLowerCase().includes(query.normalize('NFC').toLowerCase())).sort((a, b) => Number(b.pinned) - Number(a.pinned) || String(b.updatedAt).localeCompare(String(a.updatedAt)));
   const closeChat = async id => {
-    await sessions.remove(id);
+    // The game this chat started stops with it, even when its terminal is slow to close.
+    try { await sessions.remove(id); } finally { await games.stopSession(id); }
     if (selectedId === id) { selectedId = sessions.active()[0]?.id || null; settings.selectedId = selectedId; scheduleSettings(); broadcast('selection', { selectedId }); }
     return { closed: true, savedInHistory: true };
   };
@@ -266,6 +281,28 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
         if (method === 'GET' && url.pathname === '/api/mcp') return json(response, 200, await mcp.list());
         if (method === 'POST' && url.pathname === '/api/mcp/check') return json(response, 200, await mcp.check(data.id));
         if (method === 'POST' && url.pathname === '/api/native/settings') return json(response, 200, await nativeSettings.set(data.winKey));
+        // Run game: nothing runs until the owner presses Run and confirms the command.
+        if (method === 'GET' && url.pathname === '/api/game') return json(response, 200, await gameState((await chatGame(url.searchParams.get('id'))).cwd));
+        if (method === 'POST' && url.pathname === '/api/game') {
+          const { cwd } = await chatGame(data.id);
+          await saveGame(cwd, data.config);
+          // The owner typed this command in the panel, so it counts as confirmed.
+          const { launch } = await describeGame(cwd, games.approvals);
+          if (launch?.digest) await games.approvals.approve(cwd, launch.digest);
+          return json(response, 200, await gameState(cwd));
+        }
+        if (method === 'POST' && url.pathname === '/api/game/run') {
+          const { session, cwd } = await chatGame(data.id);
+          await games.run(cwd, { approve: typeof data.approve === 'string' ? data.approve : undefined, sessionId: session.id });
+          return json(response, 200, await gameState(cwd));
+        }
+        if (method === 'POST' && url.pathname === '/api/game/stop') { const { cwd } = await chatGame(data.id); await games.stop(cwd); return json(response, 200, await gameState(cwd)); }
+        if (method === 'POST' && url.pathname === '/api/game/setup') {
+          const { session, cwd } = await chatGame(data.id);
+          if (session.agent === 'shell') throw new Error('Ask an agent chat to set up the game.');
+          const guide = path.join(repo, '.agents', 'skills', 'mrmak-chat-features', 'references', 'game-run.md');
+          return json(response, 200, sessions.input(session.id, gameSetupPrompt((await readGame(cwd)).path, cwd, guide), { coordinator: true, submit: true }));
+        }
         if (method === 'GET' && url.pathname === '/api/recent-projects') return json(response, 200, await projectList());
         if (method === 'POST' && url.pathname === '/api/recent-projects/pin') {
           const project = (await projectList()).find(item => typeof data.path === 'string' && projectKey(item.path) === projectKey(data.path));
@@ -397,7 +434,7 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
           if (method === 'POST' && action === 'clear') return json(response, 200, await sessions.clearScreen(id));
           if (method === 'POST' && action === 'reorder') return json(response, 200, await sessions.reorder(id, data.targetId, data.position));
           if (method === 'POST' && action === 'input') return json(response, 200, sessions.input(id, data.text, { coordinator: data.paste !== false, submit: data.submit !== false }));
-          if (method === 'PATCH' && !action) return json(response, 200, typeof data.pinned === 'boolean' ? sessions.pin(id, data.pinned) : 'tabColor' in data ? sessions.color(id, data.tabColor) : 'group' in data ? await sessions.assign(id, data.group) : sessions.rename(id, data.name));
+          if (method === 'PATCH' && !action) return json(response, 200, typeof data.pinned === 'boolean' ? sessions.pin(id, data.pinned) : 'tabColor' in data ? sessions.color(id, data.tabColor) : 'gameFolder' in data ? sessions.setGameFolder(id, data.gameFolder === null ? null : await projectFolder(data.gameFolder)) : 'group' in data ? await sessions.assign(id, data.group) : sessions.rename(id, data.name));
           if (method === 'DELETE' && !action) return json(response, 200, await closeChat(id));
         }
         if (method === 'POST' && url.pathname === '/api/window') {
@@ -449,7 +486,7 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
       if (!info.isFile()) throw new Error('File not found');
       await serveFile(request, response, file, info, {
         'Referrer-Policy': 'no-referrer', 'X-Frame-Options': 'DENY',
-        'Content-Security-Policy': `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: ${files.origin}; media-src 'self' blob: ${files.origin}; connect-src 'self' ws://127.0.0.1:* ${files.origin}; frame-src http://127.0.0.1:*; object-src 'none'; base-uri 'self'; frame-ancestors 'none'`,
+        'Content-Security-Policy': `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: ${files.origin}; media-src 'self' blob: ${files.origin}; connect-src 'self' ws://127.0.0.1:* ${files.origin}; frame-src http://localhost:* http://127.0.0.1:* http://[::1]:*; object-src 'none'; base-uri 'self'; frame-ancestors 'none'`,
       });
     } catch (error) { if (!response.headersSent) json(response, error.status || 400, { error: publicError(error) }); }
   });
@@ -498,7 +535,7 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
       async close() {
         if (closing) return; closing = true; mcp.close(); nativeSettings.close(); await files.writes.catch(() => {});
       watcher?.close(); clearTimeout(restoreTimer); coordinator.close(); clearTimeout(settingsTimer); await saveSettings(); await transcriptSave; await quick.saves; await workspace.writes;
-      dictation.close(); await mobile.close();
+      dictation.close(); await mobile.close(); await games.close();
       for (const ws of wss.clients) ws.terminate();
       wss.close(); await sessions.close();
       server.closeAllConnections(); contentServer.closeAllConnections();

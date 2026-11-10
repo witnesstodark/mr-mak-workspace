@@ -11,6 +11,8 @@ export interface ChatSession {
   attention: boolean; cols: number; rows: number; exitCode?: number | null
   activity: 'idle' | 'working' | 'waiting'; unread: boolean; completionVersion: number
   tabOrder: number; tabColor: string | null; group: string | null
+  /** The project whose game the Game panel shows; the chat's folder when absent. */
+  gameFolder?: string | null
   open: boolean; pinned: boolean; updatedAt: string; preview?: string; hasConversation?: boolean; restoreError?: string | null
   contextUsage?: ContextUsage
 }
@@ -39,4 +41,11 @@ export interface ServiceEvent {
   type: string; id?: string; data?: string; sequence?: number; session?: ChatSession; sessions?: ChatSession[]
   selectedId?: string; sessionId?: string; state?: string; error?: string; notice?: Notice
   operation?: Operation; settings?: Settings; owner?: VoiceOwner | null; window?: string; route?: string; preview?: Preview; handoff?: Handoff
+  path?: string; status?: GameStatus
 }
+
+export interface GameConfig { command: string; cwd?: string; url?: string }
+export interface GameStatus { running: boolean; pid?: number; startedAt?: string; endedAt?: string; exitCode?: number | null; command?: string; sessionId?: string | null; output: string[] }
+/** What Mr. Mak would launch, and whether the owner already confirmed this exact command. */
+export interface GameLaunch { digest: string; approved: boolean; changed: boolean; program?: string; args?: string[]; folder?: string; shell?: boolean; error?: string }
+export interface GameState { path: string; folder: string; config: GameConfig | null; error?: string; launch: GameLaunch | null; status: GameStatus }

@@ -89,6 +89,40 @@ both mouse tracking and the requested SGR encoding, including saved screens,
 so switching tabs or reconnecting does not disable its mouse wheel. Classic
 Claude and Codex continue using local terminal scrollback.
 
+## Game panel
+
+The play button in a chat's header opens that chat's Game panel; each chat
+opens and closes its own. A game belongs to a project folder: the panel shows the
+chat's folder unless the owner chose another project there, which the chat keeps
+(`gameFolder`, `PATCH /api/sessions/<id>`), so chats sharing the Workspace folder
+each run their own game. `.agents/game.json` in the project holds `command`, an
+optional `cwd` inside the project and an optional local `url` (`game-run.mjs`
+refuses other types, control characters, files over 16 KB, folders that leave the
+project, also through a link, and remote addresses). **Ask the agent to set it
+up** sends the chat a request to write that file; the owner can also write it in
+the panel.
+
+Nothing runs when the panel or the project opens. **Run game** runs the command
+only after the owner has seen it: the first time, and whenever the file changes,
+the panel shows the resolved program, its arguments and folder and waits for
+**Run it**. The confirmation is a digest of the project and the file's fields,
+kept in Mr. Mak's state (`.mrmak/game-approvals.json`), so a cloned or pulled
+repository cannot bring its own; the service refuses a run whose digest the owner
+has not confirmed (409). A command the owner saves in the panel counts as
+confirmed.
+
+The command is split into a program and arguments and started without a shell;
+`&&`, pipes and redirections are refused. A `.cmd` or `.bat` program on Windows
+runs through `cmd.exe /d /v:off /s /c` with quoted arguments and no `"` or `%`.
+The game runs from its folder with no agent turn; the panel keeps its last 200
+output lines. **Stop game**, closing the chat that started it, a 12-hour limit
+and closing the service end the command's whole process tree (`taskkill /T /F`
+on Windows, the process group elsewhere). A process the command leaves behind
+after it exits, such as a launcher's game, is outside that tree. A `url` is
+previewed in the panel while the game runs (`GET`/`POST /api/game`,
+`/api/game/run`, `/api/game/stop`, `/api/game/setup`, with the chat's `id` and
+the service token like every other route).
+
 ## Local microphone dictation
 
 Desktop chats, the Mak composer and paired mobile chats support free local Whisper
