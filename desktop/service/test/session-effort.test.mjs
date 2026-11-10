@@ -1,13 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Sessions } from '../sessions.mjs';
+import { createService } from '../server.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 
-test('new and imported chats default to xhigh; explicit efforts survive saving and reopening', async () => {
+test('new and imported chats retain extra-high effort; explicit efforts survive saving and reopening', async () => {
   await mkdir(path.join(root, '.cache'), { recursive: true });
   const repo = await mkdtemp(path.join(root, '.cache', 'session-effort-'));
   const stateDir = path.join(repo, 'state');
@@ -37,4 +38,32 @@ test('new and imported chats default to xhigh; explicit efforts survive saving a
     assert.equal(restored.list().length, expected.size);
     for (const session of restored.list()) assert.equal(session.effort, expected.get(session.id));
   } finally { await restored.close(); }
+});
+
+test('the chosen default effort applies to new desktop chats; an explicit effort still wins', async () => {
+  await mkdir(path.join(root, '.cache'), { recursive: true });
+  const repo = await mkdtemp(path.join(root, '.cache', 'default-effort-'));
+  await mkdir(path.join(repo, 'workspace'));
+  await writeFile(path.join(repo, 'workspace/workspace.json'), '{"entities":[]}');
+  let service = await createService({ repo, uiDir: repo, mcpOptions: { home: repo, env: {} } });
+  const request = (route, data) => fetch(service.origin + '/api' + route, { method: 'POST', headers: { Authorization: `Bearer ${service.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+  const created = [];
+  const capture = async options => {
+    created.push(options);
+    return service.sessions.make({ id: `fixture-${created.length}`, cwd: repo, open: false, status: 'closed', ...options });
+  };
+  service.sessions.create = capture;
+  try {
+    await request('/sessions', { agent: 'claude' }); assert.equal(created.at(-1).effort, 'xhigh');
+    assert.equal((await (await request('/settings', { defaultEffort: 'high' })).json()).defaultEffort, 'high');
+    await request('/sessions', { agent: 'codex' }); assert.equal(created.at(-1).effort, 'high');
+    await request('/sessions', { agent: 'codex', effort: 'max' }); assert.equal(created.at(-1).effort, 'max');
+    assert.equal((await (await request('/settings', { defaultEffort: 'low' })).json()).defaultEffort, 'high');
+    await request('/settings', { defaultEffort: 'medium' });
+    await service.close();
+    service = await createService({ repo, uiDir: repo, mcpOptions: { home: repo, env: {} } });
+    service.sessions.create = capture;
+    await request('/sessions', { agent: 'claude' }); assert.equal(created.at(-1).effort, 'medium');
+    await request('/sessions', { agent: 'codex', effort: 'xhigh' }); assert.equal(created.at(-1).effort, 'xhigh');
+  } finally { await service.close(); }
 });

@@ -1,0 +1,56 @@
+{
+  "comment": "Rows in the shape OpenCode 2.0.32 (session_v2, session_message) and 1.19.3 (session, message, part) store them in opencode.db. Invented content; {{folderUrl}} is replaced with the test folder's file URL.",
+  "v2": {
+    "session": { "id": "ses_mrmakFixtureCurrent", "directory": "E:\\fixture", "version": "2.0.32", "time_created": 1792900000000, "time_updated": 1792900012000, "revert": null },
+    "messages": [
+      { "id": "msg_c001", "type": "system", "seq": 1, "time_created": 1792900000000, "data": { "metadata": { "notice": "instructions", "instructionSources": ["core/date"] }, "time": { "created": 1792900000000 }, "text": "Project instructions loaded from AGENTS.md", "description": "Instructions updated: core/date" } },
+      { "id": "msg_c002", "type": "user", "seq": 2, "time_created": 1792900001000, "data": { "time": { "created": 1792900001000 }, "text": "Fix the collision bug in player.ts", "files": [{ "mime": "image/png", "name": "bug.png", "uri": "data:image/png;base64,iVBORw0KGgoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==" }], "agents": [] } },
+      { "id": "msg_c003", "type": "assistant", "seq": 3, "time_created": 1792900002000, "data": {
+        "time": { "created": 1792900002000, "completed": 1792900004000 }, "agent": "build",
+        "model": { "id": "gpt-5.1-codex", "providerID": "openai", "variant": "high" },
+        "content": [
+          { "type": "reasoning", "text": "PRIVATE_REASONING_SENTINEL: the player box is checked before it moves.", "time": { "created": 1792900002000, "completed": 1792900002500 } },
+          { "type": "tool", "id": "call_read", "name": "read", "state": { "status": "completed", "input": { "filePath": "player.ts" }, "content": [{ "type": "text", "text": "TOOL_OUTPUT_SENTINEL export function move() {}" }, { "type": "file", "mime": "image/png", "name": "render.png", "uri": "data:image/png;base64,iVBORw0KGgoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==" }] }, "time": { "created": 1792900002600, "completed": 1792900002700 } },
+          { "type": "tool", "id": "call_test", "name": "bash", "state": { "status": "error", "input": { "command": "npm test" }, "error": { "type": "tool.execution", "message": "exit 1" } }, "time": { "created": 1792900003000, "completed": 1792900003500 } },
+          { "type": "text", "text": "Fixed the collision check in `player.ts`." }
+        ],
+        "finish": "stop", "cost": 0.01, "tokens": { "input": 1200, "output": 80, "reasoning": 20, "cache": { "read": 0, "write": 0 } } } },
+      { "id": "msg_c004", "type": "synthetic", "seq": 4, "time_created": 1792900005000, "data": { "time": { "created": 1792900005000 }, "text": "The previous response was interrupted. Continue from where you left off." } },
+      { "id": "msg_c005", "type": "assistant", "seq": 5, "time_created": 1792900006000, "data": { "time": { "created": 1792900006000, "completed": 1792900006500 }, "agent": "build", "model": { "id": "gpt-5.1-codex", "providerID": "openai", "variant": "high" }, "content": [], "finish": "error", "error": { "type": "provider.quota", "message": "Quota exceeded for this API key.\nRetry later." } } },
+      { "id": "msg_c006", "type": "idle", "seq": 6, "time_created": 1792900006600, "data": { "time": { "created": 1792900006600 }, "outcome": "failed", "error": { "type": "provider.quota", "message": "Quota exceeded for this API key." } } },
+      { "id": "msg_c007", "type": "compaction", "seq": 7, "time_created": 1792900007000, "data": { "time": { "created": 1792900007000 }, "status": "completed", "reason": "auto", "summary": "Earlier: the collision check in player.ts was fixed.", "recent": "" } },
+      { "id": "msg_c008", "type": "model-switched", "seq": 8, "time_created": 1792900008000, "data": { "time": { "created": 1792900008000 }, "model": { "id": "claude-sonnet-4-5", "providerID": "anthropic" }, "previous": { "id": "gpt-5.1-codex", "providerID": "openai", "variant": "high" } } },
+      { "id": "msg_c009", "type": "user", "seq": 9, "time_created": 1792900009000, "data": { "time": { "created": 1792900009000 }, "text": "Now add a regression test.", "files": [], "agents": [] } },
+      { "id": "msg_c010", "type": "assistant", "seq": 10, "time_created": 1792900010000, "data": { "time": { "created": 1792900010000 }, "agent": "build", "model": { "id": "claude-sonnet-4-5", "providerID": "anthropic", "variant": "default" }, "content": [{ "type": "tool", "id": "call_write", "name": "write", "state": { "status": "running", "input": { "filePath": "player.test.ts" } }, "time": { "created": 1792900010500 } }] } }
+    ]
+  },
+  "v1": {
+    "session": { "id": "ses_mrmakFixtureLegacy", "directory": "E:\\fixture", "version": "1.19.3", "time_created": 1792800000000, "time_updated": 1792800009000, "revert": null },
+    "messages": [
+      { "id": "msg_l001", "time_created": 1792800001000, "data": { "role": "user", "time": { "created": 1792800001000 }, "agent": "build", "model": { "providerID": "ollama", "modelID": "gpt-oss:20b" } }, "parts": [
+        { "id": "prt_l001", "data": { "type": "text", "text": "Where is the spawn point set?" } },
+        { "id": "prt_l002", "data": { "type": "text", "synthetic": true, "text": "Called the Read tool with the following input: {\"filePath\":\"shot.png\"}" } },
+        { "id": "prt_l003", "data": { "type": "file", "mime": "image/png", "filename": "shot.png", "url": "{{folderUrl}}/shot.png" } }
+      ] },
+      { "id": "msg_l002", "time_created": 1792800002000, "data": { "parentID": "msg_l001", "role": "assistant", "mode": "build", "agent": "build", "path": { "cwd": "E:\\fixture", "root": "E:\\fixture" }, "cost": 0, "tokens": { "total": 10, "input": 8, "output": 2, "reasoning": 0, "cache": { "write": 0, "read": 0 } }, "modelID": "gpt-oss:20b", "providerID": "ollama", "time": { "created": 1792800002000, "completed": 1792800003000 }, "finish": "tool-calls" }, "parts": [
+        { "id": "prt_l004", "data": { "type": "step-start", "snapshot": "0000000000000000000000000000000000000000" } },
+        { "id": "prt_l005", "data": { "type": "reasoning", "text": "PRIVATE_REASONING_SENTINEL", "time": { "start": 1792800002100, "end": 1792800002200 } } },
+        { "id": "prt_l006", "data": { "type": "tool", "tool": "grep", "callID": "call_grep", "state": { "status": "completed", "input": { "pattern": "spawn" }, "output": "TOOL_OUTPUT_SENTINEL level.ts:12", "title": "spawn", "metadata": {}, "time": { "start": 1792800002300, "end": 1792800002400 } } } },
+        { "id": "prt_l007", "data": { "type": "step-finish", "reason": "tool-calls", "snapshot": "0000000000000000000000000000000000000000", "tokens": { "total": 10, "input": 8, "output": 2, "reasoning": 0, "cache": { "write": 0, "read": 0 } }, "cost": 0 } }
+      ] },
+      { "id": "msg_l003", "time_created": 1792800004000, "data": { "parentID": "msg_l001", "role": "assistant", "mode": "build", "agent": "build", "modelID": "gpt-oss:20b", "providerID": "ollama", "time": { "created": 1792800004000, "completed": 1792800005000 }, "finish": "stop" }, "parts": [
+        { "id": "prt_l008", "data": { "type": "text", "text": "The spawn point is set in `level.ts` line 12." } }
+      ] },
+      { "id": "msg_l004", "time_created": 1792800006000, "data": { "role": "user", "time": { "created": 1792800006000 }, "agent": "build", "model": { "providerID": "ollama", "modelID": "gpt-oss:20b" } }, "parts": [
+        { "id": "prt_l009", "data": { "type": "compaction", "auto": true } }
+      ] },
+      { "id": "msg_l005", "time_created": 1792800007000, "data": { "parentID": "msg_l004", "role": "assistant", "mode": "compaction", "agent": "compaction", "summary": true, "modelID": "gpt-oss:20b", "providerID": "ollama", "time": { "created": 1792800007000, "completed": 1792800007500 }, "finish": "stop" }, "parts": [
+        { "id": "prt_l010", "data": { "type": "text", "text": "Earlier: the spawn point lives in level.ts." } }
+      ] },
+      { "id": "msg_l006", "time_created": 1792800008000, "data": { "role": "user", "time": { "created": 1792800008000 }, "agent": "build", "model": { "providerID": "ollama", "modelID": "gpt-oss:20b" } }, "parts": [
+        { "id": "prt_l011", "data": { "type": "text", "text": "Move it two tiles left." } }
+      ] },
+      { "id": "msg_l007", "time_created": 1792800009000, "data": { "parentID": "msg_l006", "role": "assistant", "mode": "build", "agent": "build", "modelID": "gpt-oss:20b", "providerID": "ollama", "time": { "created": 1792800009000, "completed": 1792800009100 }, "error": { "name": "MessageAbortedError", "data": { "message": "Aborted" } } }, "parts": [] }
+    ]
+  }
+}

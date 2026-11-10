@@ -48,6 +48,13 @@ from the disk image over the one in Applications and choose Replace.
 macOS asks again for permissions such as microphone access after each rebuild,
 because the ad-hoc signature changes. See [macOS notes](macos.md).
 
+Version 0.6.3 extends **Conversation** to Antigravity and OpenCode and adds CLI
+question controls on desktop and phone. Each desktop chat shows its latest
+context usage; inferred Claude limits are labelled as estimates. **Settings →
+Chats → Default reasoning effort** controls new chats, with Extra high retained
+as the initial default. Existing chat settings and saved histories are preserved.
+The project grouping button retains custom group names across toggles and restart.
+
 Version 0.5.2 adds named chat groups and an optional **Conversation** view for
 Claude Code and Codex. Right-click a chat tab to manage its group, or use the
 Conversation / Terminal switch to choose how you read that chat. Existing chats

@@ -37,6 +37,17 @@ function groupRanks(items: ChatSession[]) {
   return (item: ChatSession) => (item.group ? ranks.get(`${item.pinned}:${item.group}`) : undefined) ?? (item.tabOrder || 0)
 }
 
+/** Open tabs are grouped by project when each folder's tabs share one group that holds only that folder. The service's `projectGrouped` applies the same rule. */
+export function projectGrouped(sessions: ChatSession[]) {
+  const open = sessions.filter(item => item.open), groups = new Map<string, string>(), folders = new Map<string, string>()
+  for (const item of open) {
+    const key = projectKey(item.cwd)
+    if (!item.group || (groups.get(key) ?? item.group) !== item.group || (folders.get(item.group) ?? key) !== key) return false
+    groups.set(key, item.group); folders.set(item.group, key)
+  }
+  return open.length > 0
+}
+
 export function orderedChats(sessions: ChatSession[]) {
   const open = sessions.filter(item => item.open)
   const rank = groupRanks(open)

@@ -1,9 +1,10 @@
 import { mkdir, open, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { antigravityContext, unknownContext } from './native-context.mjs';
 
 const uuid = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
-const nativeLine = new RegExp(`^[IWEF]\\d{4} \\d{2}:\\d{2}:\\d{2}\\.\\d+\\s+\\d+ [^\\]\\r\\n]+:\\d+\\] (?:Created|Resuming) conversation (${uuid})\\s*$`, 'i');
+const nativeLine = new RegExp(`^[IWEF]\\d{4} \\d{2}:\\d{2}:\\d{2}\\.\\d+\\s+\\d+ [^\\]\\r\\n]+:\\d+\\] (?:Print mode:\\s+)?(?:Created|Resuming|Streaming) conversation (${uuid})(?: \\([^)\\r\\n]*\\))?\\s*$`, 'i');
 export const validAntigravityId = value => typeof value === 'string' && new RegExp(`^${uuid}$`, 'i').test(value);
 
 export function antigravityLogPath(stateDir, chatId) {
@@ -67,7 +68,7 @@ export function watchAntigravity(stateDir, chatId, onConversation) {
 }
 
 // agy keeps each conversation in its own SQLite file. Mr. Mak opens it
-// read-only and reads only the latest step.
+// read-only and reads only the context metadata of the latest generation.
 export const antigravityConversationFile = (id, home = os.homedir()) => path.join(home, '.gemini', 'antigravity-cli', 'conversations', `${id}.db`);
 
 let sqlite;
@@ -131,31 +132,69 @@ export async function readAntigravityTurn(file) {
   } finally { database.close(); }
 }
 
-// Reports each change of the bound conversation's turn state. The state of a
-// conversation bound at start is history, so a resumed chat does not report it.
-export function watchAntigravityTurns(conversation, onTurn, { file = antigravityConversationFile } = {}) {
-  const initial = conversation();
-  let closed = false, reading = false, watched = null, signature = '', last;
+export async function readAntigravityContext(file) {
+  const DatabaseSync = await sqliteDatabase();
+  if (!DatabaseSync) return null;
+  const database = new DatabaseSync(file, { readOnly: true });
+  try {
+    const row = database.prepare('SELECT idx, data FROM gen_metadata ORDER BY idx DESC LIMIT 1').get();
+    return row ? { index: Number(row.idx), usage: antigravityContext(row.data) || unknownContext('antigravity', 'unavailable') } : { index: -1, usage: null };
+  } finally { database.close(); }
+}
+
+// Reports the latest generation once, and again only when another becomes
+// latest (a new turn or a rewind), so a reread cannot undo a reset after input.
+export function watchAntigravityContext(conversation, onContext, { file = antigravityConversationFile } = {}) {
+  let closed = false, reading = false, watched = null, signature = '', index = -1;
   const tick = async () => {
     const id = conversation();
     if (closed || reading || !validAntigravityId(id)) return;
     reading = true;
     try {
-      if (id !== watched) { watched = id; signature = ''; last = id === initial ? null : ''; }
-      if (!(await sqliteDatabase())) { stop(); return; }
+      if (id !== watched) { watched = id; signature = ''; index = -1; }
+      if (!(await sqliteDatabase())) { stop(); onContext(unknownContext('antigravity', 'unavailable')); return; }
+      // The database uses WAL: a new turn may change only the -wal file.
       const info = await stat(file(id)), wal = await stat(`${file(id)}-wal`).catch(() => null);
       const next = `${info.size}:${info.mtimeMs}:${wal?.size}:${wal?.mtimeMs}`;
       if (next === signature) return;
-      const turn = await readAntigravityTurn(file(id));
+      const latest = await readAntigravityContext(file(id));
       signature = next;
-      if (!turn || closed || id !== conversation()) return;
-      const key = `${turn.kind}:${turn.step}`;
-      if (last === null) last = key;
-      else if (key !== last) { last = key; onTurn({ ...turn, id: `${id}:${turn.step}` }); }
+      if (latest.index !== index && !closed && id === conversation()) { index = latest.index; onContext(latest.usage || unknownContext('antigravity')); }
     } catch { /* The CLI may not have created the file yet, or holds a write lock. */ }
     finally { reading = false; }
   };
   const stop = () => { closed = true; clearInterval(timer); };
   const timer = setInterval(tick, 1000); timer.unref(); void tick();
   return stop;
+}
+
+async function transcriptFile(nativeId, names, env, home) {
+  if (!validAntigravityId(nativeId)) throw new Error('Invalid Antigravity conversation ID.');
+  const roots = [
+    env.ANTIGRAVITY_BRAIN_DIR,
+    env.ANTIGRAVITY_HOME && path.join(env.ANTIGRAVITY_HOME, 'brain'),
+    path.join(home, '.gemini', 'antigravity-cli', 'brain'),
+    path.join(home, '.gemini', 'antigravity', 'brain'),
+  ].filter(Boolean);
+  for (const root of roots) for (const name of names) {
+    const file = path.join(root, nativeId, '.system_generated', 'logs', name);
+    if (await stat(file).then(s => s.isFile(), () => false)) return file;
+  }
+  const fallback = (env.ANTIGRAVITY_BRAIN_DIR && roots.find(r => r === env.ANTIGRAVITY_BRAIN_DIR)) || roots[0] || path.join(home, '.gemini', 'antigravity-cli', 'brain');
+  return path.join(fallback, nativeId, '.system_generated', 'logs', 'transcript.jsonl');
+}
+
+// The transcript whose appended records signal turns; its fields may be shortened.
+export function antigravityTranscript(nativeId, env = process.env, home = os.homedir()) {
+  return transcriptFile(nativeId, ['transcript.jsonl'], env, home);
+}
+
+// agy writes each conversation twice, in step. transcript.jsonl keeps only the
+// first and last 2048 bytes of a field over 4 KB, joined by "\n<truncated N bytes>\n",
+// and names it in truncated_fields. A cut inside a Markdown list also drops the
+// parent items, so the nested items left after it render glued to the line before.
+// transcript_full.jsonl, next to it, keeps every field whole: read text from it, and
+// from the shortened copy only when no full copy exists.
+export function antigravityFullTranscript(nativeId, env = process.env, home = os.homedir()) {
+  return transcriptFile(nativeId, ['transcript_full.jsonl', 'transcript.jsonl'], env, home);
 }

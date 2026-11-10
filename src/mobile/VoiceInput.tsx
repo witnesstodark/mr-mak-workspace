@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Icon } from '../desktop/Icons'
 import { transcribeMobileAudio, type DictationInfo } from './client'
+import { onDoubleCtrl } from './double-ctrl'
 import { deleteVoiceDraft, readVoiceDraft, saveVoiceDraft, type VoiceDraft } from './voice-drafts'
 
 type Phase = 'idle' | 'permission' | 'recording' | 'transcribing' | 'saved'
-export default function VoiceInput({ id, connected, disabled, config, onText, onBusy, transcriber = transcribeMobileAudio }: {
-  id: string; connected: boolean; disabled: boolean; config?: DictationInfo
+export default function VoiceInput({ id, connected, disabled, config, hotkey = false, onText, onBusy, transcriber = transcribeMobileAudio }: {
+  id: string; connected: boolean; disabled: boolean; config?: DictationInfo; hotkey?: boolean
   transcriber?: typeof transcribeMobileAudio
   onText: (text: string, recordingId: string) => void | Promise<void>; onBusy: (busy: boolean) => void
 }) {
@@ -34,6 +35,16 @@ export default function VoiceInput({ id, connected, disabled, config, onText, on
     return () => { alive.current = false; controller.current?.abort(); stop(); document.removeEventListener('visibilitychange', hidden) }
   }, [id, stop])
   useEffect(() => { onBusy(phase === 'permission' || phase === 'recording' || phase === 'transcribing') }, [phase, onBusy])
+  const root = useRef<HTMLDivElement>(null), toggle = useRef<() => boolean>(() => false)
+  useEffect(() => {
+    toggle.current = () => {
+      if (!root.current?.getClientRects().length) return false
+      if (phase === 'recording') { stop(); return true }
+      if (phase !== 'idle' || disabled || !connected || !recovered) return false
+      void start(); return true
+    }
+  })
+  useEffect(() => hotkey ? onDoubleCtrl(() => toggle.current()) : undefined, [hotkey])
   async function transcribe(saved: VoiceDraft) {
     const request = ++serial.current
     setPhase('transcribing'); setError(''); busyHandler.current(true)
@@ -111,8 +122,8 @@ export default function VoiceInput({ id, connected, disabled, config, onText, on
     link.click(); window.setTimeout(() => URL.revokeObjectURL(url), 10000)
   }
   const clock = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
-  return <div className={`mobile-voice ${phase}`}>
-    <button type="button" className="mobile-icon mobile-mic" aria-label={phase === 'recording' ? 'Stop recording and transcribe' : 'Dictate a message'} title="Dictate a message" disabled={phase !== 'recording' && (disabled || !connected || !recovered || phase !== 'idle')} onClick={() => phase === 'recording' ? stop() : void start()}><Icon name={phase === 'recording' ? 'stop' : 'mic'} /></button>
+  return <div ref={root} className={`mobile-voice ${phase}`}>
+    <button type="button" className="mobile-icon mobile-mic" aria-label={phase === 'recording' ? 'Stop recording and transcribe' : 'Dictate a message'} title={hotkey ? 'Dictate a message · double-tap Ctrl' : 'Dictate a message'}disabled={phase !== 'recording' && (disabled || !connected || !recovered || phase !== 'idle')} onClick={() => phase === 'recording' ? stop() : void start()}><Icon name={phase === 'recording' ? 'stop' : 'mic'} /></button>
     {phase !== 'idle' && <div className="mobile-voice-panel" role="status">
       <span>{phase === 'permission' ? 'Allow microphone access…' : phase === 'recording' ? `Recording ${clock} · tap Stop when finished` : phase === 'transcribing' ? 'Transcribing… Your message will stay a draft.' : `Saved recording · ${clock}`}</span>
       {phase === 'recording' && <button type="button" onClick={() => stop(true)}>Cancel recording</button>}

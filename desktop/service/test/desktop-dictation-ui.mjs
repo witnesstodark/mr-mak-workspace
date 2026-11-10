@@ -53,6 +53,16 @@ try {
   await page.getByRole('button', { name: 'Cancel recording' }).click();
   await expect(page.getByRole('button', { name: 'Dictate a message', exact: true })).toBeEnabled();
   assert.equal(transcriptions, 1);
+  await page.keyboard.press('Control'); await page.keyboard.press('Control');
+  await expect(page.getByRole('button', { name: 'Stop recording and transcribe' })).toBeVisible();
+  await page.waitForTimeout(700);
+  await page.keyboard.press('Control'); await page.keyboard.press('Control');
+  await expect(page.getByRole('button', { name: 'Dictate a message', exact: true })).toBeEnabled();
+  assert.equal(transcriptions, 2);
+  await page.keyboard.press('Control'); await page.keyboard.press('Shift'); await page.keyboard.press('Control');
+  for (let tap = 0; tap < 2; tap++) { await page.keyboard.down('Control'); await page.keyboard.down('Shift'); await page.keyboard.up('Shift'); await page.keyboard.up('Control'); }
+  await page.waitForTimeout(300);
+  await expect(page.getByRole('button', { name: 'Dictate a message', exact: true })).toBeEnabled();
   await page.route('**/api/sessions/dictation-test/input', route => route.fulfill({ status: 503, json: { error: 'Test paste unavailable' } }));
   await page.getByRole('button', { name: 'Dictate a message', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Stop recording and transcribe' })).toBeVisible();
@@ -63,7 +73,7 @@ try {
   await page.unroute('**/api/sessions/dictation-test/input');
   await page.getByRole('button', { name: 'Transcribe recording', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Dictate a message', exact: true })).toBeEnabled();
-  assert.equal(writes.filter(text => text === '\x1b[200~Please review this draft.\x1b[201~').length, 2);
+  assert.equal(writes.filter(text => text === '\x1b[200~Please review this draft.\x1b[201~').length, 3);
   assert.ok(!writes.includes('\r'));
   await page.getByRole('button', { name: 'Mobile access', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Phone settings', exact: true })).toBeVisible();

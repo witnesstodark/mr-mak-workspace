@@ -11,9 +11,12 @@ import { claudeTranscript, codexTranscript, tailNativeFile } from './native-even
 import { findCodexChat, newerCodexRollout } from './codex-history.mjs';
 import { englishTitle, groupLabel, restoredTitle } from './titles.mjs';
 import { defaultWorkerEffort, workerEfforts } from './effort.mjs';
+import { projectKey } from './recent-projects.mjs';
 import { ptyOptions } from './platform.mjs';
+import { composerText, terminalPrompt } from './terminal-prompt.mjs';
 import { opencodeVersion, opencodeEnvironment, readOpencodeState, watchOpencode } from './opencode.mjs';
-import { prepareAntigravityLog, readAntigravityConversation, validAntigravityId, watchAntigravity, watchAntigravityTurns } from './antigravity.mjs';
+import { antigravityTranscript, prepareAntigravityLog, readAntigravityConversation, validAntigravityId, watchAntigravity, watchAntigravityContext } from './antigravity.mjs';
+import { unknownContext } from './native-context.mjs';
 import { CHAT_TOOL_AGENTS, chatToolArguments, chatToolEnvironment, opencodeChatToolConfig } from './chat-tools.mjs';
 
 const { Terminal } = headless;
@@ -26,7 +29,7 @@ async function workingFolder(value) {
 }
 const publicSession = session => {
   const { id, name, agent, cwd, bypass, effort, status, createdAt, lastOutputAt, lastInputAt, exitCode, nativeId, attention, activity, unread, completionVersion, lastCompletedId, cols, rows, open, pinned, tabOrder, tabColor, group, updatedAt, preview, hasConversation, restoreError } = session;
-  return { id, name, agent, cwd, bypass, effort, status, createdAt, lastOutputAt, lastInputAt, exitCode, nativeId, attention, activity, unread, completionVersion, lastCompletedId, cols, rows, open, pinned, tabOrder, tabColor, group, updatedAt, preview, hasConversation, restoreError };
+  return { id, name, agent, cwd, bypass, effort, status, createdAt, lastOutputAt, lastInputAt, exitCode, nativeId, attention, activity, unread, completionVersion, lastCompletedId, cols, rows, open, pinned, tabOrder, tabColor, group, updatedAt, preview, hasConversation, restoreError, contextUsage: session.contextUsage };
 };
 
 // Grouped tabs sit together at the position of their earliest open member; a tab
@@ -40,6 +43,13 @@ export const groupRanks = items => {
   }
   return item => (item.group ? ranks.get(`${item.pinned}:${item.group}`) : undefined) ?? item.tabOrder;
 };
+
+// What a terminal sends by itself: device and mode replies, focus in and out,
+// OSC colour answers, and mouse reports while the CLI tracks the mouse (moving
+// the pointer over a fullscreen Claude chat sends them continuously).
+// eslint-disable-next-line no-control-regex
+const REPORT = /^(?:\x1b\[[?>0-9;]*[RcnIO]|\x1b\[\?[0-9;]*\$y|\x1b\[<\d+;\d+;\d+[Mm]|\x1b\[M[\s\S]{3}|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\))+$/;
+export const terminalReport = data => REPORT.test(data);
 
 export class Sessions extends EventEmitter {
   constructor(repo, stateDir) {
@@ -68,7 +78,7 @@ export class Sessions extends EventEmitter {
   }
 
   make(metadata) {
-    return { activity: 'idle', unread: false, completionVersion: 0, tabOrder: this.items.size, tabColor: null, group: null, ...metadata, effort: ['codex', 'claude', 'antigravity'].includes(metadata.agent) ? metadata.effort || defaultWorkerEffort : undefined, terminal: null, serializer: null, process: null, sequence: 0, pendingOutput: '', outputTimer: null };
+    return { activity: 'idle', unread: false, completionVersion: 0, tabOrder: this.items.size, tabColor: null, group: null, ...metadata, contextUsage: unknownContext(metadata.agent), effort: ['codex', 'claude', 'antigravity'].includes(metadata.agent) ? metadata.effort || defaultWorkerEffort : undefined, terminal: null, serializer: null, process: null, sequence: 0, pendingOutput: '', outputTimer: null };
   }
 
   async hydrate(session) {
@@ -167,6 +177,7 @@ export class Sessions extends EventEmitter {
   }
 
   async launch(session, resumeId, nativeWatch, first = {}) {
+    session.contextUsage = unknownContext(session.agent);
     let env = childEnvironment(this.repo);
     let opencodeMajor;
     if (session.agent === 'opencode') {
@@ -248,16 +259,17 @@ export class Sessions extends EventEmitter {
       const stopLog = watchAntigravity(this.stateDir, session.id, id => {
         if (session.process === proc) this.bindAntigravity(session, id);
       });
-      const stopTurns = watchAntigravityTurns(() => session.nativeId, turn => {
-        if (session.process !== proc) return;
-        if (turn.kind === 'turn-completed') this.nativeEvent(session, { kind: 'turn-completed', id: turn.id, text: 'The agent finished its turn. Review the result.', preview: turn.reply.slice(-350) });
-        else this.nativeEvent(session, { kind: turn.kind });
+      const stopContext = watchAntigravityContext(() => session.nativeId, usage => {
+        if (session.process === proc) this.nativeEvent(session, { kind: 'context-usage', usage });
       });
-      session.stopNativeWatch = () => { stopLog(); stopTurns(); };
+      session.stopNativeWatch = () => {
+        stopLog(); stopContext(); session.stopTranscriptWatch?.(); session.stopTranscriptWatch = null;
+      };
     }
     if (session.agent === 'opencode') session.stopNativeWatch = watchOpencode(this.stateDir, session, env.MRMAK_OPENCODE_LAUNCH_ID, state => {
       this.bindNative(session, { id: state.nativeId });
       if (session.nativeId !== state.nativeId) return;
+      if (state.contextUsage) this.nativeEvent(session, { kind: 'context-usage', usage: state.contextUsage });
       if (state.completion) this.nativeEvent(session, { kind: 'turn-completed', id: state.completion });
       if (state.activity === 'working') this.nativeEvent(session, { kind: 'turn-started' });
       else if (state.activity === 'waiting') this.nativeEvent(session, { kind: 'attention' });
@@ -267,6 +279,7 @@ export class Sessions extends EventEmitter {
     else if (session.agent === 'claude' && session.nativeId) claudeTranscript(session.cwd, session.nativeId).then(file => {
       if (session.process === proc) this.watchNative(session, file);
     }).catch(() => {});
+    else if (session.agent === 'antigravity' && session.nativeId) this.watchAntigravityTranscript(session, session.nativeId, proc);
   }
 
   beginDiscovery(session) {
@@ -277,7 +290,16 @@ export class Sessions extends EventEmitter {
 
   watchNative(session, file, offset = 0) {
     if (!session.process) return;
+    if (session.agent === 'antigravity') {
+      // The lifecycle log and SQLite usage observer must keep running when a
+      // readable transcript attaches or switches to another native conversation.
+      session.stopTranscriptWatch?.();
+      session.stopTranscriptWatch = tailNativeFile(file, session.agent, event => this.nativeEvent(session, event), offset);
+      return;
+    }
     session.stopNativeWatch?.();
+    session.contextUsage = unknownContext(session.agent);
+    this.changed(session);
     const stopTail = tailNativeFile(file, session.agent, event => this.nativeEvent(session, event), offset);
     if (session.agent !== 'codex') { session.stopNativeWatch = stopTail; return; }
     // A Codex rewind continues the thread in a new rollout, and /new starts another
@@ -301,6 +323,11 @@ export class Sessions extends EventEmitter {
   }
 
   nativeEvent(session, event) {
+    if (event.kind === 'context-usage') {
+      session.contextUsage = event.usage;
+      this.changed(session);
+      return;
+    }
     if (event.kind === 'turn-started') {
       if (session.activity === 'working') return;
       session.activity = 'working'; session.attention = false;
@@ -358,7 +385,15 @@ export class Sessions extends EventEmitter {
   bindAntigravity(session, id) {
     if (!id || id === session.nativeId || [...this.items.values()].some(item => item !== session && item.agent === 'antigravity' && item.nativeId === id)) return;
     session.nativeId = id; session.hasConversation = true; session.restoreError = null;
+    session.contextUsage = unknownContext(session.agent);
     this.changed(session);
+    if (session.process) this.watchAntigravityTranscript(session, id, session.process);
+  }
+
+  watchAntigravityTranscript(session, id, proc) {
+    antigravityTranscript(id).then(file => {
+      if (session.process === proc && session.nativeId === id) this.watchNative(session, file);
+    }).catch(() => {});
   }
 
   flushOutput(session) {
@@ -400,6 +435,10 @@ export class Sessions extends EventEmitter {
     if (coordinator && session.agent === 'shell') throw new Error('Mr. Mak can send messages to agent chats; type shell commands directly in the local shell.');
     if (typeof data !== 'string' || data.length > 64000) throw new Error('Message is too large');
     if (coordinator && Date.now() - Date.parse(session.lastInputAt || 0) < 2500) throw new Error('You are typing in this chat. Wait a moment before sending through Mr. Mak.');
+    // Enter can submit /compact, /clear, /new or /resume in a native CLI. Drop
+    // the previous snapshot until fresh telemetry arrives; do not parse the TUI
+    // input editor or assume that submitted text was accepted as a command.
+    if (data.includes('\r') || data.includes('\n') || submit) session.contextUsage = unknownContext(session.agent);
     if (coordinator) {
       // Bracketed paste keeps multi-line text a single CLI prompt, then Enter submits it.
       const clean = data.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '').replaceAll('\r', '');
@@ -407,11 +446,17 @@ export class Sessions extends EventEmitter {
       target.write(`\x1b[200~${clean}\x1b[201~`);
       // The native CLI finishes handling a paste asynchronously. A quick Enter
       // can be swallowed by a paste guard, especially after resume.
-      if (submit) setTimeout(() => { if (session.process === target) target.write('\r'); }, 500);
+      const typedAt = session.lastInputAt;
+      if (submit) setTimeout(() => {
+        if (session.process !== target) return;
+        target.write('\r');
+        // Right after a slash command, such as an effort switch, Claude Code can
+        // swallow that Enter too. One more submits a message left in its composer.
+        if (session.agent === 'claude') setTimeout(() => void this.resubmit(session, target, typedAt).catch(() => {}), 1500);
+      }, 500);
     } else session.process.write(data);
-    if (!coordinator && !/^\x1b\[[?>0-9;]*[RcnIO]$/.test(data)) session.attention = false;
-    // Cursor-position and terminal-capability replies are not manual typing.
-    if (!coordinator && !/^\x1b\[[?>0-9;]*[RcnIO]$/.test(data)) session.lastInputAt = new Date().toISOString();
+    // Terminal replies, focus changes and mouse reports are not manual typing.
+    if (!coordinator && !terminalReport(data)) { session.attention = false; session.lastInputAt = new Date().toISOString(); }
     if (data.includes('\r') || submit) {
       this.beginDiscovery(session);
       // Antigravity's first Enter can be login, theme or workspace-trust setup.
@@ -421,6 +466,16 @@ export class Sessions extends EventEmitter {
     }
     this.changed(session);
     return { delivered: true, sessionId: id, name: session.name, note: 'Text delivered to the terminal. Check the screen for CLI readiness or permission prompts; delivery does not confirm the agent accepted the task.' };
+  }
+
+  // A long paste can still be settling, so it is checked up to three times.
+  async resubmit(session, target, typedAt, tries = 3) {
+    // Text the person typed in the terminal since then is theirs to send.
+    if (session.process !== target || session.lastInputAt !== typedAt) return;
+    const { screen } = await this.read(session.id, 150);
+    if (terminalPrompt(screen) || !composerText(screen)) return;
+    target.write('\r');
+    if (tries > 1) setTimeout(() => void this.resubmit(session, target, typedAt, tries - 1).catch(() => {}), 1500);
   }
 
   // Keys Mr. Mak presses on the user's behalf, such as menu navigation. They are
@@ -458,11 +513,80 @@ export class Sessions extends EventEmitter {
     const session = this.get(id); session.tabColor = value?.toLowerCase() || null; this.changed(session);
     return publicSession(session);
   }
+  // Convert project-based ordering into ordinary named groups. The same action
+  // is used for the old settings migration and the header's project shortcut.
+  async groupByProject(projectOrder = []) {
+    const open = [...this.items.values()].filter(item => item.open).sort((a, b) => Number(b.pinned) - Number(a.pinned) || a.tabOrder - b.tabOrder);
+    const projects = new Map();
+    for (const item of open) {
+      const key = projectKey(item.cwd);
+      if (!projects.has(key)) projects.set(key, []);
+      projects.get(key).push(item);
+    }
+    const reserved = new Map();
+    // Current groups take precedence over names remembered by the project toggle.
+    for (const field of ['group', 'projectGroup']) for (const item of this.items.values()) {
+      const name = item[field];
+      if (!name) continue;
+      if (!reserved.has(name)) reserved.set(name, new Set());
+      reserved.get(name).add(projectKey(item.cwd));
+    }
+    const names = new Map();
+    for (const [key, members] of projects) {
+      const existing = [...reserved].find(([, folders]) => folders.size === 1 && folders.has(key));
+      if (existing) { names.set(key, existing[0]); continue; }
+      let base = members[0].cwd.split(/[\\/]/).filter(Boolean).at(-1)?.slice(0, 50) || 'Project';
+      try { base = groupLabel(base) || 'Project'; } catch { base = 'Project'; }
+      if (Object.hasOwn(Object.prototype, base)) base += ' project';
+      let name = base, suffix = 2;
+      while (reserved.has(name)) name = `${base} (${suffix++})`;
+      reserved.set(name, new Set([key])); names.set(key, name);
+    }
+    const rank = new Map();
+    if (Array.isArray(projectOrder)) for (const [index, folder] of projectOrder.entries()) {
+      if (typeof folder === 'string' && !rank.has(projectKey(folder))) rank.set(projectKey(folder), index);
+    }
+    let order = 0;
+    for (const pinned of [true, false]) {
+      const keys = [...new Set(open.filter(item => !!item.pinned === pinned).map(item => projectKey(item.cwd)))];
+      keys.sort((a, b) => (rank.get(a) ?? Infinity) - (rank.get(b) ?? Infinity));
+      for (const key of keys) for (const item of projects.get(key).filter(item => !!item.pinned === pinned)) {
+        const group = names.get(key), tabOrder = order++;
+        if (item.group !== group || item.tabOrder !== tabOrder || item.projectGroup) {
+          item.group = group; item.tabOrder = tabOrder; delete item.projectGroup; this.changed(item);
+        }
+      }
+    }
+    await this.persist();
+    return { grouped: open.length, groups: projects.size };
+  }
+  // Open tabs are grouped by project when each folder's tabs share one group that
+  // holds only that folder. The frontend (chatOrder.ts) mirrors this.
+  projectGrouped() {
+    const open = this.active(), groups = new Map(), folders = new Map();
+    for (const item of open) {
+      const key = projectKey(item.cwd);
+      if (!item.group || (groups.get(key) ?? item.group) !== item.group || (folders.get(item.group) ?? key) !== key) return false;
+      groups.set(key, item.group); folders.set(item.group, key);
+    }
+    return open.length > 0;
+  }
+  // The header's project button. Remember names even when every member is open;
+  // persisting them separately from the visible group also survives a restart.
+  async toggleProjectGroups() {
+    if (!this.projectGrouped()) return this.groupByProject();
+    for (const [tabOrder, { id }] of this.active().entries()) {
+      const item = this.items.get(id);
+      if (item.group || item.tabOrder !== tabOrder) { item.projectGroup = item.group; item.group = null; item.tabOrder = tabOrder; this.changed(item); }
+    }
+    await this.persist();
+    return { grouped: 0, groups: 0 };
+  }
   async assign(id, value) {
     const session = this.get(id);
     const group = groupLabel(value);
-    if (session.group === group) return publicSession(session);
-    session.group = group;
+    if (session.group === group && !session.projectGroup) return publicSession(session);
+    session.group = group; delete session.projectGroup;
     this.changed(session);
     // Joining a group places the tab after that group's last open member, as a
     // drag there would. Leaving a group keeps the tab where it is.
@@ -479,7 +603,7 @@ export class Sessions extends EventEmitter {
     if (id === targetId) return this.active();
     // Dropping beside a tab of another group joins that group; dropping beside an
     // ungrouped tab leaves the current group.
-    if (session.group !== target.group) { session.group = target.group; this.changed(session); }
+    if (session.group !== target.group) { session.group = target.group; delete session.projectGroup; this.changed(session); }
     // Retain closed chats between their neighbours so reopening History keeps
     // their place. Reordering pinned tabs cannot affect unpinned tabs.
     const siblings = this.list().filter(item => item.pinned === session.pinned && item.id !== id);
@@ -515,6 +639,7 @@ export class Sessions extends EventEmitter {
     if (!members.length) throw Object.assign(new Error('That group no longer exists.'), { status: 404 });
     if (name !== source) {
       for (const session of members) { session.group = name; this.changed(session); }
+      for (const session of this.items.values()) if (session.projectGroup === source) { session.projectGroup = name; this.changed(session); }
       await this.persist();
     }
     return this.active();
@@ -525,8 +650,8 @@ export class Sessions extends EventEmitter {
   async deleteGroup(name) {
     const label = groupLabel(name);
     if (!label) throw new Error('Name the group.');
-    const members = [...this.items.values()].filter(item => item.group === label);
-    for (const session of members) { session.group = null; this.changed(session); }
+    const members = [...this.items.values()].filter(item => item.group === label || item.projectGroup === label);
+    for (const session of members) { if (session.group === label) session.group = null; delete session.projectGroup; this.changed(session); }
     if (members.length) await this.persist();
     return { removed: members.length, history: members.filter(item => !item.open).length };
   }
@@ -550,7 +675,7 @@ export class Sessions extends EventEmitter {
     session.unread = false; session.attention = false; this.changed(session);
   }
   async nativeBoundary(session, resumeId) {
-    const file = !resumeId ? null : session.agent === 'codex' ? await codexTranscript(resumeId) : session.agent === 'claude' ? await claudeTranscript(session.cwd, resumeId) : null;
+    const file = !resumeId ? null : session.agent === 'codex' ? await codexTranscript(resumeId) : session.agent === 'claude' ? await claudeTranscript(session.cwd, resumeId) : session.agent === 'antigravity' ? await antigravityTranscript(resumeId) : null;
     return file ? { file, offset: (await stat(file).catch(() => null))?.size || 0 } : null;
   }
   stop(id) { const session = this.get(id); this.requestStop(session); return { stopped: !!session.process }; }
@@ -618,7 +743,7 @@ export class Sessions extends EventEmitter {
   async persist() {
     this.saveChain = this.saveChain.catch(() => {}).then(async () => {
       this.dirty = false;
-      await saveJson(path.join(this.stateDir, 'sessions.json'), this.list());
+      await saveJson(path.join(this.stateDir, 'sessions.json'), this.list().map(item => ({ ...item, projectGroup: this.items.get(item.id).projectGroup || undefined })));
       let screenError;
       for (const session of this.items.values()) {
         if (!session.terminal) continue;

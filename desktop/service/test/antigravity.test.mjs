@@ -1,20 +1,27 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { chmod, mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import { antigravityConversation, antigravityLogPath, prepareAntigravityLog, readAntigravityConversation, readAntigravityTurn, watchAntigravity, watchAntigravityTurns } from '../antigravity.mjs';
+import { antigravityConversation, antigravityFullTranscript, antigravityLogPath, antigravityTranscript, prepareAntigravityLog, readAntigravityConversation, readAntigravityTurn, validAntigravityId, watchAntigravity } from '../antigravity.mjs';
 import { terminalCommand } from '../agents.mjs';
 import { commandSearchRoots, resolveCommand } from '../platform.mjs';
 import { Sessions } from '../sessions.mjs';
+import { ConversationTranscripts } from '../mobile-transcript.mjs';
+import { completedTurn, nativeActivity } from '../native-events.mjs';
+import { chatCommands } from '../chat-commands.mjs';
 
 const idA = '11111111-1111-4111-8111-111111111111';
 const idB = '22222222-2222-4222-8222-222222222222';
 const line = (id, verb = 'Created') => `I1013 23:48:17.916254     258 conversation.go:224] ${verb} conversation ${id}\n`;
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
-async function until(check) { for (let i = 0; i < 160; i++) { if (await check()) return; await pause(50); } throw new Error('Antigravity fixture timed out'); }
+async function until(check, { timeout = 8000, diagnostics } = {}) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) { if (await check()) return; await pause(50); }
+  throw new Error('Antigravity fixture timed out' + (diagnostics ? ': ' + JSON.stringify(await diagnostics()) : ''));
+}
 
 test('Antigravity is discoverable before the app refreshes PATH', async () => {
   const home = await mkdtemp(path.join(os.tmpdir(), 'mrmak-agy-lookup-'));
@@ -53,7 +60,13 @@ test('Native ID discovery ignores echoed UUIDs, partial records and unrelated me
   assert.equal(antigravityConversation(`I1013 23:48:17.916254 258 tool.go:12] echo Created conversation ${idA}\n`), null);
   assert.equal(antigravityConversation(line(idA) + `tool result ${idB}\n`), idA);
   assert.equal(antigravityConversation(line(idA) + line(idB, 'Resuming')), idB);
+  assert.equal(antigravityConversation(`I1018 18:32:13.352646 1402 server.go:1199] Created conversation ${idA} (backend=BACKEND_TYPE_UNSPECIFIED)\n`), idA);
+  assert.equal(antigravityConversation(`I1018 19:00:17.884963 1 session.go:156] Print mode: resuming conversation ${idB}\n`), idB);
+  assert.equal(antigravityConversation(`I1018 18:32:13.353168 1402 conversation_manager.go:973] Streaming conversation ${idA}\n`), idA);
   assert.equal(antigravityConversation(line('not-a-uuid')), null);
+  // agy 1.4.7 appends the backend after the ID.
+  assert.equal(antigravityConversation(`I1024 10:32:30.034484    1066 server.go:1225] Created conversation ${idA} (backend=BACKEND_TYPE_UNSPECIFIED)\n`), idA);
+  assert.equal(antigravityConversation(`I1024 10:32:30.034484    1066 server.go:1225] Created conversation ${idA} (backend=x) extra\n`), null);
   assert.throws(() => antigravityLogPath(os.tmpdir(), '../secret'), /Invalid/);
 });
 
@@ -115,12 +128,14 @@ test('Login Enter does not invent a conversation, while missing known history ne
   } finally { await sessions.close(); }
 });
 
-test('Real PTY create and resume execute Antigravity flags and retain distinct chats', { timeout: 30000 }, async () => {
+test('Real PTY create and resume execute Antigravity flags and retain distinct chats', { timeout: 90000 }, async () => {
   const repo = await mkdtemp(path.join(os.tmpdir(), 'mrmak-agy-pty-'));
   const bin = path.join(repo, 'bin'); await mkdir(bin);
   const fake = path.join(bin, 'fake.mjs');
   const trace = path.join(repo, 'launches.jsonl');
+  const startupDelay = Math.max(0, Math.min(15000, Number(process.env.MRMAK_TEST_AGY_STARTUP_DELAY_MS) || 0));
   await writeFile(fake, `import fs from 'node:fs'; import path from 'node:path';
+await new Promise(resolve => setTimeout(resolve, ${startupDelay}));
 const args=process.argv.slice(2); const value=k=>args[args.indexOf(k)+1];
 const id=args.includes('--conversation')?value('--conversation'):path.basename(value('--log-file'),'.log');
 fs.appendFileSync(${JSON.stringify(trace)},JSON.stringify(args)+'\\n');
@@ -132,16 +147,23 @@ console.log('AGY_FIXTURE '+id); setTimeout(()=>process.exit(0),650);`);
   const previous = process.env.PATH;
   process.env.PATH = `${bin}${path.delimiter}${previous || ''}`;
   let sessions = await new Sessions(repo, path.join(repo, 'state')).init();
+  const waitForChats = (chats, phase) => until(() => chats.every(s => !sessions.get(s.id).process && sessions.get(s.id).nativeId), {
+    timeout: 30000,
+    diagnostics: async () => ({ phase, launches: await readFile(trace, 'utf8').catch(() => 'no launches'), chats: await Promise.all(chats.map(async ({ id }) => {
+      const session = sessions.get(id);
+      return { id, status: session.status, exitCode: session.exitCode, nativeId: session.nativeId, screen: (await sessions.read(id)).screen.slice(-1500), log: await readFile(antigravityLogPath(sessions.stateDir, id), 'utf8').catch(() => 'no native log') };
+    })) }),
+  });
   try {
     const a = await sessions.create({ agent: 'antigravity', name: 'First test', bypass: false });
     const b = await sessions.create({ agent: 'antigravity', name: 'Second test', bypass: false });
-    await until(() => [a,b].every(s => !sessions.get(s.id).process && sessions.get(s.id).nativeId));
+    await waitForChats([a, b], 'create');
     assert.equal(sessions.get(a.id).nativeId, a.id); assert.equal(sessions.get(b.id).nativeId, b.id);
     await sessions.remove(a.id); await sessions.remove(b.id);
     await sessions.close();
     sessions = await new Sessions(repo, path.join(repo, 'state')).init();
     await sessions.resume(a.id); await sessions.resume(b.id);
-    await until(() => [a,b].every(s => !sessions.get(s.id).process));
+    await waitForChats([a, b], 'resume');
     const launches = (await readFile(trace,'utf8')).trim().split('\n').map(JSON.parse);
     assert.equal(launches.length,4);
     for (const args of launches) { assert.ok(args.includes('--log-file')); assert.ok(args.includes('xhigh')); assert.ok(!args.includes('--dangerously-skip-permissions')); }
@@ -153,29 +175,163 @@ console.log('AGY_FIXTURE '+id); setTimeout(()=>process.exit(0),650);`);
 const varint = n => { const out = []; do { let byte = n % 128; n = Math.floor(n / 128); if (n) byte |= 0x80; out.push(byte); } while (n); return out; };
 const pb = (...fields) => Buffer.concat(fields.map(([number, value]) => typeof value === 'number' ? Buffer.from([...varint(number * 8), ...varint(value)]) : Buffer.concat([Buffer.from([...varint(number * 8 + 2), ...varint(value.length)]), value])));
 
-test('Antigravity turns end with a model step that calls no tool, and a resumed turn is not replayed', async () => {
+test('Antigravity reads the latest finished model step as the reply, and a tool call does not end the turn', async () => {
   const folder = await mkdtemp(path.join(os.tmpdir(), 'mak-agy-turns-'));
   const file = id => path.join(folder, `${id}.db`);
   const conversation = id => { const db = new DatabaseSync(file(id)); db.exec('PRAGMA journal_mode = WAL; CREATE TABLE steps (idx integer PRIMARY KEY, step_type integer NOT NULL DEFAULT 0, status integer NOT NULL DEFAULT 0, step_payload blob)'); return db; };
   const step = (db, idx, type, status, payload = null) => db.prepare('INSERT INTO steps (idx, step_type, status, step_payload) VALUES (?, ?, ?, ?)').run(idx, type, status, payload);
   const reply = text => pb([20, pb([1, Buffer.from(text)])]), toolCall = pb([20, pb([7, pb([1, Buffer.from('call_1')])])]);
-  const resumed = randomUUID(), fresh = randomUUID();
-  const db = conversation(resumed), other = conversation(fresh);
-  step(db, 0, 14, 3); step(db, 1, 15, 3, reply('Old answer.')); step(db, 2, 101, 3);
-  assert.deepEqual(await readAntigravityTurn(file(resumed)), { kind: 'turn-completed', step: 1, reply: 'Old answer.' });
-  let bound = resumed;
-  const events = [];
-  const stop = watchAntigravityTurns(() => bound, turn => events.push(turn), { file });
+  const id = randomUUID(), db = conversation(id);
+    try {
+    step(db, 0, 14, 3); step(db, 1, 15, 3, reply('Old answer.')); step(db, 2, 101, 3);
+    assert.deepEqual(await readAntigravityTurn(file(id)), { kind: 'turn-completed', step: 1, reply: 'Old answer.' });
+    step(db, 3, 14, 3);
+    assert.deepEqual(await readAntigravityTurn(file(id)), { kind: 'turn-started', step: 3 });
+    step(db, 4, 15, 3, toolCall);
+    assert.equal((await readAntigravityTurn(file(id))).kind, 'turn-started', 'a model step with a tool call does not end the turn');
+    step(db, 5, 132, 3); step(db, 6, 15, 3, reply('Done.'));
+    assert.deepEqual(await readAntigravityTurn(file(id)), { kind: 'turn-completed', step: 6, reply: 'Done.' });
+    step(db, 7, 14, 3); step(db, 8, 132, 6);
+    assert.equal((await readAntigravityTurn(file(id))).kind, 'turn-interrupted');
+  } finally { db.close(); }
+});
+
+test('Antigravity transcript attachment preserves lifecycle discovery and reported context', async () => {
+  const repo = await mkdtemp(path.join(os.tmpdir(), 'mrmak-agy-observers-'));
+  const brain = path.join(repo, 'brain');
+  for (const id of [idA, idB]) {
+    const logs = path.join(brain, id, '.system_generated', 'logs');
+    await mkdir(logs, { recursive: true });
+    await writeFile(path.join(logs, 'transcript.jsonl'), '');
+  }
+  const prior = process.env.ANTIGRAVITY_BRAIN_DIR;
+  process.env.ANTIGRAVITY_BRAIN_DIR = brain;
+  const sessions = await new Sessions(repo, path.join(repo, 'state')).init();
+  const session = sessions.make({ id: randomUUID(), agent: 'antigravity', cwd: repo });
+  sessions.items.set(session.id, session); session.process = {};
+  const log = await prepareAntigravityLog(sessions.stateDir, session.id);
+  let stopped = false;
+  const stopLog = watchAntigravity(sessions.stateDir, session.id, id => sessions.bindAntigravity(session, id));
+  session.stopNativeWatch = () => { stopped = true; stopLog(); session.stopTranscriptWatch?.(); };
   try {
-    await new Promise(resolve => setTimeout(resolve, 1300));
-    assert.equal(events.length, 0, 'the finished turn of a resumed conversation is history');
-    step(db, 3, 14, 3); await until(() => events.at(-1)?.kind === 'turn-started');
-    step(db, 4, 15, 3, toolCall); step(db, 5, 132, 3); await until(() => events.at(-1)?.id === `${resumed}:5`);
-    assert.equal(events.at(-1).kind, 'turn-started', 'a model step with a tool call does not end the turn');
-    step(db, 6, 15, 3, reply('Done.')); await until(() => events.at(-1)?.kind === 'turn-completed');
-    assert.deepEqual(events.at(-1), { kind: 'turn-completed', step: 6, reply: 'Done.', id: `${resumed}:6` });
-    step(db, 7, 14, 3); step(db, 8, 132, 6); await until(() => events.at(-1)?.kind === 'turn-interrupted');
-    step(other, 0, 14, 3); step(other, 1, 15, 3, reply('Fresh.')); bound = fresh;
-    await until(() => events.at(-1)?.reply === 'Fresh.');
-  } finally { stop(); db.close(); other.close(); }
+    await writeFile(log, line(idA));
+    await until(() => session.nativeId === idA && session.stopTranscriptWatch);
+    assert.equal(stopped, false, 'reading a transcript must not stop native-ID discovery');
+    session.contextUsage = { usedTokens: 1200, limitTokens: 100000, source: 'antigravity' };
+    sessions.watchNative(session, await antigravityTranscript(idA));
+    assert.equal(session.contextUsage.usedTokens, 1200, 'attaching the same transcript must not erase context');
+    await writeFile(log, line(idA) + line(idB, 'Resuming'));
+    await until(() => session.nativeId === idB);
+    assert.equal(session.contextUsage.usedTokens, null, 'a different conversation clears the old context');
+    assert.equal(stopped, false);
+  } finally {
+    session.process = null; session.stopNativeWatch(); await sessions.close();
+    if (prior === undefined) delete process.env.ANTIGRAVITY_BRAIN_DIR; else process.env.ANTIGRAVITY_BRAIN_DIR = prior;
+  }
+});
+
+test('Antigravity conversation transcript reading, turn completion, and commands', async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), 'mrmak-agy-transcript-'));
+  const brain = path.join(temp, 'brain');
+  const nativeId = randomUUID();
+  const logDir = path.join(brain, nativeId, '.system_generated', 'logs');
+  await mkdir(logDir, { recursive: true });
+  const transcriptPath = path.join(logDir, 'transcript.jsonl');
+
+  const records = [
+    { step_index: 0, source: 'USER_EXPLICIT', type: 'USER_INPUT', status: 'DONE', created_at: '2026-10-18T10:00:00Z', content: '<USER_REQUEST>\nFix the collision bug in player.ts\n</USER_REQUEST>\n<USER_SETTINGS_CHANGE>\nThe user changed setting `Model Selection` from None to Gemini 3.8 Flash (High).\n</USER_SETTINGS_CHANGE>' },
+    { step_index: 1, source: 'MODEL', type: 'PLANNER_RESPONSE', status: 'DONE', created_at: '2026-10-18T10:00:02Z', tool_calls: [{ name: 'view_file', args: { path: 'player.ts' } }] },
+    { step_index: 2, source: 'MODEL', type: 'GENERIC', status: 'DONE', created_at: '2026-10-18T10:00:04Z', content: 'file contents...' },
+    { step_index: 3, source: 'MODEL', type: 'PLANNER_RESPONSE', status: 'DONE', created_at: '2026-10-18T10:00:06Z', content: 'Fixed the collision issue in `player.ts`. Check ![preview](screenshot.png) for details.' },
+    { step_index: 4, source: 'SYSTEM', type: 'SYSTEM_MESSAGE', status: 'DONE', created_at: '2026-10-18T10:00:08Z', content: 'The following is a <SYSTEM_MESSAGE>\ncontent=Task id task-1 completed with exit code 0\n</SYSTEM_MESSAGE>' },
+    { step_index: 5, source: 'MODEL', type: 'GENERIC', status: 'DONE', created_at: '2026-10-18T10:00:10Z', content: 'const match = /`Model Selection` from .+? to (.+?)/.exec(code);' },
+  ];
+  await writeFile(transcriptPath, records.map(r => JSON.stringify(r)).join('\n') + '\n');
+
+  const prior = process.env.ANTIGRAVITY_BRAIN_DIR;
+  process.env.ANTIGRAVITY_BRAIN_DIR = brain;
+  try {
+    const resolved = await antigravityTranscript(nativeId);
+    assert.equal(resolved, transcriptPath);
+
+    const transcripts = new ConversationTranscripts();
+    const result = await transcripts.read({ id: 'agy-session-1', agent: 'antigravity', nativeId, cwd: temp });
+    assert.equal(result.supported, true);
+    assert.equal(result.userMessages, 1);
+    assert.equal(result.model, 'Gemini 3.8 Flash (High)');
+    assert.equal(result.messages.length, 3);
+    assert.equal(result.messages[0].role, 'user');
+    assert.equal(result.messages[0].text, 'Fix the collision bug in player.ts');
+    assert.equal(result.messages[1].role, 'assistant');
+    assert.ok(result.messages[1].text.includes('Fixed the collision issue'));
+    assert.deepEqual(result.messages[1].imageRefs, ['screenshot.png']);
+    assert.equal(result.messages[2].role, 'system');
+    assert.ok(result.messages[2].text.includes('task-1 completed'));
+
+    assert.equal(result.activity.length, 1);
+    assert.equal(result.activity[0].name, 'view_file');
+    assert.equal(result.activity[0].status, 'completed');
+
+    assert.deepEqual(completedTurn(records[3], 'antigravity'), {
+      kind: 'turn-completed',
+      id: '3',
+      text: 'The agent finished its turn. Review the result.',
+      preview: String(records[3].content).slice(-350),
+    });
+    assert.equal(completedTurn(records[1], 'antigravity'), null);
+    assert.deepEqual(nativeActivity(records[0], 'antigravity'), { kind: 'turn-started' });
+    assert.deepEqual(nativeActivity(records[1], 'antigravity'), { kind: 'turn-started' });
+
+    const commands = await chatCommands('antigravity', temp);
+    assert.ok(commands.commands.some(c => c.name === 'plan'));
+    assert.ok(commands.commands.some(c => c.name === 'goal'));
+    assert.ok(commands.commands.some(c => c.name === 'model' && !c.terminal));
+  } finally {
+    if (prior === undefined) delete process.env.ANTIGRAVITY_BRAIN_DIR;
+    else process.env.ANTIGRAVITY_BRAIN_DIR = prior;
+  }
+});
+
+// Shape of a real agy reply: transcript.jsonl keeps 2048 bytes on each side of
+// the cut, which here falls inside a nested list, so the text resumes mid-word and
+// the nested items lose the parent items they continued.
+test('Antigravity Conversation shows a long reply whole and with its list lines', async () => {
+  const brain = await mkdtemp(path.join(os.tmpdir(), 'mrmak-agy-full-'));
+  const nativeId = randomUUID();
+  const logDir = path.join(brain, nativeId, '.system_generated', 'logs');
+  await mkdir(logDir, { recursive: true });
+  const head = `${'Com essas 3 funcionalidades, o editor passa a ser uma estação de trabalho. '.repeat(26)}\n\n#### 2.`;
+  const cut = ' Chat com Agente Integrado (`Collapsible & Resizable Sidecar Chat`)\n* **Interface:**\n  - Painel lateral direito, colapsável com um clique.\n  - Seletores no topo do chat:\n    - **Agente:** Dropdown din';
+  const tail = `âmico com os agentes disponíveis no Mr. Mak (*Antigravity/Gemini, Claude, Codex, OpenCode*).\n    - **Effort / Reasoning:** Seleção de esforço (*Medium, High, Max*).\n* **Ciclo de Vida da Sessão:**\n  - ${'O agente já nasce com o contexto do projeto. '.repeat(44)}`;
+  const reply = { step_index: 1, source: 'MODEL', type: 'PLANNER_RESPONSE', status: 'DONE', created_at: '2026-10-28T00:59:06Z', content: head + cut + tail };
+  const prompt = { step_index: 0, source: 'USER_EXPLICIT', type: 'USER_INPUT', status: 'DONE', created_at: '2026-10-28T00:58:00Z', content: '<USER_REQUEST>\nConecte o editor aos projetos.\n</USER_REQUEST>' };
+  const shortened = { ...reply, content: `${head}\n<truncated ${Buffer.byteLength(cut)} bytes>\n${tail}`, truncated_fields: ['content'] };
+  const jsonl = records => records.map(r => JSON.stringify(r)).join('\n') + '\n';
+  const transcript = path.join(logDir, 'transcript.jsonl'), full = path.join(logDir, 'transcript_full.jsonl');
+  await writeFile(transcript, jsonl([prompt, shortened]));
+  await writeFile(full, jsonl([prompt, reply]));
+  const env = { ANTIGRAVITY_BRAIN_DIR: brain };
+  // Turn notices keep tailing the file whose offsets the session recorded.
+  assert.equal(await antigravityTranscript(nativeId, env, brain), transcript);
+  assert.equal(await antigravityFullTranscript(nativeId, env, brain), full);
+
+  const prior = process.env.ANTIGRAVITY_BRAIN_DIR;
+  process.env.ANTIGRAVITY_BRAIN_DIR = brain;
+  try {
+    const transcripts = new ConversationTranscripts();
+    const session = { id: 'agy-full', agent: 'antigravity', nativeId, cwd: brain };
+    const text = (await transcripts.read(session)).messages.find(m => m.role === 'assistant').text;
+    assert.equal(text, reply.content);
+    assert.doesNotMatch(text, /<truncated \d+ bytes>/);
+    assert.ok(text.includes('  - Seletores no topo do chat:\n    - **Agente:** Dropdown dinâmico'));
+    assert.ok(text.includes('OpenCode*).\n    - **Effort / Reasoning:**'));
+
+    // Without a full copy, the shortened reply is still shown.
+    await rm(full);
+    assert.equal(await antigravityFullTranscript(nativeId, env, brain), transcript);
+    assert.equal((await transcripts.read(session)).messages.find(m => m.role === 'assistant').text, shortened.content);
+  } finally {
+    if (prior === undefined) delete process.env.ANTIGRAVITY_BRAIN_DIR;
+    else process.env.ANTIGRAVITY_BRAIN_DIR = prior;
+  }
 });

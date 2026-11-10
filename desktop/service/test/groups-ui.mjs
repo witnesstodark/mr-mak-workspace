@@ -45,6 +45,12 @@ try {
   assert.deepEqual(await page.locator('.chat-group-chip .chip-name').allTextContents(), ['ThugLife', 'Dungeon']);
   assert.deepEqual(await page.locator('.chat-group-chip small').allTextContents(), ['2', '1']);
 
+  // Existing project-group keyboard controls now move native named groups.
+  await chip('ThugLife').focus(); await page.keyboard.press('Alt+ArrowRight');
+  await expect.poll(names).toEqual(['Animator', 'Director', 'Network', 'Combat']);
+  await chip('ThugLife').focus(); await page.keyboard.press('Alt+ArrowLeft');
+  await expect.poll(names).toEqual(['Director', 'Network', 'Animator', 'Combat']);
+
   // Collapse hides every member except the selected one, and the choice survives a reload.
   await chip('ThugLife').click();
   await page.locator('.chat-tab-group.collapsed').waitFor();

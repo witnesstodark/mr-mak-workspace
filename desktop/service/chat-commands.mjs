@@ -31,6 +31,15 @@ const CODEX_BUILTINS = [
   ['resume', 'Resume another conversation', true], ['review', 'Review current changes', true],
   ['skills', 'Choose skills for Codex to use', true], ['status', 'Show session configuration and token usage'],
 ];
+const ANTIGRAVITY_BUILTINS = [
+  ['clear', 'Clear the conversation history'], ['compact', 'Summarize the conversation to free context'],
+  ['goal', 'Run a long-running task until the goal is achieved'], ['plan', 'Step-by-step planning before execution'],
+  ['model', 'Choose the model'], ['effort', 'Set reasoning effort'],
+  ['skills', 'List and select available skills', true], ['mcp', 'Manage MCP servers', true],
+  ['agents', 'Manage subagents', true], ['browser', 'Browser automation and testing'],
+  ['learn', 'Persist behavior for future tasks'], ['boost', 'Deep thinking and rigorous verification'],
+  ['help', 'Show help', true], ['exit', 'Exit the CLI session', true],
+];
 
 // A single frontmatter value, including a folded or literal block (`description: >`).
 function field(text, name) {
@@ -104,6 +113,11 @@ export async function chatCommands(agent, cwd, { home = os.homedir(), env = proc
     for (const folder of folders) add('$', 'project', await skills(path.join(folder, '.agents', 'skills')));
     add('$', 'user', await skills(path.join(home, '.agents', 'skills')));
     add('$', 'user', await skills(path.join(codexHome, 'skills')));
+  } else if (agent === 'antigravity') {
+    add('/', 'built-in', builtins(ANTIGRAVITY_BUILTINS));
+    for (const folder of folders) add('/', 'project', await skills(path.join(folder, '.agents', 'skills')));
+    add('/', 'user', await skills(path.join(home, '.agents', 'skills')));
+    add('/', 'user', await skills(path.join(home, '.gemini', 'antigravity-cli', 'builtin', 'skills')));
   }
   return { commands: items };
 }

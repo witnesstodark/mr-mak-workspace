@@ -2,6 +2,7 @@
 // request a model, change permissions, or read provider credentials.
 import { writeFileSync, renameSync } from 'node:fs';
 import path from 'node:path';
+import { opencodeContext, unknownContext } from '../native-context.mjs';
 
 export const validSessionId = value => typeof value === 'string' && /^ses[a-zA-Z0-9_-]{1,160}$/.test(value);
 const sameDirectory = (a, b) => {
@@ -17,6 +18,7 @@ export function createObserver({ directory, nativeId, chatId, launchId, startedA
   let state = { chatId, launchId, nativeId: validSessionId(nativeId) ? nativeId : null, activity: 'idle', completion: null, revision: 0 };
   let finalMessage = null;
   const emit = patch => { state = { ...state, ...patch, revision: state.revision + 1 }; save({ ...state }); };
+  const context = usage => emit({ contextUsage: usage, contextRevision: state.revision + 1 });
   const complete = id => {
     if (!id || state.completion === id) return;
     emit({ activity: 'idle', completion: id });
@@ -34,6 +36,8 @@ export function createObserver({ directory, nativeId, chatId, launchId, startedA
     }
     const id = data.sessionID || info?.sessionID;
     if (!state.nativeId || id !== state.nativeId) return;
+    if (event.type === 'session.compacted') context(unknownContext('opencode', 'compacted'));
+    if (event.type === 'message.updated' && info?.role === 'assistant' && info.time?.completed && !info.error && !info.summary) context(opencodeContext(info));
     if (event.type === 'session.execution.started' || event.type === 'session.status' && ['busy', 'retry'].includes(data.status?.type)) {
       if (state.activity !== 'working') { finalMessage = null; emit({ activity: 'working' }); }
     } else if (event.type === 'session.execution.succeeded') {

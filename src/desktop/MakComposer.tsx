@@ -62,7 +62,7 @@ export default function MakComposer({ connected, sending, onSend }: {
       <textarea value={draft} rows={2} onChange={event => setDraft(event.target.value)} placeholder="Or tell Mak here…" aria-label="Message Mr. Mak" aria-describedby="mak-compose-hint" disabled={disabled}
         onPaste={event => { const files = Array.from(event.clipboardData.files).filter(file => file.type.startsWith('image/')); if (files.length) { event.preventDefault(); void attach(files) } }}
         onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && event.nativeEvent.keyCode !== 229) { event.preventDefault(); event.currentTarget.form?.requestSubmit() } }} />
-      <VoiceInput id="desktop-mak" connected={connected} disabled={disabled} config={dictation} transcriber={transcribeDesktopAudio} onBusy={setVoiceBusy} onText={(text, recordingId) => { if (voiceIds.current.has(recordingId)) return; voiceIds.current.add(recordingId); setDraft(current => current ? `${current}\n${text}` : text) }} />
+      <VoiceInput id="desktop-mak" connected={connected} disabled={disabled} config={dictation} hotkey transcriber={transcribeDesktopAudio} onBusy={setVoiceBusy} onText={(text, recordingId) => { if (voiceIds.current.has(recordingId)) return; voiceIds.current.add(recordingId); setDraft(current => current ? `${current}\n${text}` : text) }} />
       <button type="submit" title="Send to Mr. Mak" aria-label="Send to Mr. Mak" disabled={disabled || voiceBusy || (!draft.trim() && !images.length)}><Icon name="send" size={17} /></button>
     </form>
     <div className="voice-compose-hint" id="mak-compose-hint" role="status">{uploading ? 'Saving images in inbox…' : 'Enter to send · Shift+Enter for a new line · Paste images'}</div>

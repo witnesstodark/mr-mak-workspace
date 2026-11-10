@@ -232,3 +232,15 @@ test('malformed synced plugin files are skipped without breaking the inventory',
   assert.deepEqual(result.servers.map(item => item.name).sort(), ['good_server', 'project_server']);
   assert.deepEqual(result.problems, []);
 });
+
+test('agent environment drops the identity of a parent Claude Code or Codex session', () => {
+  const keys=['CLAUDECODE','CLAUDE_CODE_CHILD_SESSION','CLAUDE_CODE_SESSION_ID','CLAUDE_CODE_MESSAGING_TOKEN','CLAUDE_PID','CODEX_COMPANION_SESSION_ID'];
+  const saved=Object.fromEntries([...keys,'CLAUDE_CONFIG_DIR'].map(key=>[key,process.env[key]]));
+  try {
+    for (const key of keys) process.env[key]='1';
+    process.env.CLAUDE_CONFIG_DIR='/fixture/claude';
+    const env=childEnvironment();
+    for (const key of keys) assert.equal(env[key],undefined,key);
+    assert.equal(env.CLAUDE_CONFIG_DIR,'/fixture/claude');
+  } finally { for (const [key,value] of Object.entries(saved)) if (value===undefined) delete process.env[key]; else process.env[key]=value; }
+});
