@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { WorkspaceEntity } from '../types'
 import { entityHash } from '../lib/route'
-import { cardCover, cardPhase, cardProgress } from '../lib/card-meta'
+import { cardCover, cardIcon, cardPhase, cardProgress } from '../lib/card-meta'
 import { categoryIcon } from '../lib/categories'
 import { contentUrl } from '../desktop/client'
 import { EntityStatusButton } from './EntityControls'
@@ -45,7 +45,7 @@ export default function MakCard({ entity }: { entity: WorkspaceEntity }) {
       </div>
 
       <div className="card-project-title">
-        {entity.icon && <img className="card-project-icon" src={contentUrl(`/workspace/${entity.folder}/${entity.icon}`)} width="48" height="48" alt="" loading="lazy" decoding="async" />}
+        {cardIcon(entity) && <img className="card-project-icon" src={contentUrl(`/workspace/${entity.folder}/${cardIcon(entity)}`)} width="48" height="48" alt="" loading="lazy" decoding="async" />}
         <h3 className="card-title">{entity.title}</h3>
       </div>
 

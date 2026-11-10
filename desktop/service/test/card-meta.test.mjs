@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cardCover, cardPhase, cardProgress } from '../../../src/lib/card-meta.ts';
+import { cardCover, cardIcon, cardPhase, cardProgress } from '../../../src/lib/card-meta.ts';
 import { cardPhase as servicePhase, cardProgress as serviceProgress } from '../workspace.mjs';
 
 // The desktop card and the phone list must accept and reject the same values.
@@ -25,7 +25,8 @@ test('progress shows only a bar that can be drawn, identically on the desktop an
 
 test('cover must be an image path inside the card folder, and phase non-empty text', () => {
   assert.equal(cardCover({ cover: 'media/cover.webp' }), 'media/cover.webp');
-  for (const value of ['../other/cover.png', 'media/../../secret.png', '/etc/cover.png', 'C:/cover.png', 'media\\..\\x.png', '.hidden/cover.png', 'media//cover.png', 'notes.html', 'media/cover.svg']) assert.equal(cardCover({ cover: value }), null, value);
+  for (const value of ['../other/cover.png', 'media/../../secret.png', '/etc/cover.png', 'C:/cover.png', 'media\\..\\x.png', '.hidden/cover.png', 'media//cover.png', 'notes.html', 'media/cover.svg']) { assert.equal(cardCover({ cover: value }), null, value); assert.equal(cardIcon({ icon: value }), null, value); }
+  assert.equal(cardIcon({ icon: 'media/icon.png' }), 'media/icon.png');
   assert.equal(cardPhase({ phase: '  Alpha  ' }), 'Alpha'); assert.equal(servicePhase('  Alpha  '), 'Alpha');
   for (const value of [undefined, null, '', '   ', 7, {}, []]) {
     assert.equal(cardCover({ cover: value }), null); assert.equal(cardPhase({ phase: value }), null); assert.equal(servicePhase(value), undefined);
