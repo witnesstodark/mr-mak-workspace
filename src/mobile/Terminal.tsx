@@ -5,11 +5,14 @@ import '@xterm/xterm/css/xterm.css'
 import { Icon } from '../desktop/Icons'
 import { mobileChatPosition, saveMobileChatPosition, type TerminalView } from './app-state'
 import { mobileApi, mobileEvent, onMobileEvent, useMobile } from './client'
+import { useWorkspaceTheme } from '../lib/workspace-theme'
+import { terminalTheme } from '../desktop/terminalAppearance'
+import { readingBlocks, type ReadingBlock } from './terminal-reading'
 
-// Reading text for the phone. The CLI draws for the desktop's column width, so
-// the terminal cannot be re-wrapped; its rows become text the browser wraps.
-// Soft-wrapped rows are joined, box padding and long rules are shortened.
-function terminalText(term: Xterm, limit = 2000) {
+// Reading rows for the phone. The CLI draws for the desktop's column width, so
+// the terminal cannot be re-wrapped; soft-wrapped rows are joined and the rows
+// become blocks: prose the browser wraps, layouts that scroll sideways.
+function terminalLines(term: Xterm, limit = 2000) {
   const buffer = term.buffer.active, lines: string[] = []
   for (let index = Math.max(0, buffer.length - limit); index < buffer.length; index++) {
     const line = buffer.getLine(index)
@@ -18,11 +21,26 @@ function terminalText(term: Xterm, limit = 2000) {
     if (line.isWrapped && lines.length) lines[lines.length - 1] += text
     else lines.push(text)
   }
-  while (lines.length && !lines[lines.length - 1].trim()) lines.pop()
-  return lines.map(line => line.replace(/\s+[│┃║]\s*$/, '').replace(/[─━═]{6,}/g, '──────').trimEnd()).join('\n')
+  return lines
+}
+
+// Update the blocks in place, so each keeps its sideways scroll while output streams.
+function showBlocks(box: HTMLElement, blocks: ReadingBlock[]) {
+  blocks.forEach((block, index) => {
+    const kind = block.fixed ? 'mobile-terminal-fixed' : 'mobile-terminal-prose'
+    let node = box.children[index] as HTMLElement | undefined
+    if (node?.className !== kind) {
+      const fresh = document.createElement('span'); fresh.className = kind
+      if (node) node.replaceWith(fresh); else box.append(fresh)
+      node = fresh
+    }
+    if (node.textContent !== block.text) node.textContent = block.text
+  })
+  while (box.children.length > blocks.length) box.lastElementChild?.remove()
 }
 
 export default function Terminal({ id }: { id: string }) {
+  const { resolved } = useWorkspaceTheme('chat')
   const viewport = useRef<HTMLDivElement>(null), stage = useRef<HTMLDivElement>(null), host = useRef<HTMLDivElement>(null), terminalRef = useRef<Xterm | null>(null)
   const state = useMobile(), [error, setError] = useState(''), [view, setView] = useState<TerminalView>(() => mobileChatPosition(id).terminalView || 'wrap')
   const text = useRef<HTMLPreElement>(null), reader = useRef<HTMLDivElement>(null)
@@ -31,7 +49,7 @@ export default function Terminal({ id }: { id: string }) {
   useEffect(() => {
     if (!host.current) return
     const element = host.current
-    const terminal = new Xterm({ disableStdin: true, cursorBlink: false, fontSize: 12, lineHeight: 1.25, fontFamily: 'ui-monospace, monospace', scrollback: 3000, theme: { background: '#101116', foreground: '#dedbe3', cursor: '#c4a7b8' } })
+    const terminal = new Xterm({ disableStdin: true, cursorBlink: false, fontSize: 12, lineHeight: 1.25, fontFamily: 'ui-monospace, monospace', scrollback: 3000, theme: terminalTheme('original', 'dark') })
     terminal.loadAddon(new WebLinksAddon((event, text) => { event.preventDefault(); try { const url = new URL(text); if (['http:', 'https:'].includes(url.protocol)) window.open(url.href, '_blank', 'noopener,noreferrer') } catch { /* Invalid terminal link. */ } }))
     terminal.open(element); terminalRef.current = terminal
     const layout = () => {
@@ -53,7 +71,7 @@ export default function Terminal({ id }: { id: string }) {
         const box = reader.current
         if (!box || !text.current) return
         const atEnd = jump || box.scrollHeight - box.scrollTop - box.clientHeight < 80
-        text.current.textContent = terminalText(terminal)
+        showBlocks(text.current, readingBlocks(terminalLines(terminal)))
         if (atEnd) box.scrollTop = box.scrollHeight
       })
     }
@@ -84,9 +102,10 @@ export default function Terminal({ id }: { id: string }) {
     subscribe()
     return () => { generation++; off(); scroll.dispose(); parsed.dispose(); cancelAnimationFrame(frame); observer.disconnect(); layoutRef.current = null; readRef.current = null; terminal.dispose(); terminalRef.current = null }
   }, [id])
+  useEffect(() => { if (terminalRef.current) terminalRef.current.options.theme = terminalTheme('original', resolved) }, [resolved, id])
   async function key(value: string) {
     if (value === 'interrupt' && !window.confirm('Interrupt the current task in this chat?')) return
     try { await mobileApi(`/sessions/${id}/key`, { key: value }); setError('') } catch (err) { setError(err instanceof Error ? err.message : String(err)) }
   }
-  return <div className="mobile-terminal"><div className="mobile-terminal-hint"><span>{view === 'wrap' ? 'Live terminal · lines wrap to your screen' : 'Live terminal · pinch to zoom'}</span><div className="mobile-terminal-views" role="group" aria-label="Terminal text">{([['wrap', 'Wrap', 'Wrap lines to the screen'], ['fit', 'Fit', 'Fit terminal to screen'], ['actual', 'Actual', 'Show terminal at actual size']] as const).map(([value, label, name]) => <button key={value} aria-label={name} title={name} aria-pressed={view === value} onClick={() => setView(value)}>{label}</button>)}</div></div>{view === 'wrap' && <div className="mobile-terminal-reader" ref={reader}><pre ref={text} /></div>}<div className={`mobile-terminal-viewport ${view === 'wrap' ? 'reading' : ''}`} ref={viewport} aria-hidden={view === 'wrap'}><div className="mobile-terminal-stage" ref={stage}><div className="mobile-terminal-surface" ref={host} /></div></div><div className="mobile-terminal-keys" role="group" aria-label="Terminal keys">{[['left', 'back', 'Arrow left'], ['up', 'up', 'Arrow up'], ['down', 'down', 'Arrow down'], ['right', 'arrow', 'Arrow right'], ['escape', 'escape', 'Escape'], ['enter', 'enter', 'Enter'], ['tab', 'tab', 'Tab'], ['interrupt', 'stop', 'Stop task']].map(([value, icon, name]) => <button key={value} aria-label={name} title={name} disabled={!state.connected} onClick={() => key(value)}>{value === 'escape' ? 'Esc' : value === 'tab' ? 'Tab' : <Icon name={icon} size={18} />}</button>)}<button aria-label="Copy" title="Copy terminal text" onClick={async () => { const term = terminalRef.current; if (!term) return; const buffer = term.buffer.active; const lines = []; for (let index = 0; index < buffer.length; index++) lines.push(buffer.getLine(index)?.translateToString(true) || ''); try { await navigator.clipboard.writeText((view === 'wrap' ? window.getSelection()?.toString() : term.getSelection()) || lines.join('\n')); setError('') } catch { setError('Copy is unavailable in this browser.') } }}><Icon name="copy" size={18} /></button></div>{error && <p className="mobile-error" role="alert">{error}</p>}</div>
+  return <div className="mobile-terminal"><div className="mobile-terminal-hint"><span>{view === 'wrap' ? 'Live terminal · text wraps, code scrolls' : 'Live terminal · pinch to zoom'}</span><div className="mobile-terminal-views" role="group" aria-label="Terminal text">{([['wrap', 'Wrap', 'Wrap text to the screen'], ['fit', 'Fit', 'Fit terminal to screen'], ['actual', 'Actual', 'Show terminal at actual size']] as const).map(([value, label, name]) => <button key={value} aria-label={name} title={name} aria-pressed={view === value} onClick={() => setView(value)}>{label}</button>)}</div></div>{view === 'wrap' && <div className="mobile-terminal-reader" ref={reader}><pre ref={text} /></div>}<div className={`mobile-terminal-viewport ${view === 'wrap' ? 'reading' : ''}`} ref={viewport} aria-hidden={view === 'wrap'}><div className="mobile-terminal-stage" ref={stage}><div className="mobile-terminal-surface" ref={host} /></div></div><div className="mobile-terminal-keys" role="group" aria-label="Terminal keys">{[['left', 'back', 'Arrow left'], ['up', 'up', 'Arrow up'], ['down', 'down', 'Arrow down'], ['right', 'arrow', 'Arrow right'], ['escape', 'escape', 'Escape'], ['enter', 'enter', 'Enter'], ['tab', 'tab', 'Tab'], ['interrupt', 'stop', 'Stop task']].map(([value, icon, name]) => <button key={value} aria-label={name} title={name} disabled={!state.connected} onClick={() => key(value)}>{value === 'escape' ? 'Esc' : value === 'tab' ? 'Tab' : <Icon name={icon} size={18} />}</button>)}<button aria-label="Copy" title="Copy terminal text" onClick={async () => { const term = terminalRef.current; if (!term) return; const buffer = term.buffer.active; const lines = []; for (let index = 0; index < buffer.length; index++) lines.push(buffer.getLine(index)?.translateToString(true) || ''); try { await navigator.clipboard.writeText((view === 'wrap' ? window.getSelection()?.toString() : term.getSelection()) || lines.join('\n')); setError('') } catch { setError('Copy is unavailable in this browser.') } }}><Icon name="copy" size={18} /></button></div>{error && <p className="mobile-error" role="alert">{error}</p>}</div>
 }

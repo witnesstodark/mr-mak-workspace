@@ -89,6 +89,15 @@ both mouse tracking and the requested SGR encoding, including saved screens,
 so switching tabs or reconnecting does not disable its mouse wheel. Classic
 Claude and Codex continue using local terminal scrollback.
 
+## Linked files on the phone
+
+A local file linked in a chat message opens on the phone instead of reloading the
+app. A Workspace report page opens as that report; another file inside the chat's
+folder or the Workspace repository opens in a viewer (a page in the sandboxed
+report frame, Markdown as text, images and video directly) through a 30-minute
+grant on its card's folder or its own folder (`openLocal` in `mobile-reports.mjs`).
+Files in dot folders, outside both places or of other types stay on the computer.
+
 ## Local microphone dictation
 
 Desktop chats, the Mak composer and paired mobile chats support free local Whisper

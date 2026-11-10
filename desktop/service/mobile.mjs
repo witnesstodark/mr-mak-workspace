@@ -24,6 +24,7 @@ const uuid = value => typeof value === 'string' && /^[a-f0-9-]{36}$/i.test(value
 const COOKIE = 'mrmak_mobile';
 const PAIR_TTL = 5 * 60 * 1000;
 const DEVICE_TTL = 180 * 24 * 60 * 60 * 1000;
+const ENABLE_RETRIES = [10, 30, 60, 120, 300].map(seconds => seconds * 1000);
 const DEVICE_IDLE_TTL = 30 * 24 * 60 * 60 * 1000;
 const send = (ws, value) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(value)); };
 
@@ -69,8 +70,18 @@ export class MobileGateway {
         else { ws.alive = false; ws.ping(); }
       }
     }, 30000); this.timer.unref();
-    if (this.state.enabled) await this.enable().catch(error => { this.error = publicError(error); });
+    if (this.state.enabled) await this.enable().catch(error => this.retryEnable(error, 0));
     return this;
+  }
+  // Tailscale can fail while the computer or the app is still starting. Without the
+  // route a paired phone stays on its splash screen, so try again for a few minutes.
+  retryEnable(error, attempt) {
+    console.error(`Mobile access could not start: ${publicError(error)}`);
+    if (attempt >= ENABLE_RETRIES.length) return;
+    this.retry = setTimeout(() => {
+      if (!this.closed && this.state.enabled && !this.active) this.enable().catch(next => this.retryEnable(next, attempt + 1));
+    }, ENABLE_RETRIES[attempt]);
+    this.retry.unref?.();
   }
   save() {
     this.saves = this.saves.catch(() => {}).then(() => saveJson(this.file, this.state));
@@ -98,6 +109,7 @@ export class MobileGateway {
   }
   async disable() {
     if (this.enabling) await this.enabling.catch(() => {});
+    clearTimeout(this.retry);
     this.active = false; this.state.enabled = false; this.pairing = null; this.pending.clear(); this.uploads.clear();
     for (const ws of this.clients) ws.close(1008, 'Mobile access disabled');
     await this.save(); this.notify();
@@ -316,7 +328,7 @@ export class MobileGateway {
           if (data.cwd !== undefined && !project) fail('Choose a project from the list.');
           return json(response, 201, await this.sessions.create({ agent: data.agent, name: data.name, cwd: project?.path || this.repo, bypass: this.settings().defaultBypass === true, effort: this.settings().defaultEffort }));
         }
-        const match = /^\/mobile\/api\/sessions\/([a-f0-9-]{36})\/(messages|send|resume|close|key|prompt|read-aloud)$/.exec(route);
+        const match = /^\/mobile\/api\/sessions\/([a-f0-9-]{36})\/(messages|send|resume|close|key|prompt|read-aloud|open)$/.exec(route);
         if (match) {
           const session = this.session(match[1]);
           // The same terminal menu and one-use answer the desktop Conversation offers.
@@ -332,6 +344,7 @@ export class MobileGateway {
               complete = true; response.writeHead(200, { 'Content-Type': 'audio/wav', 'Content-Length': audio.length, 'Cache-Control': 'no-store' }); response.end(audio); return;
             } finally { response.off('close', abort); }
           }
+          if (method === 'POST' && match[2] === 'open') return json(response, 200, await this.reports.openLocal(device, session, data.path));
           if (method === 'POST' && match[2] === 'send') return json(response, 200, await this.submit(device, session.id, data));
           if (method === 'POST' && match[2] === 'resume') return json(response, 200, session.process ? this.list().find(item => item.id === session.id) : await this.sessions.resume(session.id));
           if (method === 'POST' && match[2] === 'close') return json(response, 200, await this.closeChat(session.id));
@@ -363,7 +376,7 @@ export class MobileGateway {
     } catch (error) { if (!response.headersSent) json(response, error.status || 400, { error: publicError(error) }); else response.destroy(); }
   }
   async close() {
-    if (this.closed) return; this.closed = true;
+    if (this.closed) return; this.closed = true; clearTimeout(this.retry);
     this.readAloud.close(); this.dictation.close();
     this.active = false; clearInterval(this.timer);
     for (const [event, handler] of Object.entries(this.handlers)) this.sessions.off(event, handler);
