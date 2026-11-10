@@ -8,6 +8,10 @@ description: Design and implement game HUDs, menus, icons and portrait systems f
 Inspect the current game camera, input rules, UI framework and representative
 screens. Reuse the project's selected visual language and framework. Establish
 the information and actions the player needs before generating decorative art.
+Follow the standards in `knowledge/game-ui-guidelines.md` when the repository has
+it, and compose or verify layouts in Mr. Mak's Game UI Studio. The
+`game-ui-studio` skill covers its Copilot, importing UI art and loading a
+game's existing screens into it.
 
 ## Design against real gameplay
 
