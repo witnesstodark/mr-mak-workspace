@@ -66,7 +66,25 @@ try {
   await expect(page.locator('.conversation-copy-text strong')).toHaveText('Verified');
   await expect(page.getByRole('link', { name: 'OpenAI', exact: true })).toHaveAttribute('target', '_blank');
   const input = page.getByRole('combobox', { name: 'Message Codex' });
+  // Keep rendered history stable while typing and while an unchanged transcript
+  // is polled. Recreating the link used to reparse the entire Markdown history.
+  await page.getByRole('link', { name: 'OpenAI', exact: true }).evaluate(node => { window.historyLink = node; });
   await input.fill('Keep my draft');
+  await expect.poll(() => input.inputValue()).toBe('Keep my draft');
+  assert.ok(await page.getByRole('link', { name: 'OpenAI', exact: true }).evaluate(node => node === window.historyLink), 'typing must preserve the rendered history');
+  await page.waitForResponse(response => /\/api\/sessions\/[^/]+\/messages$/.test(new URL(response.url()).pathname));
+  await page.waitForTimeout(100);
+  assert.ok(await page.getByRole('link', { name: 'OpenAI', exact: true }).evaluate(node => node === window.historyLink), 'an unchanged transcript poll must preserve rendered history');
+  const historyRoute = '**/api/sessions/*/messages';
+  await page.route(historyRoute, async route => {
+    const response = await route.fetch(), value = await response.json();
+    value.messages = value.messages.map(message => ({ ...message, text: message.text.replace('**Verified**', '**Updated**') }));
+    await route.fulfill({ response, json: value });
+  });
+  await expect(page.locator('.conversation-copy-text strong')).toHaveText('Updated');
+  await expect(input).toHaveValue('Keep my draft');
+  await page.unroute(historyRoute);
+  await expect(page.locator('.conversation-copy-text strong')).toHaveText('Verified');
   await page.getByRole('button', { name: 'Terminal', exact: true }).click();
   await page.getByRole('button', { name: 'Conversation', exact: true }).click();
   await expect(input).toHaveValue('Keep my draft');
@@ -139,7 +157,7 @@ try {
   }
   assert.deepEqual(errors, []);
   await page.screenshot({ path: path.join(repo, 'conversation.png') });
-  console.log(JSON.stringify({ ok: true, fixture: repo, checks: ['Markdown and links', 'independent drafts', 'Terminal toggle', 'soft line breaks and sending', 'stale prompt rejected without input', 'permission navigation and confirmation', 'multiple choice boxes and submit','command autocomplete and terminal handoff', '500/900px layout'] }));
+  console.log(JSON.stringify({ ok: true, fixture: repo, checks: ['stable Markdown while typing and polling', 'changed Markdown refreshes without losing the draft', 'Markdown and links', 'independent drafts', 'Terminal toggle', 'soft line breaks and sending', 'stale prompt rejected without input', 'permission navigation and confirmation', 'multiple choice boxes and submit','command autocomplete and terminal handoff', '500/900px layout'] }));
 } catch (error) {
   const page = browser?.contexts()[0]?.pages()[0];
   if (page) {
