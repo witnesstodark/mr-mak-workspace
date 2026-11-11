@@ -212,7 +212,8 @@ export default function Conversation({ session, connected, agentLabel, openTermi
           {openEdit?.id === message.id ? <form className="conversation-edit" onSubmit={event => { event.preventDefault(); void sendEdit() }}>
             <textarea autoFocus aria-label="Edit message" value={openEdit.text} disabled={rewinding} rows={Math.min(12, openEdit.text.split('\n').length + 1)} onChange={event => setEditing({ id: message.id, text: event.target.value })}
               onKeyDown={event => {
-                if (event.nativeEvent.isComposing) return
+                // WebKit may clear isComposing before the IME-confirming Enter.
+                if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return
                 if (event.key === 'Escape' && !rewinding) { event.preventDefault(); event.stopPropagation(); setEditing(null) }
                 if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void sendEdit() }
               }} />
@@ -256,7 +257,8 @@ export default function Conversation({ session, connected, agentLabel, openTermi
         onSelect={event => setCaret(event.currentTarget.selectionStart)}
         role="combobox" aria-autocomplete="list" aria-expanded={!!suggestions.length} aria-controls="conversation-commands" aria-activedescendant={highlighted ? `conversation-command-${suggestions.indexOf(highlighted)}` : undefined}
         onKeyDown={event => {
-          if (event.nativeEvent.isComposing) return
+          // WebKit may clear isComposing before the IME-confirming Enter.
+          if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return
           if (suggestions.length && highlighted) {
             if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); setPicked((suggestions.indexOf(highlighted) + (event.key === 'ArrowDown' ? 1 : suggestions.length - 1)) % suggestions.length); return }
             if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setDismissed(tokenKey); return }
