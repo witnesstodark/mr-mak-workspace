@@ -132,6 +132,7 @@ try {
 
   // New chat offers the known groups and files the new tab under the chosen one.
   await page.getByRole('button', { name: 'New chat', exact: true }).click();
+  await page.locator('.desk-dialog summary', { hasText: /^Advanced$/ }).click();
   const picker = page.locator('.desk-dialog select[aria-label="Group"]');
   assert.deepEqual(await picker.locator('option').allTextContents(), ['No group', 'Dungeon', 'ThugLife', 'New group…']);
   await page.locator('.desk-dialog input[placeholder*="Dream Game"]').fill('Producer');

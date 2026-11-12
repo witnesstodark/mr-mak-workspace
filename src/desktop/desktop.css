@@ -72,6 +72,7 @@
 .desk-field{display:flex;flex-direction:column;gap:8px;font-size:10px;color:var(--text-dim);margin-bottom:16px}.desk-field input{font-size:12px}.desk-field input:focus{border-color:color-mix(in srgb,var(--pink) 29%,transparent);outline:none}
 .desk-check{display:flex;gap:9px;align-items:flex-start;font-size:11px;line-height:1.5;margin-bottom:18px;color:var(--text)}.desk-check input{accent-color:#dfa3b8;margin:2px 0}.desk-check small{display:block;font-size:10px;color:var(--text-dim);margin-top:4px;line-height:1.5}
 .desk-details{font-size:10px;color:var(--text-dim);margin-bottom:20px}.desk-details summary{cursor:pointer;margin-bottom:10px}.desk-details .desk-field{margin-top:15px}.desk-dialog>.desk-primary{width:100%;font-size:12px;justify-content:space-between}
+.new-chat-advanced>summary{font-size:11px;color:var(--text);padding:8px 0;margin-bottom:0}.new-chat-advanced[open]>summary{margin-bottom:12px}.new-chat-advanced>.desk-field:first-of-type{margin-top:0}.new-chat-advanced>.desk-details{margin-bottom:0}
 
 /* Files reveal from a 42 px rail; browsing never narrows the report. */
 .files-container{position:relative;display:flex;width:48px;flex-shrink:0;z-index:40}.files-container.expanded{width:auto}.files-rail{display:flex;flex-direction:column;align-items:center;width:48px;flex-shrink:0;height:100%;background:var(--bg);border-left:1px solid color-mix(in srgb,var(--text) 12%,transparent);padding:9px 0 12px;gap:10px}.rail-spacer{flex:1}
