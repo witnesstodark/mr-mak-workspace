@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.4 - 2026-11-12
+
+- Keep New chat compact. Agent selection, chat name and the permission checkbox stay visible; project, working folder, group, reasoning effort and native resume are under Advanced, closed by default. Existing defaults and entered values are preserved.
+- Reduce typing lag in long Conversation histories by reusing rendered Markdown when a message has not changed.
+- Keep Japanese IME confirmation in macOS/WebKit from sending a message, submitting an edit or accepting a slash command. Ordinary Enter and Shift+Enter keep their existing behavior.
+
+Thanks to @noprops for the Conversation fixes. This release includes #90, #91 and #92.
+
 ## 0.6.3 - 2026-11-06
 
 - Answer CLI questions in Conversation and on the phone, including multiple selections, typed answers and long option descriptions. Keep unread indicators and compaction messages current, and ignore terminal device replies when deciding whether you are typing.
