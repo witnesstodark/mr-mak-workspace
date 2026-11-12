@@ -431,6 +431,8 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
           if (!key) throw new Error('Add OPENAI_API_KEY to the repository .env, then press the nose again.');
           voiceOwner = { clientId: data.clientId, surface: data.surface === 'chats' ? 'chats' : 'workspace' };
           broadcast('voice-owner', { owner: voiceOwner });
+          // NOTE: OpenAI Live voice session is user-initiated when the user enables GPT-Live.
+          // It is NOT background telemetry — the session is created on-demand per user action.
           try {
             const result = await fetch('https://api.openai.com/v1/live/sessions', {
               method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(30000),

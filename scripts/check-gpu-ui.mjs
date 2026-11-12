@@ -52,7 +52,7 @@ try {
 
   // Use the real model loader. Serve its decoder from the installed dependency,
   // so this test never needs the external Draco CDN.
-  await page.route('https://www.gstatic.com/draco/versioned/decoders/1.5.7/**', route => route.fulfill({
+  await page.route('/draco/**', route => route.fulfill({
     path: path.join(root, 'node_modules/three/examples/jsm/libs/draco/gltf', path.basename(new URL(route.request().url()).pathname)),
   }));
   await page.evaluate(async () => {

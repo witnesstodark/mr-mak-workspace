@@ -10,6 +10,8 @@ const PROMPT = 'Transcribe speech verbatim in its original language(s). Preserve
 const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status }); };
 const formats = { 'audio/webm': 'webm', 'audio/mp4': 'm4a', 'audio/ogg': 'ogg', 'audio/wav': 'wav' };
 
+// NOTE: Transcription via OpenRouter/OpenAI is USER-INITIATED when the user opts in to cloud speech-to-text.
+// It is NOT background telemetry — transcribeProvider is set by the user through 'New chat' / Settings.
 export class MobileDictation {
   constructor(repo, { fetcher = fetch, env = process.env, localRunner = localTranscribe, localStatus = localAvailable, providerChoice = () => null } = {}) {
     this.providerChoice = providerChoice; this.localRunner = localRunner; this.localStatus = localStatus;
