@@ -13,8 +13,8 @@ await mkdir(path.join(root, '.cache'), { recursive: true });
 const repo = await mkdtemp(path.join(root, '.cache/conversation-ui-'));
 await mkdir(path.join(repo, 'workspace')); await mkdir(path.join(repo, '.mrmak'));
 await writeFile(path.join(repo, 'workspace/workspace.json'), '{"entities":[]}');
-const ids = ['conversation-a', 'conversation-b'];
-await writeFile(path.join(repo, '.mrmak/sessions.json'), JSON.stringify(ids.map((id, tabOrder) => ({ id, tabOrder, name: `Review ${tabOrder + 1}`, agent: 'codex', group: 'Game', cwd: repo, open: true, status: 'stopped', pinned: false, hasConversation: false, cols: 90, rows: 28, createdAt: '2026-10-18T08:00:00Z', updatedAt: '2026-10-18T08:00:00Z' }))));
+const ids = ['conversation-a', 'conversation-b', 'conversation-claude'];
+await writeFile(path.join(repo, '.mrmak/sessions.json'), JSON.stringify(ids.map((id, tabOrder) => ({ id, tabOrder, name: `Review ${tabOrder + 1}`, agent: id === 'conversation-claude' ? 'claude' : 'codex', group: 'Game', cwd: repo, open: true, status: 'stopped', pinned: false, hasConversation: false, cols: 90, rows: 28, createdAt: '2026-10-18T08:00:00Z', updatedAt: '2026-10-18T08:00:00Z' }))));
 let service, browser;
 const writes = [], errors = [];
 let command = 'echo first', option = 0, showPrompt = false, multiple = null, own = null;
@@ -150,6 +150,45 @@ try {
   assert.ok(writes.some(item => item.data.includes('/model')));
   await page.getByRole('button', { name: 'Conversation', exact: true }).click();
   await expect(input).toHaveValue('');
+  const submissions = [];
+  page.on('request', request => { if (/\/api\/sessions\/[^/]+\/(send|rewind)$/.test(new URL(request.url()).pathname)) submissions.push(request.url()); });
+  async function confirmComposition(editor, text) {
+    await editor.fill(text);
+    const before = submissions.length;
+    await editor.dispatchEvent('compositionstart', { data: '' });
+    await editor.dispatchEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, isComposing: true });
+    // macOS WebKit can end composition before its confirming Enter keydown.
+    await editor.dispatchEvent('compositionend', { data: text });
+    await editor.dispatchEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 229, isComposing: false });
+    await editor.dispatchEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, isComposing: false });
+    // Give an accidental async send/rewind time to reach the HTTP service.
+    await page.waitForTimeout(200);
+    await expect(editor).toHaveValue(text);
+    assert.equal(submissions.length, before, 'confirming IME composition must not send or rewind');
+  }
+  for (const [id, label] of [[ids[0], 'Codex'], [ids[2], 'Claude Code']]) {
+    await page.locator(`[data-chat-tab="${id}"] [role=tab]`).click();
+    await page.getByRole('button', { name: 'Conversation', exact: true }).click();
+    const composer = page.getByRole('combobox', { name: `Message ${label}` });
+    const text = `日本語の変換確定 ${label}`;
+    await confirmComposition(composer, text);
+    const before = writes.length;
+    await composer.press('Enter');
+    await expect(composer).toHaveValue('');
+    assert.ok(writes.slice(before).some(item => item.id === id && item.data.includes(text)), 'a subsequent ordinary Enter sends the text');
+  }
+  let rewinds = 0;
+  await page.route('**/api/sessions/*/rewind', async route => { rewinds++; await route.fulfill({ json: {} }); });
+  await page.getByRole('button', { name: 'Edit message', exact: true }).click();
+  const editor = page.getByRole('textbox', { name: 'Edit message', exact: true });
+  await confirmComposition(editor, '日本語の編集を確定');
+  await editor.press('Enter');
+  await expect(editor).toHaveCount(0);
+  assert.equal(rewinds, 1, 'an ordinary Enter rewinds once and sends the edit');
+  assert.ok(writes.some(item => item.id === ids[2] && item.data.includes('日本語の編集を確定')));
+  await page.locator(`[data-chat-tab="${ids[0]}"] [role=tab]`).click();
+  await confirmComposition(input, '/mo');
+  await input.fill('');
   for (const width of [500, 900]) {
     await page.setViewportSize({ width, height: 760 });
     await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeVisible();
