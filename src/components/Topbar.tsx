@@ -3,6 +3,7 @@ import { isDesktop } from '../desktop/client'
 import BrowserSettings from './BrowserSettings'
 import { EntityStatusButton } from './EntityControls'
 import NewCard from './NewCard'
+import './ui-studio.css'
 
 interface TopbarProps {
   entity: WorkspaceEntity | null
@@ -10,16 +11,24 @@ interface TopbarProps {
   onStep: (id: string, index: number) => void
   onHome: () => void
   reportUrl: string | null
+  isUIStudio?: boolean
+  onToggleUIStudio?: () => void
 }
 
-export default function Topbar({ entity, stepIndex, onStep, onHome, reportUrl }: TopbarProps) {
+export default function Topbar({ entity, stepIndex, onStep, onHome, reportUrl, isUIStudio = false, onToggleUIStudio }: TopbarProps) {
   return (
     <div className="topbar">
       <nav className="breadcrumb" aria-label="Breadcrumb">
         <button className="crumb-link" onClick={onHome}>
           Workspace
         </button>
-        {entity && (
+        {isUIStudio && (
+          <>
+            <span className="crumb-sep">/</span>
+            <span className="crumb-current">Game UI Studio</span>
+          </>
+        )}
+        {!isUIStudio && entity && (
           <>
             <span className="crumb-sep">/</span>
             <span className="crumb-current">{entity.title}</span>
@@ -27,6 +36,16 @@ export default function Topbar({ entity, stepIndex, onStep, onHome, reportUrl }:
           </>
         )}
         {!isDesktop && <BrowserSettings />}
+        {isDesktop && (
+          <button
+            className={`topbar-tool-btn${isUIStudio ? ' active' : ''}`}
+            onClick={onToggleUIStudio}
+            aria-pressed={isUIStudio}
+            title="Game UI Studio: lay out game screens with an AI Copilot"
+          >
+            UI Studio
+          </button>
+        )}
         {isDesktop && <NewCard />}
       </nav>
 

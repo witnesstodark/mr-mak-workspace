@@ -54,9 +54,9 @@ export class Files {
     const now = Date.now();
     for (const [token, grant] of this.scoped) {
       if (grant.expires < now) this.dropScoped(token);
-      else if (grant.root === root && grant.prefix === prefix) { grant.expires = now + SCOPED_GRANT_MS; return token; }
+      else if (!grant.mounts && grant.root === root && grant.prefix === prefix) { grant.expires = now + SCOPED_GRANT_MS; return token; }
     }
-    if (this.scoped.size >= 200) this.dropScoped(this.scoped.keys().next().value);
+    if (this.scoped.size >= 200) this.dropScoped([...this.scoped.keys()].find(key => key !== this.studioToken));
     const token = secret(); this.scoped.set(token, { root, prefix, expires: now + SCOPED_GRANT_MS }); return token;
   }
   // Each report folder is served from its own local port. Its pages share one origin, so a
@@ -157,22 +157,27 @@ export class Files {
     this.writes = operation;
     return operation;
   }
-  async content(request, response, url, siteToken = null) {
+  // Which grant, root and file a /view URL names: the one resolution shared by
+  // content() and resolve(), so a page's final address is known before it loads.
+  view(url, siteToken = null) {
     const match = /^\/view\/([\w-]+)\/(.*)$/.exec(url.pathname);
     // A folder's port serves that folder's grant only.
     const scoped = match && (!siteToken || match[1] === siteToken) ? this.scoped.get(match[1]) : null;
     if (scoped && scoped.expires < Date.now()) {
-      this.scoped.delete(match[1]); response.once('close', () => this.dropScoped(match[1]));
-      throw Object.assign(new Error('Preview not found'), { status: 404 });
+      this.scoped.delete(match[1]);
+      throw Object.assign(new Error('Preview not found'), { status: 404, expired: match[1] });
     }
     if (!match || !(scoped || (!siteToken && this.grants.has(match[1])))) throw Object.assign(new Error('Preview not found'), { status: 404 });
     const relative = decodeURIComponent(match[2]).replaceAll('\\', '/');
     if (relative.split('/').some(secretPart)) throw Object.assign(new Error('Private application files cannot be loaded by reports'), { status: 403 });
     const root = scoped ? scoped.root : this.grants.get(match[1]);
-    let fileRoot = root, filePath = relative;
+    let fileRoot = root, filePath = relative, mounted = false;
     if (scoped) {
       const folder = !scoped.prefix || scoped.prefix.endsWith('/');
-      if (folder && relative.startsWith(scoped.prefix)) {
+      const mount = scoped.mounts?.find(item => relative.startsWith(item.prefix));
+      if (mount) {
+        fileRoot = mount.root; filePath = relative.slice(mount.prefix.length); mounted = true;
+      } else if (folder && relative.startsWith(scoped.prefix)) {
         fileRoot = path.resolve(root, scoped.prefix); filePath = relative.slice(scoped.prefix.length);
       } else if (!folder && relative === scoped.prefix) {
         fileRoot = path.dirname(path.resolve(root, scoped.prefix)); filePath = path.basename(scoped.prefix);
@@ -180,15 +185,58 @@ export class Files {
         fileRoot = path.join(root, 'workspace/_shared'); filePath = relative.slice('workspace/_shared/'.length);
       } else throw Object.assign(new Error('This file is outside the selected report.'), { status: 403 });
     }
+    return { token: match[1], scoped, root, relative, fileRoot, filePath, mounted };
+  }
+  // The folder port, and the address on it, where a page named by view() runs.
+  async pageSite(view, search = '') {
+    const token = view.scoped ? view.token : this.scopedGrant(view.root, view.relative), site = await this.site(token);
+    return { origin: site.origin, url: `${site.origin}/view/${token}/${encodePath(view.relative)}${search}` };
+  }
+  // The final address and origin of a page from this service. A frame that
+  // exchanges messages with the UI loads this address and is trusted only from
+  // this origin, because the shared port redirects every page to its folder's port.
+  async resolve(href) {
+    let url;
+    try { url = new URL(String(href)); } catch { throw Object.assign(new Error('Choose a page from this Workspace.'), { status: 400 }); }
+    const site = [...this.sites.entries()].find(([, item]) => item.origin === url.origin);
+    if (url.origin !== this.origin && !site) throw Object.assign(new Error('Choose a page from this Workspace.'), { status: 400 });
+    let view;
+    try { view = this.view(url, site ? site[0] : null); }
+    catch (error) { if (error.expired) this.dropScoped(error.expired); throw error; }
+    if (view.mounted) throw Object.assign(new Error('This folder holds data, not pages.'), { status: 403 });
+    const { file, info } = await realFile(view.fileRoot, view.filePath);
+    if (!info.isFile() || !/\.html?$/i.test(file)) throw Object.assign(new Error('Only pages can be opened in a frame.'), { status: 400 });
+    return this.pageSite(view, url.search);
+  }
+  // The Game UI Studio ships with the service. Its code is served from the app
+  // and its data folder's assets/ under the same origin, on a port of its own.
+  studio(code, data) {
+    const now = Date.now();
+    const current = this.studioToken && this.scoped.get(this.studioToken);
+    if (current && current.expires >= now && current.root === code) current.expires = now + SCOPED_GRANT_MS;
+    else {
+      if (this.studioToken) this.dropScoped(this.studioToken);
+      this.studioToken = secret();
+      this.scoped.set(this.studioToken, { root: code, prefix: '', mounts: [{ prefix: 'assets/', root: path.join(data, 'assets') }], expires: now + SCOPED_GRANT_MS });
+    }
+    return `${this.origin}/view/${this.studioToken}/editor.html`;
+  }
+  async content(request, response, url, siteToken = null) {
+    let view;
+    try { view = this.view(url, siteToken); }
+    catch (error) { if (error.expired) response.once('close', () => this.dropScoped(error.expired)); throw error; }
+    const { scoped, root, relative, fileRoot, filePath, mounted } = view;
     // Resolve links against the allowed folder, not the repository root.
     const { file, info } = await realFile(fileRoot, filePath);
     if (!info.isFile()) throw Object.assign(new Error('File not found'), { status: 404 });
     const headers = { 'Referrer-Policy': 'no-referrer', 'Access-Control-Allow-Origin': this.uiOrigin, 'Cross-Origin-Resource-Policy': 'cross-origin' };
     const document = /\.(html?|svg)$/i.test(file), html = /\.html?$/i.test(file);
+    // A data folder mounted into a site (the studio's assets) never serves pages.
+    if (html && mounted) throw Object.assign(new Error('This folder holds data, not pages.'), { status: 403 });
     // HTML runs on its folder's port. SVG stays an opaque document on the shared port, so <img> keeps working in the UI.
     if (html && !siteToken) {
-      const token = scoped ? match[1] : this.scopedGrant(root, relative), site = await this.site(token);
-      response.writeHead(302, { ...headers, 'Cache-Control': 'no-store', Location: `${site.origin}/view/${token}/${encodePath(relative)}${url.search}` });
+      const { url: location } = await this.pageSite(view, url.search);
+      response.writeHead(302, { ...headers, 'Cache-Control': 'no-store', Location: location });
       response.end(); return;
     }
     if (document && !scoped) {
@@ -201,7 +249,7 @@ export class Files {
       headers['Cache-Control'] = 'no-store';
     }
     if (document) {
-      const base = `${url.origin}/view/${match[1]}/`, own = base + encodePath(scoped.prefix);
+      const base = `${url.origin}/view/${view.token}/`, own = base + encodePath(scoped.prefix);
       const shared = root === this.repo ? ` ${base}workspace/_shared/` : '';
       const origin = html ? ' allow-same-origin' : '';
       headers['Content-Security-Policy'] = `sandbox allow-scripts${origin} allow-forms allow-popups allow-downloads; default-src 'none'; script-src 'unsafe-inline' ${own}${shared}; style-src 'unsafe-inline' ${own}${shared}; img-src data: blob: ${own}${shared}; media-src blob: ${own}; font-src data: ${own}${shared}; connect-src ${own}; frame-src ${own}; worker-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors ${this.uiOrigin} ${url.origin}`;
