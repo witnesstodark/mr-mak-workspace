@@ -147,6 +147,24 @@ a shared working directory. Resume passes `--session` with that recorded ID.
 A launch-specific marker prevents stale events from changing a new terminal's
 activity. Native CLI history must remain on disk for conversation restoration.
 
+## Files: Git state, agent activity, diffs and size maps
+
+The Files tab shows each file's Git state (`M`, `A`, `D`, `R`, `U`, `!`) with its
+changed lines, a dot on folders holding changes, and the branch with ahead and
+behind (`file-insights.mjs`, `git status --porcelain -z` and `git diff HEAD
+--numstat`). Rows the selected chat's agent read glow purple and rows it wrote
+orange, from Claude's Read/Edit/Write tools and the files Codex patches; the eye
+button follows the agent, opening the folders down to each new file. A changed
+file has a diff button; a folder has a size map (squarified, by bytes, with
+changed entries outlined). Deep folders keep indenting in smaller steps past level
+six, with a guide line per open folder.
+
+All of this only reads. Git runs without a shell, with `--no-optional-locks`,
+`core.fsmonitor=false`, `--no-ext-diff` and `--no-textconv`, so a repository's
+own config cannot run hooks or drivers, and nothing rewrites its index. Each
+call has a 15 s limit; a diff is cut at 1 MB, an untracked file is shown only up
+to 1 MB, and a size map stops at 40,000 files or 4 s and says it is partial.
+
 ## Checks
 
 ```powershell

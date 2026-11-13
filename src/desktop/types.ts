@@ -27,7 +27,8 @@ export type SystemEventsMode = 'full' | 'compact' | 'hidden'
 export interface VoiceOwner { clientId: string; surface: 'chats' | 'workspace' }
 export interface FileEntry { name: string; path: string; directory: boolean; size: number; modifiedAt: string | null }
 export interface Folder { path: string; parent: string; entries: FileEntry[]; truncated: boolean; mode: string }
-export interface Preview { path: string; name: string; size: number; kind: 'document' | 'image' | 'video' | 'audio' | 'text' | 'unsupported'; url?: string; text?: string; revision?: string; reason?: string }
+export interface FolderMapData { path: string; name: string; parent: string; size: number; complete: boolean; children: { name: string; path: string; directory: boolean; size: number; files: number }[] }
+export interface Preview { path: string; name: string; size: number; kind: 'document' | 'image' | 'video' | 'audio' | 'text' | 'unsupported' | 'diff' | 'map'; url?: string; text?: string; revision?: string; reason?: string; map?: FolderMapData }
 export interface DesktopState {
   ready: boolean; connected: boolean; error: string | null; repo: string; contentBase: string
   agents: AgentInfo[]; sessions: ChatSession[]; selectedId: string | null; notices: Notice[]
