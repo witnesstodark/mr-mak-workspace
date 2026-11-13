@@ -24,7 +24,7 @@ test('tracked pages attach the route and anchor; another tab does not inherit th
   rememberMobileReports([{ id: 'card', title: 'Review', steps: [{ index: 0, name: 'Results' }, { index: 1, name: 'Plan' }] }]);
   selectMobileWorkspace('card');
   rememberMobileReport('card', 0, { url: '/mobile/view/private-grant/workspace/review/index.html', statePersistence: true });
-  saveReportPosition('card', 0, { path: 'workspace/review/chapter.html', hash: '#timing', top: 400, left: 0 });
+  saveReportPosition('card', 0, { path: 'workspace/review/chapter.html', hash: '#timing', top: 400, left: 0 }, '/mobile/view/private-grant/workspace/review/index.html');
   const current = metadata(messageWithWorkspaceContext('How does this work?', 'codex')).workspace;
   assert.equal(current.currentViewerPage, 'workspace/review/chapter.html'); assert.equal(current.sectionAnchor, '#timing');
   selectMobileWorkspace('card', 1);

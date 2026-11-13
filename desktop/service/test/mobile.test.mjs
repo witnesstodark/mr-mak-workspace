@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, mkdir, writeFile, readFile, symlink } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm, symlink } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { WebSocket } from 'ws';
@@ -286,6 +286,45 @@ test('delivery receipts and device pairing survive a service restart', async t =
   t.after(() => next.close());
   const result = await fetch(`${next.origin}/mobile/api/sessions/${id}/send`, { method: 'POST', headers: { Origin: next.origin, Cookie: device.cookie, 'Content-Type': 'application/json' }, body: JSON.stringify(message) });
   assert.equal((await result.json()).status, 'delivered'); assert.equal(writes.length, 2);
+});
+
+test('mobile access retries its route when Tailscale fails while the service starts', async t => {
+  const { gateway, repo } = await fixture(t);
+  await gateway.close();
+  let failures = 2;
+  const transport = { probe: async () => ({ installed: true, ready: true }), enable: async origin => { if (failures-- > 0) throw new Error('Tailscale Serve could not start.'); return { origin }; }, disable: async () => {} };
+  // Node 22 also logs an ExperimentalWarning for the mock timers.
+  const logged = []; t.mock.method(console, 'error', message => { if (/Mobile access/.test(message)) logged.push(message); });
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const next = await new MobileGateway({ repo, stateDir: repo, uiDir: gateway.uiDir, sessions: gateway.sessions, attachments: gateway.attachments, settings: gateway.settings, transport }).init();
+  t.after(() => next.close());
+  assert.deepEqual([next.status().enabled, next.status().error], [false, 'Tailscale Serve could not start.']);
+  assert.match(logged[0], /Mobile access could not start: Tailscale Serve could not start/);
+  // Waits in real time (setImmediate is not mocked) for the retry to finish, however loaded the machine is.
+  const settle = async done => { const end = Date.now() + 10000; while (!done() && Date.now() < end) await new Promise(resolve => setImmediate(resolve)); };
+  t.mock.timers.tick(10000); await settle(() => logged.length >= 2);
+  assert.deepEqual([logged.length, next.status().enabled], [2, false]);
+  t.mock.timers.tick(30000); await settle(() => next.active);
+  assert.deepEqual([next.status().enabled, next.status().error], [true, '']);
+});
+
+test('a linked local file opens only for a paired phone and only inside the chat folder or the Workspace', async t => {
+  const { request, pair, id, session, repo } = await fixture(t), device = await pair();
+  const project = path.join(repo, 'project'), outside = await mkdtemp(path.join(os.tmpdir(), 'mrmak-outside-'));
+  t.after(() => rm(outside, { recursive: true, force: true }));
+  await mkdir(path.join(project, '.private'), { recursive: true });
+  await writeFile(path.join(project, 'notes.md'), '# Notes'); await writeFile(path.join(project, '.private/key.md'), 'secret');
+  await writeFile(path.join(project, 'tool.exe'), 'binary'); await writeFile(path.join(outside, 'other.md'), 'elsewhere');
+  session.cwd = project;
+  const route = `/sessions/${id}/open`;
+  assert.equal((await request(route, { path: 'notes.md' })).status, 401);
+  const opened = await request(route, { path: path.join(project, 'notes.md') }, device.cookie);
+  assert.equal(opened.status, 200); assert.equal(opened.data.file.kind, 'markdown'); assert.equal(opened.data.file.text, '# Notes');
+  assert.match(opened.data.file.url, /^\/mobile\/view\/[^/]+\/files\/notes\.md$/);
+  for (const target of ['.private/key.md', path.join(outside, 'other.md'), 'tool.exe', '.', 123, 'missing.md']) {
+    const result = await request(route, { path: target }, device.cookie);
+    assert.ok(result.status >= 400 && !result.data.file, `${target} stays on the computer`);
+  }
 });
 
 test('conversation adapters omit tool results and prefer Codex native user/answer events', () => {
