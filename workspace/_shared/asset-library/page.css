@@ -1,0 +1,73 @@
+/* Asset library page (inlined by build.mjs). Colours come from report.css, so the page follows the app theme. */
+.al [hidden]{display:none!important}
+.al *{box-sizing:border-box}
+.al .al-head{padding:0;background:none;border:0}
+.al .al-head .sub{margin-bottom:18px}
+.al .al-bar{display:grid;gap:10px;margin:0 0 18px;padding:14px 16px;border:1px solid var(--mak-border);border-radius:12px;background:var(--mak-surface)}
+.al .al-group{display:flex;flex-wrap:wrap;gap:6px}
+.al button,.al .al-link{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:6px 12px;border:1px solid var(--mak-border);border-radius:8px;background:transparent;color:var(--mak-text);font:500 13px var(--mak-font);text-decoration:none;cursor:pointer}
+.al button:hover,.al .al-link:hover{border-color:var(--mak-accent)}
+.al button[aria-pressed=true]{border-color:var(--mak-accent);background:color-mix(in srgb,var(--mak-accent) 16%,transparent)}
+.al button:disabled{opacity:.55;cursor:default}
+.al button small{color:var(--mak-muted);font-weight:500}
+.al .al-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px}
+.al input[type=search]{flex:1 1 240px;min-width:0;min-height:38px;padding:7px 12px;border:1px solid var(--mak-border);border-radius:8px;background:var(--mak-bg);color:var(--mak-text);font:500 14px var(--mak-font)}
+.al .al-total,.al .al-legend,.al .al-empty{margin:0;font-size:13px;color:var(--mak-muted)}
+.al .al-legend{margin-top:18px}
+.al .al-empty{padding:18px;text-align:center}
+.al details{margin:0}
+.al .al-category{margin:0 0 16px;border:1px solid var(--mak-border);border-radius:12px;background:var(--mak-surface)}
+.al .al-category>summary,.al .al-family>summary{display:flex;align-items:center;gap:10px;cursor:pointer;list-style:none}
+.al .al-category>summary::-webkit-details-marker,.al .al-family>summary::-webkit-details-marker{display:none}
+.al .al-category>summary{padding:14px 18px}
+.al .al-category>summary h2{flex:1;min-width:0;margin:0;padding:0;border:0;font-size:19px}
+.al .al-category>.al-family{margin:0 12px 10px}
+.al .al-family{border:1px solid var(--mak-border);border-radius:9px;background:var(--mak-bg)}
+.al .al-family>summary{padding:11px 14px;min-height:46px}
+.al .al-family-name{flex:1;min-width:0;font:600 14.5px/1.4 var(--mak-font)}
+.al .al-count{flex:none;font-size:12.5px;color:var(--mak-muted);white-space:nowrap}
+.al .al-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,232px),1fr));gap:12px;padding:4px 12px 14px;align-items:start}
+.al .al-item{min-width:0;display:flex;flex-direction:column;border:1px solid var(--mak-border);border-radius:9px;background:var(--mak-surface);overflow:hidden}
+.al .al-item.al-wide{grid-column:1/-1}
+.al .al-item.al-wide .al-media{aspect-ratio:auto;height:min(40vh,320px)}
+.al .al-media{display:grid;place-items:center;aspect-ratio:4/3;border-bottom:1px solid var(--mak-border);background:var(--mak-bg)}
+.al .al-media img{display:block;width:100%;height:100%;object-fit:contain}
+.al .al-sound{font-size:34px;color:var(--mak-muted)}
+.al .al-body{display:flex;flex-direction:column;gap:8px;padding:10px 12px 12px;min-width:0}
+.al .al-body h3{margin:0;font-size:15px;line-height:1.35}
+.al .al-body p{margin:0;line-height:1.55}
+.al .al-meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.al .al-chip,.al .al-id{display:inline-block;padding:2px 8px;border:1px solid var(--mak-border);border-radius:999px;font-size:11.5px;line-height:1.5;color:var(--mak-muted)}
+.al .al-chip.al-current{color:var(--mak-text);border-color:color-mix(in srgb,#5fbf8a 60%,transparent)}
+.al .al-chip.al-review{color:var(--mak-text);border-color:color-mix(in srgb,#d9a54a 60%,transparent)}
+.al .al-views{display:flex;flex-wrap:wrap;gap:8px;margin:0;padding:0;list-style:none}
+.al .al-views figure{width:68px;margin:0}
+.al .al-views img{display:block;width:68px;height:51px;object-fit:cover;border:1px solid var(--mak-border);border-radius:6px}
+.al .al-views figcaption{margin-top:3px;font-size:10.5px;line-height:1.25;color:var(--mak-muted);overflow-wrap:anywhere}
+.al .al-tracks{display:grid;gap:8px;margin:0;padding:0;list-style:none}
+.al .al-tracks li{display:grid;gap:3px}
+.al .al-tracks span{font-size:12px;color:var(--mak-muted)}
+.al .al-tracks audio{width:100%;height:36px}
+.al .al-note{font-size:13px}
+.al .al-fact{font-size:12.5px;color:var(--mak-muted);overflow-wrap:anywhere}
+.al .al-fact code{font-size:11.5px}
+.al .al-none{font-style:italic;opacity:.8}
+.al .al-actions{display:flex;flex-wrap:wrap;gap:6px}
+.al .al-notice{font-size:12.5px;color:var(--mak-muted)}
+.al .al-history{border-top:1px solid var(--mak-border);padding-top:6px}
+.al .al-history>summary{cursor:pointer;font-size:12.5px;font-weight:600;color:var(--mak-muted);padding:4px 0}
+.al .al-history ul{display:grid;gap:10px;margin:8px 0 0;padding:0;list-style:none}
+.al .al-history li{display:grid;grid-template-columns:72px minmax(0,1fr);gap:4px 10px;align-items:start}
+.al .al-history li img{display:block;width:72px;height:54px;object-fit:cover;border:1px solid var(--mak-border);border-radius:6px}
+.al .al-history li div{display:grid;gap:3px;min-width:0;font-size:12.5px;line-height:1.5}
+.al .al-history li .al-tracks{grid-column:1/-1}
+.al .al-compare{display:grid;gap:8px;padding:10px;border:1px solid var(--mak-border);border-radius:9px;background:var(--mak-bg)}
+.al .al-compare-bar{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;font-size:12px;color:var(--mak-muted)}
+.al .al-compare-bar label{display:flex;align-items:center;gap:6px}
+.al .al-compare select{min-height:34px;max-width:100%;padding:3px 8px;border:1px solid var(--mak-border);border-radius:6px;background:var(--mak-bg);color:var(--mak-text);font:500 12.5px var(--mak-font)}
+.al .al-stage{position:relative;width:100%;aspect-ratio:4/3;max-height:70vh;overflow:hidden;background:var(--mak-surface);user-select:none}
+.al .al-stage img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none}
+.al .al-over{position:absolute;inset:0;clip-path:inset(0 50% 0 0)}
+.al .al-line{position:absolute;top:0;bottom:0;left:50%;width:2px;margin-left:-1px;background:var(--mak-accent);pointer-events:none}
+.al .al-compare input[type=range]{width:100%;accent-color:var(--mak-accent)}
+@media(max-width:600px){.al .al-bar{padding:12px}.al .al-category>.al-family{margin:0 8px 8px}.al .al-grid{padding:4px 8px 12px}}

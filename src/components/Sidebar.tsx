@@ -2,7 +2,7 @@ import type { RefObject } from 'react'
 import type { WorkspaceEntity } from '../types'
 import { entityHash } from '../lib/route'
 import { categoryIcon } from '../lib/categories'
-import { contentUrl } from '../desktop/client'
+import { contentUrl, isDesktop } from '../desktop/client'
 import MakLogo from './MakLogo'
 import MakText from './MakText'
 import { EntityStatusButton } from './EntityControls'
@@ -101,6 +101,20 @@ export default function Sidebar({
       </div>
 
       <nav className="sidebar-list">
+        {isDesktop && (
+          <div>
+            <div className="sidebar-section">
+              <span className="sidebar-label">{'\u{1F6E0}'} tools</span>
+            </div>
+            <div className="sidebar-item-row">
+              <a href="#/ui-studio" className={`sidebar-item${activeId === 'ui-studio' ? ' active' : ''}`}>
+                <span className="item-icon" aria-hidden="true">{'\u{1F3AE}'}</span>
+                <span className="item-text">Game UI Studio</span>
+              </a>
+            </div>
+          </div>
+        )}
+
         {pinned.length > 0 && (
           <div>
             <div className="sidebar-section">

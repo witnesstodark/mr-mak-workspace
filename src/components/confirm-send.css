@@ -1,0 +1,16 @@
+/* The owner's confirmation before a framed page reaches a chat (ConfirmSend.tsx), drawn by the Workspace window over the frame. */
+.confirm-send-layer { position: absolute; inset: 0; display: flex; align-items: flex-start; justify-content: center; padding: 48px 16px; background: rgba(8, 8, 12, 0.62); z-index: 20; overflow-y: auto; }
+.confirm-send { width: min(680px, 100%); background: var(--surface-solid, #16171d); color: var(--text, #d3d0d9); border: 1px solid var(--hairline-strong, #ffffff20); border-radius: 10px; padding: 22px 24px; box-shadow: 0 18px 60px rgba(0, 0, 0, 0.5); outline: none; }
+.confirm-send h2 { margin: 0 0 6px; font-size: 18px; color: var(--text-bright, #fff); }
+.confirm-send-lead { margin: 0 0 14px; font-size: 13px; line-height: 1.55; color: var(--text-muted, #aaa2b2); }
+.confirm-send-facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 0 0 12px; font-size: 13px; }
+.confirm-send-facts dt { color: var(--text-muted, #aaa2b2); }
+.confirm-send-facts dd { margin: 0; overflow-wrap: anywhere; }
+.confirm-send-strong { font-weight: 600; white-space: pre-wrap; }
+.confirm-send-size { font-size: 12px; color: var(--text-muted, #aaa2b2); margin-bottom: 6px; }
+.confirm-send-text { max-height: 40vh; overflow: auto; margin: 0 0 16px; padding: 10px 12px; font-size: 12px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--surface-1, #101115); border: 1px solid var(--hairline, #ffffff14); border-radius: 7px; }
+.confirm-send-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.confirm-send-actions button { font: inherit; font-size: 13px; padding: 8px 16px; border-radius: 7px; border: 1px solid var(--hairline-strong, #ffffff20); background: var(--surface-1, #18191f); color: var(--text, #d3d0d9); cursor: pointer; }
+.confirm-send-actions button.primary { background: var(--pink, #efa2b4); border-color: var(--pink, #efa2b4); color: var(--on-accent, #101115); font-weight: 600; }
+.confirm-send-actions button:disabled { opacity: 0.5; cursor: default; }
+.confirm-send-actions button:focus-visible { outline: 2px solid var(--pink, #efa2b4); outline-offset: 2px; }

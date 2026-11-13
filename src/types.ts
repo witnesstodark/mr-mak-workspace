@@ -21,6 +21,12 @@ export interface WorkspaceEntity {
   /** Last day an agent touched this entity; dashboard sorts/archives by it. */
   updated?: string
   folder: string
+  /**
+   * Optional project folder this card belongs to, relative to the repository
+   * or absolute. A card's asset library sends items only to a chat working
+   * there (src/desktop/assetBridge.ts).
+   */
+  project?: string
   steps: WorkspaceStep[]
   /** Tab to open for a card link without an explicit step; otherwise use latest. */
   defaultStep?: number

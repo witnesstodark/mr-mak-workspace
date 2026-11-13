@@ -9,6 +9,8 @@
    [the editable card format](../docs/editable-cards.md). Store content in a
    `.card.json` file and register `viewer: "card"`. Preserve stable entry IDs and
    validate before saving. Keep custom HTML when a task needs its own layout.
+   For a project's assets, follow [the asset library](../docs/asset-library.md):
+   edit `assets.json`, regenerate `assets.html` and set the card's `project`.
 4. Add the shared report CSS and script; use `data-mak-report="document"`.
    Markdown requires no HTML wrapper and opens in the formatted document view.
 5. Make every image clickable and downloadable. Videos need native controls.

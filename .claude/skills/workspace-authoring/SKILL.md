@@ -19,6 +19,13 @@ provides the view, so do not create a second editable HTML copy of the same data
 Preserve existing custom HTML unless conversion was requested. Browser and phone
 previews can read these cards; the desktop Workspace provides editing controls.
 
+For a project's asset library (previews, versions, originals and generation
+records), keep the data in the card's `assets.json` and generate `assets.html`
+with `workspace/_shared/asset-library/build.mjs`, as described in
+[the asset library](../../../docs/asset-library.md). Set the card's `project` in
+`workspace/workspace.json` so "Send to chat" reaches a chat of that project.
+Never edit the generated page.
+
 Use `workspace/_shared/report.css` and `report.js` in every HTML report, with
 `data-mak-report="document"` on the root element. Use the shared tokens and
 layout instead of inventing another visual theme. Basic cards and media grids

@@ -101,7 +101,8 @@ const serviceSource = path.join(repo, 'desktop', 'service');
 await cp(serviceSource, path.join(runtime, 'service'), { recursive: true, filter: source => !path.relative(serviceSource, source).split(path.sep).some(part => ['node_modules', 'test', '.cache'].includes(part)) });
 // A checkout can itself live under a cache/worktree directory. Validate the
 // payload before npm can resolve an unrelated parent package.json.
-for (const file of ['package.json', 'package-lock.json', 'main.mjs', 'server.mjs']) await access(path.join(runtime, 'service', file));
+// The Game UI Studio ships inside the service; its tests stay in the source tree.
+for (const file of ['package.json', 'package-lock.json', 'main.mjs', 'server.mjs', 'ui-studio/editor.html', 'ui-studio/guide.md', 'ui-studio/guidelines.md']) await access(path.join(runtime, 'service', file));
 run(['ci', '--omit=dev'], path.join(runtime, 'service'));
 // npm can unpack node-pty's macOS spawn-helper without the execute bit; terminals then fail with posix_spawnp.
 if (process.platform === 'darwin') {
