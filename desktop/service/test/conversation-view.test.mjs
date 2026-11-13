@@ -93,7 +93,7 @@ test('desktop conversation view reads the native transcript, grants its media an
   assert.deepEqual(pinned.filter(item => item.pinned).map(item => item.path), [game]);
   assert.deepEqual((await service.coordinator.execute('list_projects', { query: 'game' })).map(item => item.path), [game]);
 
-  assert.deepEqual(await (await request(`/sessions/${session.id}/stats`)).json(), { supported: true, userMessages: 1, truncated: false, model: null, handoff: null });
+  assert.deepEqual(await (await request(`/sessions/${session.id}/stats`)).json(), { supported: true, userMessages: 1, truncated: false, model: null, effort: null, handoff: null });
   const handoff = await request(`/sessions/${session.id}/handoff`, {});
   assert.equal(handoff.status, 400); assert.match((await handoff.json()).error, /Reconnect this chat/);
   assert.equal((await (await request('/settings', { handoffAfter: 5 })).json()).handoffAfter, 40);

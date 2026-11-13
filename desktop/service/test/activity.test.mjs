@@ -37,6 +37,8 @@ test('native activity separates accepted tasks, tool work, final answers and int
   assert.equal(nativeActivity({ type: 'assistant', message: { id: 'msg-1', stop_reason: 'end_turn', content: [{ type: 'text', text: 'Done.' }] } }, 'claude').id, 'msg-1');
   assert.equal(nativeActivity({ type: 'user', message: { content: '[Request interrupted by user]' } }, 'claude').kind, 'turn-interrupted');
   assert.equal(nativeActivity({ type: 'user', message: { content: [{ type: 'text', text: '[Request interrupted by user for tool use]' }] } }, 'claude').kind, 'turn-interrupted');
+  // A local command such as /model or /effort ends with its output; no model turn follows.
+  assert.equal(nativeActivity({ type: 'user', message: { content: '<local-command-stdout>Set model to Sonnet 5.5</local-command-stdout>' } }, 'claude').kind, 'turn-interrupted');
   assert.equal(nativeActivity({ type: 'assistant', message: { stop_reason: 'end_turn' } }, 'kimi'), null);
 });
 

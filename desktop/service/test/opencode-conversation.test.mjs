@@ -145,5 +145,5 @@ test('desktop Conversation and its stats serve an OpenCode chat with granted ima
   assert.equal(transcript.messages[0].text, 'Where is the spawn point set?');
   const media = await fetch(service.origin + transcript.messages[0].images[0].url);
   assert.equal(media.status, 200); assert.equal(media.headers.get('content-type'), 'image/png');
-  assert.deepEqual(await (await request(`/sessions/${chat.id}/stats`)).json(), { supported: true, userMessages: 2, truncated: false, model: 'ollama/gpt-oss:20b', handoff: null });
+  assert.deepEqual(await (await request(`/sessions/${chat.id}/stats`)).json(), { supported: true, userMessages: 2, truncated: false, model: 'ollama/gpt-oss:20b', effort: null, handoff: null });
 });

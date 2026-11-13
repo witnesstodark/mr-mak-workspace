@@ -29,6 +29,7 @@ import { ConversationTranscripts } from './mobile-transcript.mjs';
 import { ConversationMedia } from './conversation-media.mjs';
 import { projectKey, recentProjects } from './recent-projects.mjs';
 import { answerPrompt, readPrompt } from './terminal-prompt.mjs';
+import { applyChoice, liveStats, modelOptions, switchingModel } from './chat-models.mjs';
 import { rewindToMessage } from './message-edit.mjs';
 import { LocalReadAloud } from './local-read-aloud.mjs';
 import { Handoffs } from './handoff.mjs';
@@ -365,13 +366,17 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
           if (method === 'GET' && action === 'messages') {
             const session = sessions.get(id);
             const value = await conversationMedia.present(await transcripts.read(session), session, 'desktop', grant => `/media/${session.id}/${grant}`);
-            return json(response, 200, { ...value, prompt: session.process ? await readPrompt(sessions, id) : null });
+            // Mr. Mak answers Claude Code's cache warning itself while it applies a footer model change.
+            return json(response, 200, { ...value, prompt: session.process && !switchingModel(id) ? await readPrompt(sessions, id) : null });
           }
           if (method === 'GET' && action === 'commands') { const session = sessions.get(id); return json(response, 200, await chatCommands(session.agent, session.cwd, mcpOptions)); }
           if (method === 'GET' && action === 'stats') {
-            const { supported, userMessages = 0, truncated = false, model = null } = await transcripts.read(sessions.get(id));
-            return json(response, 200, { supported, userMessages, truncated, model, handoff: handoffs.state(id) });
+            const session = sessions.get(id);
+            const { supported, userMessages = 0, truncated = false, model = null, effort = null, modelName = null } = await liveStats(session, await transcripts.read(session), stateDir);
+            return json(response, 200, { supported, userMessages, truncated, model, ...(modelName && { modelName }), effort, handoff: handoffs.state(id) });
           }
+          if (method === 'GET' && action === 'models') return json(response, 200, await modelOptions(sessions.get(id)));
+          if (method === 'POST' && action === 'model') return json(response, 200, await applyChoice(sessions, stateDir, id, { model: data.model ?? undefined, effort: data.effort ?? undefined }));
           if (method === 'POST' && action === 'handoff') return json(response, 200, handoffs.start(id));
           if (method === 'POST' && action === 'prompt') return json(response, 200, await answerPrompt(sessions, id, data.id, data.choice));
           if (method === 'POST' && action === 'rewind') return json(response, 200, await rewindToMessage(sessions, transcripts, id, String(data.messageId || '')));

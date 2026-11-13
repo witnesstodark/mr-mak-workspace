@@ -89,6 +89,33 @@ both mouse tracking and the requested SGR encoding, including saved screens,
 so switching tabs or reconnecting does not disable its mouse wheel. Classic
 Claude and Codex continue using local terminal scrollback.
 
+## The model menu
+
+The chat footer's "Opus · high" chip opens a menu with Claude Code's models
+(from its model catalog cache, with the `opus`, `sonnet` and `haiku` aliases as
+the fallback) and effort levels. `POST /api/sessions/:id/model` pastes
+`/model <id>` or `/effort <level>`: with an argument the CLI opens no picker.
+Mid-conversation Claude Code may ask "Switch model?" or "Change effort level?"
+because the prompt cache is lost. That warning belongs to the switch the person
+just chose, so the service confirms it once (`cacheWarning` in
+`chat-models.mjs`), hides it from Conversation meanwhile and keeps waiting for
+the result. A confirmation a PreModelSwitch hook asks for is left to the person.
+
+A change counts only once Claude Code prints its success line ("Set model to",
+"Kept model as", "Set effort level to"). A refusal such as "Failed to validate
+model", or no confirmation within 8 seconds, keeps the previous model or effort:
+nothing is saved, `/effort` is not sent after an unconfirmed `/model`, and the
+answer is `applied: false` with a `note` the menu shows. Confirmed parts are kept
+on the chat (`--model`/`--effort` on resume) and per project in
+`<state>/chat-models.json` for new chats there. Other CLIs change models only in
+their own picker, which the menu opens in Terminal.
+
+To show a `/model` or `/effort` typed in the terminal too, each Claude chat starts
+with `--settings <state>/claude-status/<chat>.settings.json`, whose status line
+runs `claude-statusline.mjs`. It saves only the live model and effort and prints
+nothing. A status line in the person's user or project settings is left in place;
+the footer then reads the transcript's model and the confirmed choice.
+
 ## Local microphone dictation
 
 Desktop chats, the Mak composer and paired mobile chats support free local Whisper
