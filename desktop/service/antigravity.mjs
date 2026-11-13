@@ -74,6 +74,64 @@ export const antigravityConversationFile = (id, home = os.homedir()) => path.joi
 let sqlite;
 const sqliteDatabase = () => sqlite ??= import('node:sqlite').then(module => module.DatabaseSync, () => null);
 
+// Reads protobuf wire format into field number -> values (numbers or bytes).
+// Malformed data returns null, so a changed schema stays unknown.
+function protobuf(bytes) {
+  if (!(bytes instanceof Uint8Array)) return null;
+  const fields = new Map();
+  let offset = 0;
+  const varint = () => {
+    let value = 0;
+    for (let shift = 0; shift < 70; shift += 7) {
+      if (offset >= bytes.length) throw new Error('Truncated varint');
+      const byte = bytes[offset++];
+      value += (byte & 0x7f) * 2 ** shift;
+      if (!(byte & 0x80)) return value;
+    }
+    throw new Error('Invalid varint');
+  };
+  try {
+    while (offset < bytes.length) {
+      const key = varint(), field = Math.floor(key / 8), type = key % 8;
+      if (field < 1) return null;
+      let value;
+      if (type === 0) value = varint();
+      else if (type === 2) { const length = varint(); if (offset + length > bytes.length) return null; value = bytes.subarray(offset, offset + length); offset += length; }
+      else if (type === 1 || type === 5) { offset += type === 1 ? 8 : 4; if (offset > bytes.length) return null; continue; }
+      else return null;
+      fields.set(field, [...(fields.get(field) || []), value]);
+    }
+  } catch { return null; }
+  return fields;
+}
+
+// agy 1.4.7 stores a model step with its planner response in field 20: the
+// reply text in field 1 and each tool call in field 7.
+export function antigravityReply(payload) {
+  const value = protobuf(payload)?.get(20)?.at(-1), response = value instanceof Uint8Array ? protobuf(value) : null;
+  if (!response) return null;
+  const text = response.get(1)?.at(-1);
+  return { text: text instanceof Uint8Array ? Buffer.from(text).toString('utf8') : '', toolCalls: response.get(7)?.length || 0 };
+}
+
+// Step types and the done status in agy 1.4.7. Other step types are ignored.
+const userStep = 14, modelStep = 15, toolStep = 132, doneStatus = 3, stoppedStatuses = [6, 7];
+
+// A turn ends with a finished model step that calls no tool, and stops with a
+// cancelled or failed step. Any other latest step means the agent works.
+export async function readAntigravityTurn(file) {
+  const DatabaseSync = await sqliteDatabase();
+  if (!DatabaseSync) return null;
+  const database = new DatabaseSync(file, { readOnly: true });
+  try {
+    const row = database.prepare(`SELECT idx, step_type, status, step_payload FROM steps WHERE step_type IN (${userStep}, ${modelStep}, ${toolStep}) ORDER BY idx DESC LIMIT 1`).get();
+    if (!row) return null;
+    const step = Number(row.idx), reply = row.step_type === modelStep && row.status === doneStatus ? antigravityReply(row.step_payload) : null;
+    if (reply && !reply.toolCalls) return { kind: 'turn-completed', step, reply: reply.text };
+    return { kind: stoppedStatuses.includes(row.status) ? 'turn-interrupted' : 'turn-started', step };
+  } finally { database.close(); }
+}
+
 export async function readAntigravityContext(file) {
   const DatabaseSync = await sqliteDatabase();
   if (!DatabaseSync) return null;
