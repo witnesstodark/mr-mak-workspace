@@ -17,6 +17,7 @@ import { projectKey, recentProjects } from './recent-projects.mjs';
 import { MobileReports } from './mobile-reports.mjs';
 import { MobileDictation } from './mobile-dictation.mjs';
 import { answerPrompt, readPrompt } from './terminal-prompt.mjs';
+import { MobilePush } from './mobile-push.mjs';
 
 const digest = value => createHash('sha256').update(value).digest('hex');
 const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status }); };
@@ -28,18 +29,19 @@ const DEVICE_IDLE_TTL = 30 * 24 * 60 * 60 * 1000;
 const send = (ws, value) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(value)); };
 
 export class MobileGateway {
-  constructor({ repo, uiDir, stateDir, sessions, attachments, settings, changed, closeChat, transport = new TailscaleTransport(), dictation = new MobileDictation(repo), chooseDictation, readAloud = new LocalReadAloud(repo), transcripts = new ConversationTranscripts() }) {
+  constructor({ repo, uiDir, stateDir, sessions, attachments, settings, changed, closeChat, transport = new TailscaleTransport(), dictation = new MobileDictation(repo), chooseDictation, readAloud = new LocalReadAloud(repo), transcripts = new ConversationTranscripts(), sendPush }) {
     Object.assign(this, { repo, uiDir, sessions, attachments, settings, changed, closeChat, transport });
     this.file = path.join(stateDir, 'mobile-access.json');
     this.saves = Promise.resolve(); this.pending = new Map(); this.clients = new Set(); this.inflight = new Map(); this.uploads = new Map(); this.queues = new Map();
     this.transcripts = transcripts; this.conversationMedia = new ConversationMedia(); this.active = false; this.error = ''; this.origin = ''; this.rates = new Map();
-    this.reports = new MobileReports(this);
+    this.reports = new MobileReports(this); this.push = new MobilePush(this, sendPush);
     this.readAloud = readAloud; this.dictation = dictation; this.chooseDictation = chooseDictation;
   }
   async init() {
     this.state = { enabled: false, devices: [], receipts: [], ...await readJson(this.file, {}) };
     // A process restart cannot prove whether an interrupted write reached the CLI.
     for (const receipt of this.state.receipts) if (receipt.status === 'sending') receipt.status = 'uncertain';
+    this.push.watch(this.sessions.list());
     this.server = http.createServer((request, response) => this.request(request, response));
     this.server.requestTimeout = 30000; this.server.headersTimeout = 15000;
     await new Promise((resolve, reject) => { this.server.once('error', reject); this.server.listen(0, '127.0.0.1', resolve); });
@@ -54,7 +56,7 @@ export class MobileGateway {
       } catch { socket.destroy(); }
     });
     this.handlers = {
-      session: session => { if (session.agent !== 'shell') this.broadcast({ type: 'session', session }); },
+      session: session => { if (session.agent !== 'shell') { this.broadcast({ type: 'session', session }); this.push.session(session); } },
       output: output => { for (const ws of this.clients) if (ws.sessionId === output.id) { if (ws.bufferedAmount > 2 * 1024 * 1024) ws.close(1013, 'Reconnect'); else send(ws, { type: 'output', ...output }); } },
       'screen-cleared': value => this.broadcast({ type: 'screen-cleared', ...value }),
       'terminal-resized': value => this.broadcast({ type: 'terminal-resized', ...value }),
@@ -79,7 +81,7 @@ export class MobileGateway {
   status() {
     return {
       enabled: this.active, origin: this.active ? this.origin : '', error: this.error,
-      devices: this.state.devices.filter(device => this.validDevice(device)).map(({ hash: _hash, ...device }) => ({ ...device, connected: [...this.clients].some(ws => ws.deviceId === device.id && ws.readyState === WebSocket.OPEN) })),
+      devices: this.state.devices.filter(device => this.validDevice(device)).map(({ hash: _hash, push: _push, ...device }) => ({ ...device, connected: [...this.clients].some(ws => ws.deviceId === device.id && ws.readyState === WebSocket.OPEN) })),
       pending: [...this.pending.values()].filter(item => item.expires > Date.now() && !item.approved).map(({ id, name, code, expires }) => ({ id, name, code, expires })),
     };
   }
@@ -197,8 +199,13 @@ export class MobileGateway {
   list() { return this.sessions.list().filter(item => item.agent !== 'shell'); }
   projects() { return recentProjects({ repo: this.repo, sessions: this.sessions.list(), pinned: this.settings().pinnedProjects || [] }); }
   broadcast(event) { for (const ws of this.clients) send(ws, event); }
+  // A paired phone shows this chat on its screen now. The phone closes its socket
+  // when it is hidden and reports the chat it shows while visible.
+  watching(id) {
+    return [...this.clients].some(ws => ws.readyState === WebSocket.OPEN && ws.viewing === id && this.state.devices.some(device => device.id === ws.deviceId && this.validDevice(device)));
+  }
   connect(ws, device) {
-    ws.deviceId = device.id; ws.alive = true; ws.sessionId = null; this.clients.add(ws);
+    ws.deviceId = device.id; ws.alive = true; ws.sessionId = null; ws.viewing = null; this.clients.add(ws);
     device.lastSeen = new Date().toISOString(); this.save().catch(() => {}); this.notify();
     send(ws, { type: 'connected', sessions: this.list() });
     ws.on('pong', () => { ws.alive = true; if (this.validDevice(device)) this.touch(device); });
@@ -211,7 +218,11 @@ export class MobileGateway {
           const snapshot = await this.sessions.snapshot(event.id);
           if (ws.sessionId === event.id) send(ws, { type: 'snapshot', ...snapshot });
         } else if (event.type === 'seen' && ws.sessionId === event.id) this.sessions.seen(event.id, event.completionVersion);
-        else if (event.type === 'ping') send(ws, { type: 'pong' });
+        else if (event.type === 'viewing') {
+          if (event.id !== null && !uuid(event.id)) fail('This mobile action is not available.');
+          if (event.id !== null) this.session(event.id);
+          ws.viewing = event.id;
+        } else if (event.type === 'ping') send(ws, { type: 'pong' });
         else fail('This mobile action is not available.');
       } catch (error) { send(ws, { type: 'error', error: publicError(error) }); }
     });
@@ -293,12 +304,14 @@ export class MobileGateway {
         if (method === 'GET' && route === '/mobile/api/read-aloud') return json(response, 200, await this.readAloud.status());
         const media = /^\/mobile\/api\/sessions\/([a-f0-9-]{36})\/media\/([a-zA-Z0-9_-]{43})$/.exec(route);
         if (media && ['GET', 'HEAD'].includes(method)) { this.session(media[1]); return await this.conversationMedia.serve(request, response, media[1], media[2], device.id, url.searchParams.get('download') === '1'); }
+        if (method === 'GET' && route === '/mobile/api/push') return json(response, 200, await this.push.status(device));
+        if (method === 'POST' && route === '/mobile/api/push') return json(response, 200, await this.push.subscribe(device, data.subscription));
         if (method === 'GET' && route === '/mobile/api/dictation') return json(response, 200, await this.dictation.status());
         if (method === 'POST' && route === '/mobile/api/dictation') return json(response, 200, await this.chooseDictation(data.provider));
         if (method === 'POST' && route === '/mobile/api/transcribe') return json(response, 200, await this.dictation.transcribe(request, device.id, () => this.active && this.state.devices.some(item => item.id === device.id && this.validDevice(item))));
         if (method === 'GET' && route === '/mobile/api/reports') return json(response, 200, await this.reports.list());
         if (method === 'POST' && route === '/mobile/api/reports/open') return json(response, 200, await this.reports.open(device, data));
-        if (method === 'GET' && route === '/mobile/api/bootstrap') return json(response, 200, { sessions: this.list(), agents: inventory().filter(item => item.id !== 'shell'), device: { id: device.id, name: device.name }, defaultAgent: this.settings().defaultAgent, defaultBypass: this.settings().defaultBypass, dictation: await this.dictation.status() });
+        if (method === 'GET' && route === '/mobile/api/bootstrap') return json(response, 200, { sessions: this.list(), agents: inventory().filter(item => item.id !== 'shell'), device: { id: device.id, name: device.name }, defaultAgent: this.settings().defaultAgent, defaultBypass: this.settings().defaultBypass, dictation: await this.dictation.status(), mutedChats: this.push.muted() });
         if (method === 'POST' && route === '/mobile/api/disconnect') { await this.revoke(device.id); response.setHeader('Set-Cookie', this.cookie('', true)); return json(response, 200, { disconnected: true }); }
         if (method === 'POST' && route === '/mobile/api/images') {
           if (this.uploads.size >= 150) fail('Too many pending images. Try again later.', 429);
@@ -316,7 +329,7 @@ export class MobileGateway {
           if (data.cwd !== undefined && !project) fail('Choose a project from the list.');
           return json(response, 201, await this.sessions.create({ agent: data.agent, name: data.name, cwd: project?.path || this.repo, bypass: this.settings().defaultBypass === true, effort: this.settings().defaultEffort }));
         }
-        const match = /^\/mobile\/api\/sessions\/([a-f0-9-]{36})\/(messages|send|resume|close|key|prompt|read-aloud)$/.exec(route);
+        const match = /^\/mobile\/api\/sessions\/([a-f0-9-]{36})\/(messages|send|resume|close|key|prompt|read-aloud|mute)$/.exec(route);
         if (match) {
           const session = this.session(match[1]);
           // The same terminal menu and one-use answer the desktop Conversation offers.
@@ -332,6 +345,7 @@ export class MobileGateway {
               complete = true; response.writeHead(200, { 'Content-Type': 'audio/wav', 'Content-Length': audio.length, 'Cache-Control': 'no-store' }); response.end(audio); return;
             } finally { response.off('close', abort); }
           }
+          if (method === 'POST' && match[2] === 'mute') { const mutedChats = await this.push.mute(session.id, data.muted); this.broadcast({ type: 'muted', mutedChats }); return json(response, 200, { mutedChats }); }
           if (method === 'POST' && match[2] === 'send') return json(response, 200, await this.submit(device, session.id, data));
           if (method === 'POST' && match[2] === 'resume') return json(response, 200, session.process ? this.list().find(item => item.id === session.id) : await this.sessions.resume(session.id));
           if (method === 'POST' && match[2] === 'close') return json(response, 200, await this.closeChat(session.id));
