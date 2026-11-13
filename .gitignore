@@ -23,6 +23,8 @@ __pycache__/
 src-tauri/target/
 src-tauri/gen/
 public/workspace
+projects/kimodo-amd/runtime/
+projects/kimodo-amd/models/
 *.log
 
 # Local inputs and jobs
