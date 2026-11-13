@@ -1,0 +1,10 @@
+/* Optional cover, phase and progress on a phone Workspace card. A card without them keeps the plain row. */
+.mobile-app .mobile-result-card.has-cover { flex-wrap: wrap; overflow: hidden; padding-top: 0; row-gap: 0; }
+.mobile-result-card .mobile-result-cover { display: block; flex: 0 0 calc(100% + 26px); width: calc(100% + 26px); height: 112px; margin: 0 -13px 12px; object-fit: cover; background: var(--surface-solid); border-bottom: 1px solid var(--m-line); }
+.mobile-result-card .mobile-result-phase { display: block; width: fit-content; max-width: 100%; margin-top: 7px; padding: 2px 9px; font-size: 10px; color: var(--m-accent); background: var(--pink-dim); border: 1px solid var(--hairline-strong); border-radius: 999px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mobile-result-card .mobile-result-progress { display: block; margin-top: 8px; }
+.mobile-result-card .mobile-result-progress-text { display: flex; align-items: baseline; gap: 6px; min-width: 0; font-size: 10px; color: var(--m-muted); }
+.mobile-result-card .mobile-result-progress-text b { flex-shrink: 0; font-weight: 600; color: var(--m-text); font-variant-numeric: tabular-nums; }
+.mobile-result-card .mobile-result-progress-text span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mobile-result-card .mobile-result-progress-bar { display: block; height: 4px; margin-top: 4px; overflow: hidden; border-radius: 999px; background: var(--surface-2); }
+.mobile-result-card .mobile-result-progress-bar > span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--pink), var(--purple)); }

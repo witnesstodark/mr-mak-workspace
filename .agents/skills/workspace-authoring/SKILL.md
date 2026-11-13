@@ -36,6 +36,11 @@ the report. Never cover the document close button with the Files rail.
 Update `workspace/workspace.json` with a stable ID, category, folder, readable
 title, creation date, last updated date and steps. `sample: true` is reserved for
 starter examples; ordinary work uses normal archiving behavior.
+Optional home card fields: `cover` (a PNG, JPEG, WebP or GIF path inside the
+card folder, up to 8 MB), `phase` (short text, up to 80 characters) and
+`progress` (`{ "done": 3, "total": 8, "label": "M1" }`, with `total` > 0 and
+0 <= `done` <= `total`). A value that fails these rules is ignored and the card
+shows as it would without it, on the desktop and on the phone.
 
 Open every changed tab at wide and narrow sizes. Check media and links, Markdown
 rendering and image close/download controls. Preserve the selected surface during
