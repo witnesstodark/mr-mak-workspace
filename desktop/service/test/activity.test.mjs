@@ -162,6 +162,41 @@ test('only the subscribed Chats view can acknowledge the exact answer; navigatio
   } finally { sockets.forEach(ws => ws.terminate()); await service.close(); }
 });
 
+test('a manual unread mark is acknowledged like an unread answer and survives restart', async () => {
+  const { repo, sessions, item } = await fixture();
+  let restored;
+  try {
+    const version = item.completionVersion;
+    assert.equal(sessions.mark(item.id, true).unread, true);
+    // No new answer arrived, so the open chat's acknowledgement still matches.
+    sessions.seen(item.id, version);
+    assert.equal(item.unread, false);
+    sessions.mark(item.id, true);
+    await sessions.close();
+    restored = await new Sessions(repo, path.join(repo, '.mrmak')).init();
+    assert.equal(restored.get(item.id).unread, true);
+    assert.equal(restored.mark(item.id, false).unread, false);
+  } finally { await restored?.close(); await sessions.close(); }
+});
+
+test('the session API marks a chat unread or read without renaming it', async () => {
+  const { repo, sessions } = await fixture();
+  await sessions.close();
+  await mkdir(path.join(repo, 'workspace'));
+  await mkdir(path.join(repo, 'ui'));
+  await writeFile(path.join(repo, 'workspace', 'workspace.json'), '{"entities":[]}');
+  await writeFile(path.join(repo, 'ui', 'index.html'), '<html>Activity test</html>');
+  const service = await createService({ repo, uiDir: path.join(repo, 'ui') });
+  const patch = async data => (await fetch(service.origin + '/api/sessions/chat-a', { method: 'PATCH', headers: { Authorization: `Bearer ${service.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(data) })).json();
+  try {
+    const marked = await patch({ unread: true });
+    assert.equal(marked.unread, true); assert.equal(marked.name, 'Activity Review');
+    assert.equal(service.sessions.get('chat-a').unread, true);
+    assert.equal((await patch({ unread: false })).unread, false);
+    assert.equal(service.sessions.get('chat-a').unread, false);
+  } finally { await service.close(); }
+});
+
 test('terminal replies and mouse reports do not count as typing, keys do', () => {
   // Moving the pointer over a fullscreen Claude chat sends SGR mouse reports.
   for (const report of ['\x1b[<35;40;12M', '\x1b[<0;10;5M\x1b[<0;10;5m', '\x1b[I', '\x1b[O', '\x1b[12;40R', '\x1b[?2026;2$y', '\x1b]11;rgb:1e1e/1e1e/1e1e\x1b\\','\x1b[M #!']) assert.equal(terminalReport(report), true, JSON.stringify(report));

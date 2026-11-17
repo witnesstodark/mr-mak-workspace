@@ -1,5 +1,6 @@
 // Run after npm run build. Opening a chat with an unread reply in the Conversation
-// view clears its unread mark, as opening it in Terminal does. Fake PTYs only.
+// view clears its unread mark, as opening it in Terminal does. The tab menu sets
+// and removes the same mark by hand. Fake PTYs only.
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -35,6 +36,37 @@ try {
   await page.locator('.desk-conversation').waitFor();
   await page.locator('[data-chat-tab="second"] .session-unread').waitFor({ state: 'detached' });
   assert.equal(second.unread, false);
+
+  // A read chat can be marked unread from its tab menu; opening it clears the mark.
+  const first = service.sessions.get('first');
+  const tab = id => page.locator(`[data-chat-tab="${id}"]`);
+  const dot = id => tab(id).locator('.session-unread');
+  const pick = async (id, name) => { await tab(id).click({ button: 'right' }); await page.getByRole('menuitem', { name, exact: true }).click(); };
+  await pick('first', 'Mark as unread');
+  await dot('first').waitFor();
+  assert.equal(first.unread, true);
+  await tab('first').click();
+  await dot('first').waitFor({ state: 'detached' });
+  assert.equal(first.unread, false);
+
+  // Marked while it is open, a chat keeps the mark until it is opened again.
+  await pick('first', 'Mark as unread');
+  await dot('first').waitFor();
+  await page.waitForTimeout(1500); // Well past the 600 ms "viewed" acknowledgement.
+  assert.equal(first.unread, true);
+  await tab('second').click();
+  await tab('first').click();
+  await dot('first').waitFor({ state: 'detached' });
+  assert.equal(first.unread, false);
+
+  // An unread chat can be marked read without opening it.
+  await tab('second').click();
+  await pick('first', 'Mark as unread');
+  await dot('first').waitFor();
+  await pick('first', 'Mark as read');
+  await dot('first').waitFor({ state: 'detached' });
+  assert.equal(first.unread, false);
+  assert.equal(await tab('second').getByRole('tab').getAttribute('aria-selected'), 'true');
   assert.deepEqual(errors, []);
   console.log('Unread UI checks passed.');
 } finally {

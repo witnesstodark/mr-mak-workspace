@@ -665,6 +665,12 @@ export class Sessions extends EventEmitter {
     if (!session.unread || completionVersion !== session.completionVersion) return;
     session.unread = false; session.attention = false; this.changed(session);
   }
+  // A mark set by hand keeps the answer's version, so opening the chat clears it like a new answer.
+  mark(id, unread) {
+    const session = this.get(id);
+    if (session.unread !== !!unread) { session.unread = !!unread; session.attention = session.unread; this.changed(session); }
+    return publicSession(session);
+  }
   async nativeBoundary(session, resumeId) {
     const file = !resumeId ? null : session.agent === 'codex' ? await codexTranscript(resumeId) : session.agent === 'claude' ? await claudeTranscript(session.cwd, resumeId) : session.agent === 'antigravity' ? await antigravityTranscript(resumeId) : null;
     return file ? { file, offset: (await stat(file).catch(() => null))?.size || 0 } : null;
