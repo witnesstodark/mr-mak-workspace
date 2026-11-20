@@ -113,7 +113,10 @@ try {
   await expect(wrap('full')).toBeVisible();
   // Theme and width: screenshots, no page-level horizontal scroll.
   for (const theme of ['dark', 'light']) {
-    await page.evaluate(theme => document.documentElement.dataset.workspaceTheme = theme, theme);
+    // Saved as the Settings picker does: the palette lives in CSS variables, not only the attribute.
+    await fetch(`${service.origin}/api/settings`, { method: 'POST', headers: { Authorization: `Bearer ${service.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ workspaceTheme: theme }) });
+    await expect(page.locator('html')).toHaveAttribute('data-workspace-theme', theme);
+    if (theme === 'light') await expect(link('full')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
     await page.waitForTimeout(700); // Let the card background transition finish before the screenshots.
     for (const width of [1100, 390]) {
       await page.setViewportSize({ width, height: 900 });
