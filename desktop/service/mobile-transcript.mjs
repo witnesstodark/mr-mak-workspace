@@ -6,6 +6,7 @@ import { claudeTranscript } from './native-events.mjs';
 import { codexSegments } from './codex-history.mjs';
 import { antigravityFullTranscript } from './antigravity.mjs';
 import { readOpencodeSession } from './opencode-history.mjs';
+import { fileActivity } from './file-insights.mjs';
 
 export function transcriptActivity(records, agent) {
   const tools = new Map();
@@ -320,7 +321,7 @@ export class ConversationTranscripts {
         const messages = transcriptMessages(records, session.agent, Infinity);
         // Prompts the user sent; it measures how long a conversation has become.
         const userMessages = messages.filter(item => item.role === 'user').length;
-        const value = { supported: true, messages: messages.slice(-100), userMessages, activity: transcriptActivity(records, session.agent), model: transcriptModel(records, session.agent), truncated };
+        const value = { supported: true, messages: messages.slice(-100), userMessages, activity: transcriptActivity(records, session.agent), files: fileActivity(records, session.agent, session.cwd), model: transcriptModel(records, session.agent), truncated };
         const claude = session.agent === 'claude';
         cached = { key, value, stops: claude ? taskStops(records) : new Map(), commands: claude ? backgroundCommands(records) : [] };
         this.cache.set(session.id, cached);

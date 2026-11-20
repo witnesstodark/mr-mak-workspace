@@ -29,6 +29,7 @@ import { ConversationTranscripts } from './mobile-transcript.mjs';
 import { ConversationMedia } from './conversation-media.mjs';
 import { projectKey, recentProjects } from './recent-projects.mjs';
 import { answerPrompt, readPrompt } from './terminal-prompt.mjs';
+import { FileInsights, folderMap } from './file-insights.mjs';
 import { rewindToMessage } from './message-edit.mjs';
 import { LocalReadAloud } from './local-read-aloud.mjs';
 import { Handoffs } from './handoff.mjs';
@@ -52,6 +53,7 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
   const mcp = new McpInventory(repo, mcpOptions);
   const sessions = await new Sessions(repo, stateDir).init();
   const transcripts = new ConversationTranscripts();
+  const fileInsights = new FileInsights();
   const conversationMedia = new ConversationMedia();
   const readAloud = mobileOptions?.readAloud || new LocalReadAloud(repo);
   const environment = parseEnv(await readFile(path.join(repo, '.env'), 'utf8').catch(() => ''));
@@ -308,6 +310,12 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
           native({ type: 'recycle-file', path: file });
           return json(response, 200, { requested: true, path: file });
         }
+        // Read-only views for the Files tab: Git state, one file's diff, a folder's size map
+        // and what the chosen chat's agent read and wrote.
+        if (method === 'GET' && url.pathname === '/api/files/git') return json(response, 200, await fileInsights.status(url.searchParams.get('path') || repo));
+        if (method === 'GET' && url.pathname === '/api/files/diff') return json(response, 200, await fileInsights.diff(url.searchParams.get('path') || ''));
+        if (method === 'GET' && url.pathname === '/api/files/map') return json(response, 200, await folderMap(url.searchParams.get('path') || repo));
+        if (method === 'GET' && url.pathname === '/api/files/activity') { const id = url.searchParams.get('id'); const session = id && sessions.items.get(id); return json(response, 200, { id: session?.id || null, cwd: session?.cwd || null, files: session ? (await transcripts.read(session)).files || [] : [] }); }
         if (method === 'GET' && url.pathname === '/api/preview') return json(response, 200, await files.preview(url.searchParams.get('path') || ''));
         if (method === 'POST' && url.pathname === '/api/files/markdown') {
           const preview = await files.saveMarkdown(data); await integrations.publish('artifact', { kind: 'updated', path: preview.path, name: preview.name }); broadcast('workspace-changed', {});
