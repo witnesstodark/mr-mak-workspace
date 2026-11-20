@@ -197,6 +197,43 @@ test('the session API marks a chat unread or read without renaming it', async ()
   } finally { await service.close(); }
 });
 
+test('a fresh-chat Later lasts a day and is saved with the chat', async () => {
+  const { repo, sessions, item } = await fixture();
+  let restored;
+  try {
+    const later = sessions.snoozeHandoff(item.id, 'later');
+    const left = Date.parse(later.handoffSnooze.until) - Date.now();
+    assert.ok(left > 23.9 * 3600_000 && left <= 24 * 3600_000);
+    assert.throws(() => sessions.snoozeHandoff(item.id, { until: '2099-01-01T00:00:00Z' }), /later or never/);
+    await sessions.close();
+    restored = await new Sessions(repo, path.join(repo, '.mrmak')).init();
+    assert.equal(restored.get(item.id).handoffSnooze.until, later.handoffSnooze.until);
+    assert.deepEqual(restored.snoozeHandoff(item.id, 'never').handoffSnooze, { never: true });
+    assert.equal(restored.snoozeHandoff(item.id, null).handoffSnooze, null);
+  } finally { await restored?.close(); await sessions.close(); }
+});
+
+test('a suggestion switched off by message count stays off when it moves to context share', async () => {
+  const { repo, sessions } = await fixture();
+  await sessions.close();
+  await mkdir(path.join(repo, 'workspace'));
+  await mkdir(path.join(repo, 'ui'));
+  await writeFile(path.join(repo, 'workspace', 'workspace.json'), '{"entities":[]}');
+  await writeFile(path.join(repo, 'ui', 'index.html'), '<html>Activity test</html>');
+  await writeFile(path.join(repo, '.mrmak', 'settings.json'), JSON.stringify({ handoffAfter: 0 }));
+  const service = await createService({ repo, uiDir: path.join(repo, 'ui') });
+  const post = async data => (await fetch(service.origin + '/api/settings', { method: 'POST', headers: { Authorization: `Bearer ${service.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(data) })).json();
+  const patch = async data => (await fetch(service.origin + '/api/sessions/chat-a', { method: 'PATCH', headers: { Authorization: `Bearer ${service.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(data) })).json();
+  try {
+    assert.equal((await post({})).handoffAt, 0);
+    assert.equal((await post({ handoffAt: 85 })).handoffAt, 85);
+    assert.equal((await post({ handoffAt: 5 })).handoffAt, 85, 'out-of-range shares are ignored');
+    const later = await patch({ handoffSnooze: 'later' });
+    assert.equal(later.name, 'Activity Review');
+    assert.ok(Date.parse(later.handoffSnooze.until) > Date.now());
+  } finally { await service.close(); }
+});
+
 test('terminal replies and mouse reports do not count as typing, keys do', () => {
   // Moving the pointer over a fullscreen Claude chat sends SGR mouse reports.
   for (const report of ['\x1b[<35;40;12M', '\x1b[<0;10;5M\x1b[<0;10;5m', '\x1b[I', '\x1b[O', '\x1b[12;40R', '\x1b[?2026;2$y', '\x1b]11;rgb:1e1e/1e1e/1e1e\x1b\\','\x1b[M #!']) assert.equal(terminalReport(report), true, JSON.stringify(report));

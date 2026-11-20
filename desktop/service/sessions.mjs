@@ -27,8 +27,8 @@ async function workingFolder(value) {
   return process.platform === 'win32' ? folder : realpath(folder).catch(() => folder);
 }
 const publicSession = session => {
-  const { id, name, agent, cwd, bypass, effort, status, createdAt, lastOutputAt, lastInputAt, exitCode, nativeId, attention, activity, unread, completionVersion, lastCompletedId, cols, rows, open, pinned, tabOrder, tabColor, group, updatedAt, preview, hasConversation, restoreError } = session;
-  return { id, name, agent, cwd, bypass, effort, status, createdAt, lastOutputAt, lastInputAt, exitCode, nativeId, attention, activity, unread, completionVersion, lastCompletedId, cols, rows, open, pinned, tabOrder, tabColor, group, updatedAt, preview, hasConversation, restoreError, contextUsage: session.contextUsage };
+  const { id, name, agent, cwd, bypass, effort, status, createdAt, lastOutputAt, lastInputAt, exitCode, nativeId, attention, activity, unread, completionVersion, lastCompletedId, cols, rows, open, pinned, tabOrder, tabColor, group, updatedAt, preview, hasConversation, restoreError, handoffSnooze } = session;
+  return { id, name, agent, cwd, bypass, effort, status, createdAt, lastOutputAt, lastInputAt, exitCode, nativeId, attention, activity, unread, completionVersion, lastCompletedId, cols, rows, open, pinned, tabOrder, tabColor, group, updatedAt, preview, hasConversation, restoreError, handoffSnooze: handoffSnooze || null, contextUsage: session.contextUsage };
 };
 
 // Grouped tabs sit together at the position of their earliest open member; a tab
@@ -497,6 +497,15 @@ export class Sessions extends EventEmitter {
       session.tabOrder = Math.max(-1, ...this.list().filter(item => item.id !== id && item.pinned === session.pinned).map(item => item.tabOrder)) + 1;
       this.changed(session);
     }
+    return publicSession(session);
+  }
+  // "Later" hides the fresh-chat suggestion for a day and "Not for this chat" for good.
+  // It is kept with the chat, so a restart or another window does not bring it back.
+  snoozeHandoff(id, value) {
+    if (![null, 'later', 'never'].includes(value)) throw Object.assign(new Error('Choose later or never.'), { status: 400 });
+    const session = this.get(id);
+    session.handoffSnooze = value === 'never' ? { never: true } : value === 'later' ? { until: new Date(Date.now() + 24 * 3600_000).toISOString() } : null;
+    this.changed(session);
     return publicSession(session);
   }
   color(id, value) {
