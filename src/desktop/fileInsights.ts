@@ -86,7 +86,7 @@ export function useFollow(latest: AgentFile | null, root: string, follow: boolea
 }
 
 export const showDiff = (path: string) => api<{ path: string; name: string; text: string; truncated?: boolean }>(`/files/diff?path=${encodeURIComponent(path)}`)
-  .then(value => setPreview({ path: value.path, name: `${value.name} · diff`, size: value.text.length, kind: 'diff', text: value.text || 'No changes against the last commit.' })).catch(reportError)
+  .then(value => setPreview({ path: value.path, name: `${value.name} · diff`, size: value.text.length, kind: 'diff', text: value.truncated ? `${value.text}\n… The diff continues past 1 MB.` : value.text || 'No changes against the last commit.' })).catch(reportError)
 export const showMap = (path: string) => api<FolderMapData>(`/files/map?path=${encodeURIComponent(path)}`)
   .then(value => setPreview({ path: value.path, name: `${value.name} · size map`, size: value.size, kind: 'map', map: value })).catch(reportError)
 

@@ -47,6 +47,14 @@ test('reads Git state and diffs without running repository hooks or changing the
     assert.match((await insights.diff(path.join(repo, 'new.txt'))).text, /^\+fresh$/m);
     await assert.rejects(stat(marker));
     assert.deepEqual(await readFile(path.join(repo, '.git/index')), index);
+    // A diff past Git's 2 MB buffer comes back cut, not empty.
+    const lines = letter => Array.from({ length: 50000 }, (_, at) => `${at} ${letter.repeat(40)}`).join('\n');
+    await rm(path.join(repo, '.gitattributes'));
+    await writeFile(path.join(repo, 'big.txt'), lines('x')); git('add', 'big.txt'); git('commit', '-qm', 'big');
+    await writeFile(path.join(repo, 'big.txt'), lines('y'));
+    const big = await insights.diff(path.join(repo, 'big.txt'));
+    assert.equal(big.truncated, true);
+    assert.equal(big.text.length, 1024 * 1024);
   } finally { await rm(repo, { recursive: true, force: true }); }
 });
 

@@ -89,7 +89,9 @@ export class FileInsights {
     if (!top) throw new Error('This file is not in a Git repository.');
     const relative = slash(path.relative(top, actual));
     if (!relative || relative.startsWith('../') || path.isAbsolute(relative)) throw new Error('This file is not in a Git repository.');
-    let text = await git(top, ['diff', 'HEAD', '--no-color', '--no-ext-diff', '--no-textconv', '--ignore-submodules=dirty', '--', relative], 2 * 1024 * 1024, await inertEnv(top)).catch(() => '');
+    // Past its buffer execFile fails but keeps what it read: that is the cut diff, not "no changes".
+    let text = await git(top, ['diff', 'HEAD', '--no-color', '--no-ext-diff', '--no-textconv', '--ignore-submodules=dirty', '--', relative], 2 * 1024 * 1024, await inertEnv(top))
+      .catch(error => error?.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' && typeof error.stdout === 'string' ? error.stdout : '');
     if (!text) {
       const tracked = await git(top, ['ls-files', '--error-unmatch', '--', relative]).then(() => true, () => false);
       if (tracked) return { path: actual, name: path.basename(actual), text: '', untracked: false };
