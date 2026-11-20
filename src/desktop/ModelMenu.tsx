@@ -141,7 +141,7 @@ export default function ModelMenu({ session, model, modelName, effort, running, 
               className={checked ? 'selected' : ''} onClick={() => { if (!checked) void apply({ effort: level }) }}>{level}</button>
           })}
         </div>
-        <p className="model-menu-note" role="status">{busy ? `Applying the ${busy}…` : error || (!running ? 'Resume the chat to change its model.' : 'Applies to this chat now and to new chats in this folder. Mid-conversation, the next reply rereads the history without the prompt cache.')}</p>
+        <p className="model-menu-note" role="status">{busy ? `Applying the ${busy}…` : error || (!running ? 'Resume the chat to change its model.' : 'Applies to this chat now and to new chats in this folder; Claude Code also keeps it as its default for new sessions. Mid-conversation, the next reply rereads the history without the prompt cache.')}</p>
       </> : <>
         <div className="model-menu-title">{({ codex: 'Codex', antigravity: 'Antigravity', opencode: 'OpenCode', kimi: 'Kimi' } as Record<string, string>)[session.agent] || session.agent}</div>
         <p className="model-menu-note">{modelName || model || 'Model not reported yet'}{effort ? ` · ${effortName(effort)} effort` : ''}</p>
