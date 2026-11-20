@@ -109,11 +109,14 @@ export async function folderMap(folder, { maxFiles = 40000, maxMs = 4000 } = {})
   const actual = await realpath(path.resolve(folder));
   const started = Date.now();
   let files = 0, complete = true;
+  const spent = () => files >= maxFiles || Date.now() - started > maxMs;
   async function measure(target, depth) {
-    if (files >= maxFiles || Date.now() - started > maxMs || depth > 30) { complete = false; return { size: 0, files: 0 }; }
+    if (spent() || depth > 30) { complete = false; return { size: 0, files: 0 }; }
     const entries = await readdir(target, { withFileTypes: true }).catch(() => []);
     let size = 0, count = 0;
     for (const entry of entries) {
+      // Checked per entry too: one flat folder can hold far more files than the limit.
+      if (spent()) { complete = false; break; }
       if (entry.isSymbolicLink() || entry.name === '.git') continue;
       const full = path.join(target, entry.name);
       if (entry.isDirectory()) { const inner = await measure(full, depth + 1); size += inner.size; count += inner.files; }
@@ -122,6 +125,7 @@ export async function folderMap(folder, { maxFiles = 40000, maxMs = 4000 } = {})
     return { size, files: count };
   }
   const entries = await readdir(actual, { withFileTypes: true });
+  if (entries.length > 400) complete = false;
   const children = [];
   for (const entry of entries.slice(0, 400)) {
     if (entry.isSymbolicLink() || entry.name === '.git') continue;

@@ -60,6 +60,12 @@ test('maps folder sizes within limits', async () => {
     assert.equal(map.complete, true);
     assert.deepEqual(map.children.map(item => [item.name, item.size]), [['sub', 5000], ['small.txt', 1]]);
     assert.equal((await folderMap(folder, { maxFiles: 0 })).complete, false);
+    // The limit holds inside one flat folder, and a cut top-level listing is partial.
+    await Promise.all(Array.from({ length: 450 }, (_, index) => writeFile(path.join(folder, 'sub', `f${index}.txt`), 'x')));
+    const flat = await folderMap(folder, { maxFiles: 50 });
+    assert.equal(flat.complete, false);
+    assert.ok(flat.children.find(item => item.name === 'sub').files <= 50);
+    assert.equal((await folderMap(path.join(folder, 'sub'))).complete, false);
   } finally { await rm(folder, { recursive: true, force: true }); }
 });
 
