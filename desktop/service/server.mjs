@@ -397,7 +397,7 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
           if (method === 'POST' && action === 'clear') return json(response, 200, await sessions.clearScreen(id));
           if (method === 'POST' && action === 'reorder') return json(response, 200, await sessions.reorder(id, data.targetId, data.position));
           if (method === 'POST' && action === 'input') return json(response, 200, sessions.input(id, data.text, { coordinator: data.paste !== false, submit: data.submit !== false }));
-          if (method === 'PATCH' && !action) return json(response, 200, typeof data.pinned === 'boolean' ? sessions.pin(id, data.pinned) : 'tabColor' in data ? sessions.color(id, data.tabColor) : 'group' in data ? await sessions.assign(id, data.group) : sessions.rename(id, data.name));
+          if (method === 'PATCH' && !action) return json(response, 200, typeof data.pinned === 'boolean' ? sessions.pin(id, data.pinned) : typeof data.unread === 'boolean' ? sessions.mark(id, data.unread) : 'tabColor' in data ? sessions.color(id, data.tabColor) : 'group' in data ? await sessions.assign(id, data.group) : sessions.rename(id, data.name));
           if (method === 'DELETE' && !action) return json(response, 200, await closeChat(id));
         }
         if (method === 'POST' && url.pathname === '/api/window') {

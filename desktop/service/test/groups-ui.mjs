@@ -65,7 +65,7 @@ try {
   // Right-click: move an ungrouped tab into an existing group, then into a new one, then ungroup from the chip.
   await tab('Animator').click({ button: 'right' });
   await page.locator('.tab-menu').waitFor();
-  assert.deepEqual(await page.locator('.tab-menu [role=menuitem]').allTextContents(), ['Rename chat', 'Pin in History', 'Dungeon', 'ThugLife', 'Show working folder', 'Clear terminal scrollback', 'Close tab · keep in History'], 'the tab menu keeps the chat settings and offers groups most recently active first');
+  assert.deepEqual(await page.locator('.tab-menu [role=menuitem]').allTextContents(), ['Rename chat', 'Pin in History', 'Mark as unread', 'Dungeon', 'ThugLife', 'Show working folder', 'Clear terminal scrollback', 'Close tab · keep in History'], 'the tab menu keeps the chat settings and offers groups most recently active first');
   await page.locator('.tab-menu [aria-label="Rose tab color"]').click();
   await page.locator('.chat-tab.has-color').filter({ hasText: 'Animator' }).waitFor();
   assert.equal(service.sessions.get('g-2').tabColor, '#dba3bb');
