@@ -75,6 +75,19 @@ test('a subscribed phone is notified once when a chat starts waiting, with only 
   assert.equal(sent.length, 2, 'a chat that waits again is announced again');
 });
 
+test('a finished turn notifies once; a chat marked unread by hand does not', async t => {
+  const { gateway, sessions, request, pair, sent, map, hud } = await fixture(t), phone = await pair('Pixel');
+  await request('/push', { subscription: subscription() }, phone.cookie);
+  const emit = async chat => { gateway.origin = TAILNET; sessions.emit('session', chat); await pause(); };
+  map.activity = 'idle'; map.unread = true; map.completionVersion = (map.completionVersion || 0) + 1;
+  await emit(map); await emit(map);
+  assert.deepEqual(sent.map(item => item.payload), [{ title: 'Map', body: 'Finished · your turn', chat: map.id }]);
+  hud.unread = true; await emit(hud);
+  assert.equal(sent.length, 1, 'a manual unread mark keeps the completion version');
+  hud.completionVersion = (hud.completionVersion || 0) + 1; hud.unread = false; await emit(hud);
+  assert.equal(sent.length, 1, 'an answer already read on another device is not announced');
+});
+
 test('a phone idle for 31 days or past its expiry gets no notification and its subscription is dropped', async t => {
   const { gateway, request, pair, wait, sent, map, repo } = await fixture(t);
   const active = await pair('Active'), idle = await pair('Idle'), expired = await pair('Expired'), revoked = await pair('Revoked');

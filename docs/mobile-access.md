@@ -4,7 +4,7 @@ Mobile access connects a phone to the agent chats running in Mr. Mak Desktop.
 The computer keeps the CLI processes, their sign-ins and project files. The
 phone can read conversations, dictate drafts, send messages and images, resume a saved chat,
 start an installed agent, read Workspace reports and get a notification when a
-chat waits for you.
+chat finishes or waits for you.
 
 ## First connection
 
@@ -64,12 +64,14 @@ Reading a completed turn marks it seen across devices.
 ## Notifications
 
 Open Phone settings and choose **Turn on notifications** to be told when a chat
-starts waiting for you: an OpenCode permission request or question, or an error
-that stops a Claude Code or OpenCode turn. Permission prompts in the Claude Code
-and Codex terminals and finished turns do not send a notification yet. On iPhone,
-notifications are offered only to Mr. Mak opened from the Home Screen. Tapping a
-notification opens its chat. Each chat has one notification, replaced while it
-waits; it shows the chat's name and "Waiting for you", never its messages.
+needs you: an agent finished its turn ("Finished · your turn"), or a chat starts
+waiting ("Waiting for you") on an OpenCode permission request or question, or on
+an error that stops a Claude Code or OpenCode turn. Permission prompts in the
+Claude Code and Codex terminals do not send a notification yet, and marking a
+chat unread by hand sends none. On iPhone, notifications are offered only to
+Mr. Mak opened from the Home Screen. Tapping a notification opens its chat. Each
+chat has one notification, replaced by its next one; it shows the chat's name and
+that line, never its messages.
 
 - **Already looking:** no notification is sent while a paired phone shows that
   chat on its screen. The phone reports the chat it shows while it is visible

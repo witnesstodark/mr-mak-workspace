@@ -16,17 +16,17 @@ function pushEndpoint(value) {
 }
 const base64url = (value, max) => typeof value === 'string' && value.length > 0 && value.length <= max && /^[A-Za-z0-9_-]+={0,2}$/.test(value);
 
-// Web Push to paired phones when a chat starts waiting for the person. The
+// Web Push to paired phones when a chat finishes its turn or starts waiting for the person. The
 // notification carries the chat's name and id only; its messages never leave
 // this computer. One subscription per paired device; the VAPID key pair lives in
 // mobile-access.json beside the device hashes and only its public half leaves it.
 export class MobilePush {
   constructor(gateway, send = (subscription, payload, options) => webpush.sendNotification(subscription, payload, options)) {
     Object.assign(this, { gateway, send });
-    this.waiting = new Map(); this.generating = null;
+    this.waiting = new Map(); this.answered = new Map(); this.generating = null;
   }
-  // Chats already waiting when the service starts were announced before.
-  watch(sessions) { for (const session of sessions) this.waiting.set(session.id, session.activity === 'waiting'); }
+  // Chats already waiting or answered when the service starts were announced before.
+  watch(sessions) { for (const session of sessions) { this.waiting.set(session.id, session.activity === 'waiting'); this.answered.set(session.id, session.completionVersion || 0); } }
   async keys() {
     if (this.gateway.state.vapid) return this.gateway.state.vapid;
     // Two first requests at once must not create two key pairs.
@@ -59,12 +59,16 @@ export class MobilePush {
   }
   session(session) {
     const waiting = session.activity === 'waiting', was = this.waiting.get(session.id);
-    this.waiting.set(session.id, waiting);
-    if (!waiting || was || !this.gateway.active) return;
+    const answers = session.completionVersion || 0, known = this.answered.get(session.id) ?? answers;
+    this.waiting.set(session.id, waiting); this.answered.set(session.id, answers);
+    // A finished answer also leaves the chat to the person. Marking a chat unread by
+    // hand keeps its completion version, so it notifies nobody.
+    const body = waiting && !was ? 'Waiting for you' : answers > known && session.unread ? 'Finished · your turn' : null;
+    if (!body || !this.gateway.active) return;
     if (this.muted().includes(session.id)) return;
     // Someone already has this chat open on a phone in front of them.
     if (this.gateway.watching(session.id)) return;
-    this.notify(session).catch(error => console.error(`Phone notification failed: ${error.message}`));
+    this.notify(session, body).catch(error => console.error(`Phone notification failed: ${error.message}`));
   }
   // The phones allowed to sign in now. A subscription left by an expired or idle
   // device is dropped instead of kept for a phone that can no longer open the chat.
@@ -78,14 +82,14 @@ export class MobilePush {
     }
     return { devices, dropped };
   }
-  async notify(session) {
+  async notify(session, body = 'Waiting for you') {
     const { devices, dropped } = this.recipients();
     let changed = dropped;
     // Web Push requires an https: or mailto: contact; the tailnet address identifies this app.
     if (devices.length && this.gateway.origin.startsWith('https://')) {
       const { publicKey, privateKey } = await this.keys();
       const title = String(session.name || 'Mr. Mak').replace(/[\x00-\x1f\x7f]/g, ' ').trim().slice(0, 80) || 'Mr. Mak';
-      const payload = JSON.stringify({ title, body: 'Waiting for you', chat: session.id });
+      const payload = JSON.stringify({ title, body, chat: session.id });
       // A newer notice for the same chat replaces one the push service still holds.
       const options = { TTL: 3600, urgency: 'high', timeout: 15000, vapidDetails: { subject: this.gateway.origin, publicKey, privateKey }, ...(uuid(session.id) ? { topic: session.id.replaceAll('-', '') } : {}) };
       await Promise.all(devices.map(async device => {
