@@ -48,6 +48,13 @@ from the disk image over the one in Applications and choose Replace.
 macOS asks again for permissions such as microphone access after each rebuild,
 because the ad-hoc signature changes. See [macOS notes](macos.md).
 
+Version 0.6.6 moves project, folder, group, effort and resume in New chat
+under **More options** and picks the agent from one dropdown. The fresh-chat
+suggestion now follows context occupancy, 70 percent by default; choose
+another share or Off in the chat options. Phone notifications are off until
+you turn them on in the phone's settings. Claude Code chats get a hidden
+status line that reports the model to the footer, unless you have your own.
+
 Version 0.6.5 keeps a second copy of the chat list and flushes it to disk
 before replacing the old one, so a power cut no longer empties History. The
 copy appears as `sessions.json.bak` next to `sessions.json` after the first

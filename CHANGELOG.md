@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.6 - 2026-11-20
+
+- Simplify New chat: the name field comes first, one agent dropdown replaces the six tiles, the permission choice stays visible, and project, folder, group, effort and resume are under **More options**, whose folded row shows the current folder, group and effort.
+- Suggest a fresh chat by context occupancy (Off, 50, 70 or 85 percent; 70 by default) instead of message counts or transcript size. **Later** now waits 24 hours and **Not for this chat** lasts; both are saved with the chat, so restarts no longer bring the suggestion back. A suggestion that was off stays off.
+- Change a Claude Code chat's model and reasoning effort from the chat footer. A change the CLI does not confirm, including a declined switch, keeps the previous model. Other agents open their own picker in the terminal.
+- Notify paired phones when an agent finishes its turn or a chat starts waiting, with per-chat mute, no notification while a phone shows that chat, and no sends to idle, expired or revoked phones. Payloads carry only the chat's name and id, encrypted for the phone. Claude's automatic API retries no longer count as waiting; a turn stopped by an API error does.
+- Show Git state, changed lines, the selected agent's reads and writes, diffs and a folder size map in Files. Git runs read-only with repository hooks, filter drivers, external diff and fsmonitor disabled.
+- Show an optional cover, phase and progress on Workspace cards, on desktop and phone. Covers and icons must stay inside their card folder.
+
+Thanks to @vanderleitelesjr for the footer model menu, phone notifications, Files insights and card covers. This release includes #82, #83, #85, #86 and #100.
+
 ## 0.6.5 - 2026-11-20
 
 - Keep chat History through a power cut. The chat list is flushed to disk before it replaces the previous copy, and a second copy is kept in `sessions.json.bak`. If the list cannot be read on start, it is kept aside as `sessions.json.unreadable-<time>` and History loads from the backup instead of starting empty.
