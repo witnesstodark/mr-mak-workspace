@@ -144,6 +144,16 @@ test('a switch confirmation a PreModelSwitch hook asks for stays with the person
   await assert.rejects(applyChoice({ ...fake.sessions, get: () => ({ ...session, agent: 'codex' }) }, state, 'chat', { effort: 'low' }), /own terminal picker/);
 });
 
+test('a second change sent while the first is starting is refused, not pasted beside it', async () => {
+  const state = await temp('chat-models-twice-');
+  const cwd = await temp('chat-models-twice-project-');
+  const { fake } = fakeChat({ cwd, onInput: (chat, text) => { chat.screen = `${chat.screen.replace(/\n❯ \n$/, '')}\n  ⎿  Set effort level to ${text.split(' ')[1]}\n\n❯ \n`; } });
+  const first = applyChoice(fake.sessions, state, 'chat', { effort: 'high' });
+  await assert.rejects(applyChoice(fake.sessions, state, 'chat', { effort: 'low' }), /already being applied/);
+  assert.equal((await first).applied, true);
+  assert.deepEqual(fake.typed, ['/effort high']);
+});
+
 // Claude Code refuses a model it cannot validate; the footer must keep the previous one.
 const refuse = message => (chat, text) => { chat.screen = `${chat.screen.replace(/\n❯ \n$/, '')}\n  ⎿  ${text.startsWith('/model') ? message : 'Set effort level to high'}\n\n❯ \n`; };
 

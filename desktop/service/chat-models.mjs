@@ -96,12 +96,14 @@ export async function applyChoice(sessions, stateDir, id, { model, effort } = {}
   if (model !== undefined && !validModel(model)) throw new Error('Choose one of the listed models.');
   if (effort !== undefined && !EFFORTS.includes(effort)) throw new Error('Choose one of the listed effort levels.');
   if (model === undefined && effort === undefined) throw new Error('Choose a model or an effort level.');
-  if (switching.has(id)) throw Object.assign(new Error('A model change is already being applied to this chat.'), { status: 409 });
-  if (await readPrompt(sessions, id)) throw Object.assign(new Error('Answer the question open in this chat first.'), { status: 409 });
+  const conflict = message => Object.assign(new Error(message), { status: 409 });
+  if (switching.has(id)) throw conflict('A model change is already being applied to this chat.');
+  // Claimed before the checks below wait, so a second request cannot run beside this one.
   switching.add(id);
   const status = {}, confirmed = {};
   let note = null;
   try {
+    if (await readPrompt(sessions, id)) throw conflict('Answer the question open in this chat first.');
     if (model !== undefined) {
       const result = await runCommand(sessions, id, `/model ${model}`, timeout);
       status.model = result.status;
