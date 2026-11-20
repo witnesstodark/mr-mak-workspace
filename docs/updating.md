@@ -48,6 +48,13 @@ from the disk image over the one in Applications and choose Replace.
 macOS asks again for permissions such as microphone access after each rebuild,
 because the ad-hoc signature changes. See [macOS notes](macos.md).
 
+Version 0.6.5 keeps a second copy of the chat list and flushes it to disk
+before replacing the old one, so a power cut no longer empties History. The
+copy appears as `sessions.json.bak` next to `sessions.json` after the first
+save.
+A chat's tab menu can mark it unread or read, and terminal copy and paste
+accept shortcuts sent by dictation tools.
+
 Version 0.6.4 puts project, working folder, group, reasoning effort and native
 resume in **New chat > Advanced**, closed by default. Your existing defaults
 are preserved. Conversation avoids reparsing unchanged messages while you type,

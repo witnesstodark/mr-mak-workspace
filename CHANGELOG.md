@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.5 - 2026-11-20
+
+- Keep chat History through a power cut. The chat list is flushed to disk before it replaces the previous copy, and a second copy is kept in `sessions.json.bak`. If the list cannot be read on start, it is kept aside as `sessions.json.unreadable-<time>` and History loads from the backup instead of starting empty.
+- Mark a chat as unread, or as read without opening it, from its tab's right-click menu. The mark survives restart and clears when the chat is opened.
+- Copy and paste in the terminal also work when a dictation or automation tool sends Ctrl+C or Ctrl+V without a scan code, including on non-Latin keyboard layouts. The shortcut no longer reaches the agent CLI as `^C` or `^V`.
+- Update the bundled hono and `@hono/node-server` to clear five moderate advisories, and update vite, zod, eslint and typescript-eslint in the build tools.
+
+Thanks to @nsoth for the unread mark and the terminal shortcut fix. This release includes #97, #98 and #99.
+
 ## 0.6.4 - 2026-11-12
 
 - Keep New chat compact. Agent selection, chat name and the permission checkbox stay visible; project, working folder, group, reasoning effort and native resume are under Advanced, closed by default. Existing defaults and entered values are preserved.
