@@ -64,7 +64,9 @@ Reading a completed turn marks it seen across devices.
 ## Notifications
 
 Open Phone settings and choose **Turn on notifications** to be told when a chat
-starts waiting for you, for example at a permission or a question. On iPhone,
+starts waiting for you: an OpenCode permission request or question, or an error
+that stops a Claude Code or OpenCode turn. Permission prompts in the Claude Code
+and Codex terminals and finished turns do not send a notification yet. On iPhone,
 notifications are offered only to Mr. Mak opened from the Home Screen. Tapping a
 notification opens its chat. Each chat has one notification, replaced while it
 waits; it shows the chat's name and "Waiting for you", never its messages.
