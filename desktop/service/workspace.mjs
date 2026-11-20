@@ -10,8 +10,8 @@ export const localDay = (date = new Date()) => `${date.getFullYear()}-${String(d
 const brief = ({ id, title, description, status, category, created, updated, pinned, steps }) => ({ id, title, description, status, category, created, updated, pinned: !!pinned, steps: (steps || []).map(({ name }, index) => ({ name, index })) });
 const invalid = message => Object.assign(new Error(message), { status: 400 });
 
-// Display fields other tools write into a card (docs/workspace-template.md; src/lib/card-meta.ts
-// applies the same rules on the desktop). A value that cannot be drawn is dropped on its own, so
+// Display fields other tools write into a card (documented in the workspace-authoring skill;
+// src/lib/card-meta.ts applies the same rules on the desktop). A value that cannot be drawn is dropped on its own, so
 // the card still lists with everything else.
 const metaText = (value, max) => typeof value === 'string' && value.trim() ? value.trim().slice(0, max) : undefined;
 export const cardPhase = value => metaText(value, 80);
