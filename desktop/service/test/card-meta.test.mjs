@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cardCover, cardIcon, cardPhase, cardProgress } from '../../../src/lib/card-meta.ts';
+import { cardCover, cardIcon, cardImageUrl, cardPhase, cardProgress } from '../../../src/lib/card-meta.ts';
 import { cardPhase as servicePhase, cardProgress as serviceProgress } from '../workspace.mjs';
 
 // The desktop card and the phone list must accept and reject the same values.
@@ -27,6 +27,12 @@ test('cover must be an image path inside the card folder, and phase non-empty te
   assert.equal(cardCover({ cover: 'media/cover.webp' }), 'media/cover.webp');
   for (const value of ['../other/cover.png', 'media/../../secret.png', '/etc/cover.png', 'C:/cover.png', 'media\\..\\x.png', '.hidden/cover.png', 'media//cover.png', 'notes.html', 'media/cover.svg']) { assert.equal(cardCover({ cover: value }), null, value); assert.equal(cardIcon({ icon: value }), null, value); }
   assert.equal(cardIcon({ icon: 'media/icon.png' }), 'media/icon.png');
+  // A percent-encoded dot segment passes the path rule, so the URL must keep it a name.
+  for (const value of ['%2e%2e/%2e%2e/other/x.png', '%2E%2e/x.png']) {
+    const image = cardIcon({ icon: value }), url = new URL(cardImageUrl({ folder: 'card' }, image), 'http://host/view/grant');
+    assert.ok(url.pathname.startsWith('/workspace/card/'), url.pathname);
+  }
+  assert.equal(cardImageUrl({ folder: 'card' }, 'media\\cover.png'), '/workspace/card/media/cover.png');
   assert.equal(cardPhase({ phase: '  Alpha  ' }), 'Alpha'); assert.equal(servicePhase('  Alpha  '), 'Alpha');
   for (const value of [undefined, null, '', '   ', 7, {}, []]) {
     assert.equal(cardCover({ cover: value }), null); assert.equal(cardPhase({ phase: value }), null); assert.equal(servicePhase(value), undefined);

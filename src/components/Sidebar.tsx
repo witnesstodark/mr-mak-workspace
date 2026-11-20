@@ -1,7 +1,7 @@
 import type { RefObject } from 'react'
 import type { WorkspaceEntity } from '../types'
 import { entityHash } from '../lib/route'
-import { cardIcon } from '../lib/card-meta'
+import { cardIcon, cardImageUrl } from '../lib/card-meta'
 import { categoryIcon } from '../lib/categories'
 import { contentUrl } from '../desktop/client'
 import MakLogo from './MakLogo'
@@ -25,6 +25,7 @@ interface SidebarProps {
 }
 
 function Item({ entity, active }: { entity: WorkspaceEntity; active: boolean }) {
+  const icon = cardIcon(entity)
   return (
     <div className="sidebar-item-row" data-card={entity.id}>
     <a
@@ -33,7 +34,7 @@ function Item({ entity, active }: { entity: WorkspaceEntity; active: boolean }) 
       aria-current={active ? 'page' : undefined}
     >
       <span className="item-icon" aria-hidden="true">
-        {cardIcon(entity) ? <img src={contentUrl(`/workspace/${entity.folder}/${cardIcon(entity)}`)} width="24" height="24" alt="" decoding="async" /> : categoryIcon(entity.category)}
+        {icon ? <img src={contentUrl(cardImageUrl(entity, icon))} width="24" height="24" alt="" decoding="async" /> : categoryIcon(entity.category)}
       </span>
       <span className="item-text">{entity.title}</span>
     </a>

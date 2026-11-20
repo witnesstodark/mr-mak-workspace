@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { WorkspaceEntity } from '../types'
 import { entityHash } from '../lib/route'
-import { cardCover, cardIcon, cardPhase, cardProgress } from '../lib/card-meta'
+import { cardCover, cardIcon, cardImageUrl, cardPhase, cardProgress } from '../lib/card-meta'
 import { categoryIcon } from '../lib/categories'
 import { contentUrl } from '../desktop/client'
 import { EntityStatusButton } from './EntityControls'
@@ -16,10 +16,8 @@ export default function MakCard({ entity }: { entity: WorkspaceEntity }) {
   const steps = entity.steps.length
   // Cover, phase and progress are optional; a card without them is unchanged.
   // A cover that fails to load is dropped, so it leaves no empty band.
-  const cover = cardCover(entity)
-  const coverUrl = cover
-    ? contentUrl(`/workspace/${entity.folder}/${cover.split('/').map(encodeURIComponent).join('/')}`)
-    : null
+  const cover = cardCover(entity), icon = cardIcon(entity)
+  const coverUrl = cover ? contentUrl(cardImageUrl(entity, cover)) : null
   const [failedCover, setFailedCover] = useState<string | null>(null)
   const showCover = coverUrl !== null && failedCover !== coverUrl
   const phase = cardPhase(entity)
@@ -45,7 +43,7 @@ export default function MakCard({ entity }: { entity: WorkspaceEntity }) {
       </div>
 
       <div className="card-project-title">
-        {cardIcon(entity) && <img className="card-project-icon" src={contentUrl(`/workspace/${entity.folder}/${cardIcon(entity)}`)} width="48" height="48" alt="" loading="lazy" decoding="async" />}
+        {icon && <img className="card-project-icon" src={contentUrl(cardImageUrl(entity, icon))} width="48" height="48" alt="" loading="lazy" decoding="async" />}
         <h3 className="card-title">{entity.title}</h3>
       </div>
 

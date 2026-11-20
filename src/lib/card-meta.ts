@@ -24,6 +24,10 @@ function cardImage(raw: unknown): string | null {
 export const cardCover = (entity: WorkspaceEntity) => cardImage(entity.cover)
 export const cardIcon = (entity: WorkspaceEntity) => cardImage(entity.icon)
 
+// Each segment is encoded: the URL parser reads a raw `%2e%2e` as `..` and would leave the folder.
+export const cardImageUrl = (entity: WorkspaceEntity, file: string) =>
+  `/workspace/${entity.folder}/${file.split(/[\\/]/).map(encodeURIComponent).join('/')}`
+
 export function cardPhase(entity: WorkspaceEntity): string | null {
   return text(entity.phase, 80) ?? null
 }
