@@ -172,6 +172,20 @@ test('a model the CLI fails to validate is not applied, saved or followed by /ef
   assert.equal(switchingModel('chat'), false);
 });
 
+test('a switch declined at the cache warning is not taken as applied', async () => {
+  const state = await temp('chat-models-kept-');
+  const cwd = await temp('chat-models-kept-project-');
+  const { session, fake } = fakeChat({ cwd, onInput: chat => { chat.screen = confirm(); } });
+  // Claude Code names the model it kept when the switch is declined or cancelled.
+  fake.sessions.keys = (id, key) => { fake.keys.push(key); fake.screen = `${fake.base}\n  ⎿  Kept model as Opus 5.5\n\n❯ \n`; };
+  const result = await applyChoice(fake.sessions, state, 'chat', { model: 'claude-sonnet-5-5', effort: 'high' });
+  assert.equal(result.applied, false);
+  assert.match(result.note, /Kept model as Opus 5\.5/);
+  assert.deepEqual(fake.typed, ['/model claude-sonnet-5-5']);
+  assert.equal(session.model, undefined);
+  assert.deepEqual(await rememberedChoice(state, cwd, 'claude'), { model: undefined, effort: undefined });
+});
+
 test('a change nothing confirms in time keeps the previous setting', async () => {
   const state = await temp('chat-models-silent-');
   const cwd = await temp('chat-models-silent-project-');

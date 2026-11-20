@@ -45,9 +45,10 @@ const SWITCH_QUESTION = /^(?:Switch model|Change effort level)\?$/;
 export const cacheWarning = prompt => !!prompt && SWITCH_QUESTION.test(String(prompt.question || '').trim()) && (prompt.detail || []).some(line => /next response will be slower/i.test(line)) && !(prompt.detail || []).some(line => /PreModelSwitch hook/i.test(line));
 
 // What Claude Code prints once it has handled the command. Only a success line counts
-// as applied; a refusal or silence leaves the previous setting in place.
-const APPLIED = /Set model to|Kept model as|Set effort level to|Effort level set to/gi;
-const FAILED = /Model switch failed|Failed to validate model|not found|isn't available|is not available|not supported/gi;
+// as applied; a refusal or silence leaves the previous setting in place. "Kept model as"
+// names the current model after the switch was declined or cancelled.
+const APPLIED = /Set model to|Set effort level to|Effort level set to/gi;
+const FAILED = /Model switch failed|Failed to validate model|Kept model as|not found|isn't available|is not available|not supported/gi;
 const count = (screen, pattern) => (screen.match(pattern) || []).length;
 // The newest line of the screen that carries a refusal, for the menu to show.
 const failureLine = screen => screen.split('\n').reverse().find(line => count(line, FAILED))?.replace(/^[\s⎿│]+/, '').trim().slice(0, 200) || '';

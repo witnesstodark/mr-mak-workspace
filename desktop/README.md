@@ -102,8 +102,9 @@ just chose, so the service confirms it once (`cacheWarning` in
 the result. A confirmation a PreModelSwitch hook asks for is left to the person.
 
 A change counts only once Claude Code prints its success line ("Set model to",
-"Kept model as", "Set effort level to"). A refusal such as "Failed to validate
-model", or no confirmation within 8 seconds, keeps the previous model or effort:
+"Set effort level to"). A refusal such as "Failed to validate model", "Kept
+model as" (the switch was declined), or no confirmation within 8 seconds, keeps
+the previous model or effort:
 nothing is saved, `/effort` is not sent after an unconfirmed `/model`, and the
 answer is `applied: false` with a `note` the menu shows. Confirmed parts are kept
 on the chat (`--model`/`--effort` on resume) and per project in
