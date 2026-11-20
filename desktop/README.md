@@ -160,8 +160,10 @@ changed entries outlined). Deep folders keep indenting in smaller steps past lev
 six, with a guide line per open folder.
 
 All of this only reads. Git runs without a shell, with `--no-optional-locks`,
-`core.fsmonitor=false`, `--no-ext-diff` and `--no-textconv`, so a repository's
-own config cannot run hooks or drivers, and nothing rewrites its index. Each
+`core.fsmonitor=false`, `--no-ext-diff`, `--no-textconv`, every configured
+filter driver blanked and `--ignore-submodules=dirty`, so a repository's own
+config cannot run hooks or drivers, and nothing rewrites its index. A submodule
+shows as changed only when its commit moves. Each
 call has a 15 s limit; a diff is cut at 1 MB, an untracked file is shown only up
 to 1 MB, and a size map stops at 40,000 files or 4 s and says it is partial.
 

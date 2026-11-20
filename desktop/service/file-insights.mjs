@@ -10,7 +10,17 @@ const run = promisify(execFile);
 // No shell, and nothing a repository's own config could run or write: no
 // fsmonitor hook, no external diff or textconv driver, no index refresh lock.
 const GIT_ENV = { ...process.env, GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0' };
-const git = (cwd, args, maxBuffer = 8 * 1024 * 1024) => run('git', ['--no-optional-locks', '-c', 'core.quotepath=off', '-c', 'core.fsmonitor=false', '-C', cwd, ...args], { windowsHide: true, timeout: 15000, maxBuffer, env: GIT_ENV }).then(result => result.stdout);
+const git = (cwd, args, maxBuffer = 8 * 1024 * 1024, env = GIT_ENV) => run('git', ['--no-optional-locks', '-c', 'core.quotepath=off', '-c', 'core.fsmonitor=false', '-C', cwd, ...args], { windowsHide: true, timeout: 15000, maxBuffer, env }).then(result => result.stdout);
+// Status and diff pass a file whose timestamp moved through its clean filter, a
+// command the repository's config names. Every configured filter is blanked for
+// them; the environment form carries driver names a `-c` argument cannot.
+// Submodules are not entered (--ignore-submodules=dirty): their config is not read here.
+async function inertEnv(top) {
+  const config = await git(top, ['config', '-z', '--get-regexp', '^filter\\.']).catch(() => '');
+  const names = new Set(config.split('\0').map(entry => entry.split('\n')[0]).filter(key => key.lastIndexOf('.') > 7).map(key => key.slice(7, key.lastIndexOf('.'))));
+  const pairs = [...names].flatMap(name => [[`filter.${name}.clean`, ''], [`filter.${name}.smudge`, ''], [`filter.${name}.process`, ''], [`filter.${name}.required`, 'false']]);
+  return { ...GIT_ENV, GIT_CONFIG_COUNT: String(pairs.length), ...Object.fromEntries(pairs.flatMap(([key, value], index) => [[`GIT_CONFIG_KEY_${index}`, key], [`GIT_CONFIG_VALUE_${index}`, value]])) };
+}
 const slash = value => value.replace(/\\/g, '/');
 
 // Porcelain v1 with -z: "XY path\0", and a rename's source path after its own \0.
@@ -57,9 +67,10 @@ export class FileInsights {
     if (!top) return { repository: null, branch: null, files: [] };
     const cached = this.cache.get(top);
     if (cached && Date.now() - cached.at < 2500) return cached.value;
+    const env = await inertEnv(top);
     const [status, numstat] = await Promise.all([
-      git(top, ['status', '--porcelain=v1', '-z', '-b', '--untracked-files=normal']),
-      git(top, ['diff', 'HEAD', '--numstat', '--no-ext-diff', '--no-textconv']).catch(() => ''),
+      git(top, ['status', '--porcelain=v1', '-z', '-b', '--untracked-files=normal', '--ignore-submodules=dirty'], undefined, env),
+      git(top, ['diff', 'HEAD', '--numstat', '--no-ext-diff', '--no-textconv', '--ignore-submodules=dirty'], undefined, env).catch(() => ''),
     ]);
     const [head, ...rest] = status.split('\0');
     const lines = parseNumstat(numstat);
@@ -78,7 +89,7 @@ export class FileInsights {
     if (!top) throw new Error('This file is not in a Git repository.');
     const relative = slash(path.relative(top, actual));
     if (!relative || relative.startsWith('../') || path.isAbsolute(relative)) throw new Error('This file is not in a Git repository.');
-    let text = await git(top, ['diff', 'HEAD', '--no-color', '--no-ext-diff', '--no-textconv', '--', relative], 2 * 1024 * 1024).catch(() => '');
+    let text = await git(top, ['diff', 'HEAD', '--no-color', '--no-ext-diff', '--no-textconv', '--ignore-submodules=dirty', '--', relative], 2 * 1024 * 1024, await inertEnv(top)).catch(() => '');
     if (!text) {
       const tracked = await git(top, ['ls-files', '--error-unmatch', '--', relative]).then(() => true, () => false);
       if (tracked) return { path: actual, name: path.basename(actual), text: '', untracked: false };

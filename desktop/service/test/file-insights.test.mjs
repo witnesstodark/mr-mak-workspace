@@ -31,6 +31,10 @@ test('reads Git state and diffs without running repository hooks or changing the
     // A repository config that would run a command on status must stay inert.
     const marker = path.join(repo, 'ran.txt').replace(/\\/g, '/');
     git('config', 'core.fsmonitor', `node -e "require('fs').writeFileSync('${marker}','x')"`);
+    // A clean filter runs whenever Git hashes a.txt again, which a same-size edit forces.
+    git('config', 'filter.mark.clean', `node -e "require('fs').writeFileSync('${marker}','x');process.stdin.pipe(process.stdout)"`);
+    git('config', 'filter.mark.required', 'true');
+    await writeFile(path.join(repo, '.gitattributes'), '* filter=mark\n');
     const index = await readFile(path.join(repo, '.git/index'));
     const insights = new FileInsights();
     const status = await insights.status(repo);
