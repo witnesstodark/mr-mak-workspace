@@ -243,6 +243,7 @@ try {
   await speechProvider.selectOption('local'); await expect(speechProvider).toHaveValue('local');
   await phone.getByText(/Local Whisper needs setup on your computer/).waitFor();
   await speechProvider.selectOption('openrouter'); await expect(speechProvider).toHaveValue('openrouter');
+  await phone.getByRole('group', { name: 'Notifications', exact: true }).waitFor();
   await phone.getByRole('button', { name: 'Install Mr. Mak', exact: true }).click();
   assert.equal(await phone.evaluate(() => window.installCalls), 1);
   await phone.getByRole('button', { name: 'Phone settings' }).click();
@@ -263,6 +264,21 @@ try {
   const desktopSelected = (await (await fetch(`${service.origin}/api/bootstrap`, { headers: { Authorization: `Bearer ${service.token}` } })).json()).selectedId;
   await phone.getByRole('button', { name: /Research ideas/ }).click();
   await phone.getByRole('heading', { name: 'Ready for review' }).waitFor();
+  // The phone reports the chat it shows, so a notification for it is skipped, and stops when hidden.
+  await expect.poll(() => service.mobile.watching(ids[1])).toBe(true);
+  assert.equal(service.mobile.watching(ids[0]), false);
+  await phone.evaluate(() => { window.testVisibility = 'hidden'; document.dispatchEvent(new Event('visibilitychange')); });
+  await expect.poll(() => service.mobile.watching(ids[1])).toBe(false);
+  await phone.evaluate(() => { window.testVisibility = 'visible'; document.dispatchEvent(new Event('visibilitychange')); });
+  await expect.poll(() => service.mobile.watching(ids[1])).toBe(true);
+  await phone.waitForFunction(() => !document.querySelector('.mobile-offline'));
+  // The bell mutes this chat's notifications for every paired phone.
+  const bell = phone.locator('.mobile-chat-tools').getByRole('button', { name: 'Mute notifications', exact: true });
+  await expect(bell).toHaveAttribute('aria-pressed', 'false');
+  await bell.click(); await expect(bell).toHaveAttribute('aria-pressed', 'true');
+  assert.deepEqual(service.mobile.push.muted(), [ids[1]]);
+  await bell.click(); await expect(bell).toHaveAttribute('aria-pressed', 'false');
+  assert.deepEqual(service.mobile.push.muted(), []);
   const modeButtons = phone.getByRole('group', { name: 'Conversation view' });
   async function swipeModes(dx, dy = 0, clickIndex = -1) {
     await modeButtons.evaluate((node, { dx, dy, clickIndex }) => {
@@ -433,11 +449,11 @@ try {
   await phone.locator('.mobile-activity-status.working').waitFor();
   assert.equal(await phone.locator('.mobile-worker-hands').evaluate(node => getComputedStyle(node).animationName), 'mobile-worker-type');
   const modeLayout = await phone.locator('.mobile-chat-tools').evaluate(node => {
-    const segment = node.querySelector('.mobile-segment').getBoundingClientRect(), status = node.querySelector('.mobile-activity-status').getBoundingClientRect();
+    const segment = node.querySelector('.mobile-segment').getBoundingClientRect(), bell = node.querySelector('.mobile-chat-mute').getBoundingClientRect(), status = node.querySelector('.mobile-activity-status').getBoundingClientRect();
     const buttons = [...node.querySelectorAll('.mobile-segment button')].map(button => button.getBoundingClientRect().width);
-    return { gap: status.left - segment.right, widths: buttons };
+    return { gap: bell.left - segment.right, statusGap: status.left - bell.right, widths: buttons };
   });
-  assert.ok(Math.abs(modeLayout.gap - 8) < 1); assert.ok(Math.abs(modeLayout.widths[0] - modeLayout.widths[1]) < 1);
+  assert.ok(Math.abs(modeLayout.gap - 8) < 1); assert.ok(Math.abs(modeLayout.statusGap - 8) < 1); assert.ok(Math.abs(modeLayout.widths[0] - modeLayout.widths[1]) < 1);
   await phone.screenshot({ path: path.join(repo, 'phone-working.png') });
   await phone.emulateMedia({ reducedMotion: 'reduce' });
   assert.equal(await phone.locator('.mobile-worker-hands').evaluate(node => getComputedStyle(node).animationName), 'none');
@@ -862,6 +878,16 @@ try {
   await phone.getByRole('button', { name: 'Retry', exact: true }).click(); await phone.getByText('Delivered to terminal', { exact: true }).waitFor();
   assert.equal(writes.length - legacyBefore, 2, 'Pre-update pending drafts remain compatible with delivery receipts');
   assert.equal(writes[legacyBefore].data, '\x1b[200~An older pending draft.\x1b[201~');
+  // A tapped notification opens its chat: by address in a new window, by a service worker message in an open one.
+  await phone.getByRole('button', { name: 'Back to chats', exact: true }).click();
+  await expect.poll(() => service.mobile.watching(ids[1])).toBe(false);
+  await phone.evaluate(id => { location.hash = `chat=${id}`; }, ids[0]); await reloadPhone();
+  await phone.getByRole('heading', { name: 'Game animations', exact: true }).waitFor();
+  assert.equal(await phone.evaluate(() => location.hash), '');
+  await expect.poll(() => service.mobile.watching(ids[0])).toBe(true);
+  await phone.getByRole('button', { name: 'Back to chats', exact: true }).click();
+  await phone.evaluate(id => navigator.serviceWorker.dispatchEvent(new MessageEvent('message', { data: { type: 'open-chat', chat: id } })), ids[1]);
+  await phone.getByRole('heading', { name: 'Research ideas', exact: true }).waitFor();
   // Close the selected desktop chat from the phone, then resume it from History.
   // Only the launch is stubbed; closing/persistence/selection use the real service.
   await phone.getByRole('button', { name: 'Chats', exact: true }).click();
@@ -898,7 +924,7 @@ try {
   assert.equal(service.sessions.get(ids[0]).status, 'running'); assert.equal(service.sessions.get(ids[1]).status, 'running');
   if (navigationCancellations.length) console.log(`Expected WebKit read cancellations during reload: ${navigationCancellations.length}`);
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ ok: true, fixture: repo, checks: ['Workspace context follows card/tab/page and section', 'navigation-only references; no report content or grant URLs', 'context frozen across lost reply, page change and reload', 'automatic context excluded from display and read aloud', 'cleared selection, slash commands and pre-update pending drafts', 'QR + desktop approval', 'independent views and PTY sizes', 'microphone permission / record / stop / cancel', 'dictation never auto-sends', 'saved recording recovery after reload and chat switch', 'lost transcription reply reuses provider result', 'lost reply / retry once', 'drafts per chat', 'offline recovery', 'image attachment', 'sandboxed report + image download', 'Markdown preview', 'long-link chat cards at 320/360/393/430/768px', '360/390/768px report layout', 'four terminal arrows and touch targets', 'close confirmation / desktop tab sync / History resume / draft retention', 'device revocation'] }));
+  console.log(JSON.stringify({ ok: true, fixture: repo, checks: ['Workspace context follows card/tab/page and section', 'navigation-only references; no report content or grant URLs', 'context frozen across lost reply, page change and reload', 'automatic context excluded from display and read aloud', 'cleared selection, slash commands and pre-update pending drafts', 'QR + desktop approval', 'independent views and PTY sizes', 'microphone permission / record / stop / cancel', 'dictation never auto-sends', 'saved recording recovery after reload and chat switch', 'lost transcription reply reuses provider result', 'lost reply / retry once', 'drafts per chat', 'offline recovery', 'image attachment', 'sandboxed report + image download', 'Markdown preview', 'long-link chat cards at 320/360/393/430/768px', '360/390/768px report layout', 'four terminal arrows and touch targets', 'viewed chat reported and cleared when hidden', 'chat mute bell', 'notification opens its chat by address or message', 'close confirmation / desktop tab sync / History resume / draft retention', 'device revocation'] }));
 } catch (error) {
   if (diagnosticPhone) {
     const state = await diagnosticPhone.evaluate(() => ({

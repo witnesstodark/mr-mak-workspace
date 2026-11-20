@@ -17,6 +17,7 @@ import Results from './Results'
 import ActivityStatus from './ActivityStatus'
 import BackgroundWork, { type BackgroundCommand, type WorkingAgent } from './BackgroundWork'
 import { useInstall } from './useInstall'
+import NotificationSettings, { MuteChat } from './NotificationSettings'
 import { visibleUserMessage } from './workspace-context'
 import TerminalPrompt, { type PromptChoice, type TerminalPromptData } from '../components/TerminalPrompt'
 import './mobile.css'
@@ -141,7 +142,7 @@ function Conversation({ session, active }: { session: ChatSession; active: boole
         if (dx < 0) setMode('terminal'); else showConversation()
       }}
       onClickCapture={event => { if (suppressModeClick.current) { event.preventDefault(); event.stopPropagation(); suppressModeClick.current = false } }}
-    ><button className={mode === 'messages' ? 'active' : ''} onClick={showConversation}>Conversation</button><button className={mode === 'terminal' ? 'active' : ''} onClick={() => { speech.stop(); setMode('terminal') }}>Terminal</button></div><ActivityStatus session={session} connected={state.connected} /></div>
+    ><button className={mode === 'messages' ? 'active' : ''} onClick={showConversation}>Conversation</button><button className={mode === 'terminal' ? 'active' : ''} onClick={() => { speech.stop(); setMode('terminal') }}>Terminal</button></div><MuteChat id={session.id} onError={setError} /><ActivityStatus session={session} connected={state.connected} /></div>
     {mode === 'terminal' ? <Terminal id={session.id} /> : <div className="mobile-message-pane"><div className="mobile-messages" ref={scroller} onScroll={() => { const box = scroller.current; if (box) { const nearEnd = box.scrollHeight - box.scrollTop - box.clientHeight < 100; if (!restored.current) return; follow.current = nearEnd; saveMobileChatPosition(session.id, { top: box.scrollTop, follow: nearEnd }); setShowJump(!nearEnd) } }}>
       <div className="mobile-history-note">{checkedAt ? `Transcript checked ${new Date(checkedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Loading conversation…'}{messages[messages.length - 1]?.at && ` · Last message ${new Date(messages[messages.length - 1].at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}</div>
       {(readError || (session.activity === 'working' && now - changedAt >= 45000)) && <div className="mobile-transcript-status" role="status"><p>{readError || 'Conversation has not updated recently. The terminal may have newer output.'}</p><button onClick={() => { speech.stop(); setMode('terminal') }}>Open terminal<Icon name="arrow" size={15} /></button></div>}
@@ -206,6 +207,25 @@ export default function MobileApp() {
   useEffect(() => { if (state.ready && state.authenticated && view === 'chat' && !session) setMobileView('list') }, [state.ready, state.authenticated, view, session])
   useEffect(() => state.authenticated ? installMobileBack() : undefined, [state.authenticated])
   function open(id: string) { selectMobileChat(id); setCloseError(''); setMobileView('chat') }
+  const openRef = useRef(open)
+  useEffect(() => { openRef.current = open })
+  // A tapped notification opens its chat: a new window by its address, an open one by message.
+  useEffect(() => {
+    const chat = new URLSearchParams(location.hash.slice(1)).get('chat')
+    if (chat) { window.history.replaceState(null, '', location.pathname); openRef.current(chat) }
+    const message = (event: MessageEvent) => { if (event.data?.type === 'open-chat' && typeof event.data.chat === 'string') openRef.current(event.data.chat) }
+    navigator.serviceWorker?.addEventListener('message', message)
+    return () => navigator.serviceWorker?.removeEventListener('message', message)
+  }, [])
+  // The service skips a notification for the chat a visible phone shows.
+  const viewingId = view === 'chat' ? session?.id ?? null : null
+  useEffect(() => {
+    const report = () => mobileEvent({ type: 'viewing', id: document.visibilityState === 'visible' ? viewingId : null })
+    report()
+    document.addEventListener('visibilitychange', report)
+    const off = onMobileEvent(event => { if (event.type === 'connected') report() })
+    return () => { document.removeEventListener('visibilitychange', report); off() }
+  }, [viewingId])
   async function closeChat() {
     if (!session || closing || !state.connected) return
     if (!window.confirm(`Close "${session.name}"? This closes the desktop tab and stops its CLI. The conversation stays in History.`)) return
@@ -234,7 +254,7 @@ export default function MobileApp() {
     {installation.error && <p className="mobile-error" role="alert">{installation.error}</p>}
     {!state.connected && <div className="mobile-offline" role="status">{state.error || 'Reconnecting… Keep Tailscale connected and your computer awake.'}</div>}
     {closeError && <div className="mobile-error" role="alert">{closeError}<button className="mobile-icon" aria-label="Dismiss close error" onClick={() => setCloseError('')}><Icon name="close" size={15} /></button></div>}
-    {settings && <div className="mobile-device-settings"><strong>{state.device?.name}</strong><p>Chats run on your computer. Switching views here leaves your desktop view alone.</p>{installation.installed ? <p>Mr. Mak is installed on this phone.</p> : installation.available ? <button onClick={() => void installation.install()} disabled={installation.busy}>Install Mr. Mak</button> : <p>To add Mr. Mak to your Home Screen, open your browser’s menu and choose Install app or Add to Home Screen. On iPhone, use Safari’s Share menu.</p>}<ReadingVoiceSettings /><DictationSettings info={state.dictation} onChange={chooseMobileDictation} disabled={!state.connected} /><button onClick={() => { if (window.confirm('Disconnect this phone from Mr. Mak?')) void disconnectMobile() }}>Disconnect this phone</button></div>}
+    {settings && <div className="mobile-device-settings"><strong>{state.device?.name}</strong><p>Chats run on your computer. Switching views here leaves your desktop view alone.</p>{installation.installed ? <p>Mr. Mak is installed on this phone.</p> : installation.available ? <button onClick={() => void installation.install()} disabled={installation.busy}>Install Mr. Mak</button> : <p>To add Mr. Mak to your Home Screen, open your browser’s menu and choose Install app or Add to Home Screen. On iPhone, use Safari’s Share menu.</p>}<ReadingVoiceSettings /><NotificationSettings disabled={!state.connected} /><DictationSettings info={state.dictation} onChange={chooseMobileDictation} disabled={!state.connected} /><button onClick={() => { if (window.confirm('Disconnect this phone from Mr. Mak?')) void disconnectMobile() }}>Disconnect this phone</button></div>}
     <div className="mobile-view-host"><div className="mobile-persistent-view" aria-hidden={view !== 'results'} inert={view !== 'results'}><Results header={view === 'results' ? resultsHeader : null} active={view === 'results'} /></div>{session && <div className="mobile-persistent-view" aria-hidden={view !== 'chat'} inert={view !== 'chat'}><Conversation key={session.id} session={session} active={view === 'chat'} /></div>}{view === 'list' && <main className="mobile-chat-list"><label className="mobile-search"><Icon name="search" size={17} /><input aria-label="Find a chat" placeholder="Find a conversation…" value={query} onChange={event => setQuery(event.target.value)} /></label><div className="mobile-chat-cards">{items.map(item => <button className={`mobile-chat-card ${item.activity === 'working' ? 'working' : ''}`} key={item.id} onClick={() => open(item.id)} style={{ '--chat-color': item.tabColor || state.agents.find(agent => agent.id === item.agent)?.color || '#d7aabd' } as React.CSSProperties}><span className="mobile-agent-icon"><AgentLogo agent={item.agent} size={24} />{item.unread && <i />}</span><span className="mobile-card-copy"><strong>{item.name}{item.pinned && <Icon name="pin" size={12} />}</strong><small>{state.agents.find(agent => agent.id === item.agent)?.label || item.agent} · {chatActivityLabel(item)}</small>{item.preview && <p>{item.preview}</p>}</span><Icon name="arrow" size={15} /></button>)}{!items.length && <p className="mobile-list-empty">{query ? 'No matching chats.' : 'Open a chat to give your next idea a place.'}</p>}</div><p className="mobile-list-foot">A thought on your phone.<br />A task on your computer.</p></main>}</div>
     {creating && <NewChat close={() => setCreating(false)} opened={open} />}
   </div>

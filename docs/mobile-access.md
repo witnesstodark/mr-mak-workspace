@@ -3,7 +3,8 @@
 Mobile access connects a phone to the agent chats running in Mr. Mak Desktop.
 The computer keeps the CLI processes, their sign-ins and project files. The
 phone can read conversations, dictate drafts, send messages and images, resume a saved chat,
-start an installed agent, and read Workspace reports.
+start an installed agent, read Workspace reports and get a notification when a
+chat waits for you.
 
 ## First connection
 
@@ -59,6 +60,34 @@ between 8443 and 8446. It preserves existing routes and never enables Funnel.
 Selecting a tab, scrolling or opening a report on the phone does not select a
 different tab on the desktop. Conversation contents and task activity are shared.
 Reading a completed turn marks it seen across devices.
+
+## Notifications
+
+Open Phone settings and choose **Turn on notifications** to be told when a chat
+starts waiting for you, for example at a permission or a question. On iPhone,
+notifications are offered only to Mr. Mak opened from the Home Screen. Tapping a
+notification opens its chat. Each chat has one notification, replaced while it
+waits; it shows the chat's name and "Waiting for you", never its messages.
+
+- **Already looking:** no notification is sent while a paired phone shows that
+  chat on its screen. The phone reports the chat it shows while it is visible
+  and closes its connection when hidden or locked, so a phone in a pocket is
+  notified. The desktop window does not count: the service knows which chat is
+  selected there but not whether anyone is in front of the computer, and the
+  phone notification is for when you are away from it.
+- **Mute a chat:** the bell beside Conversation and Terminal mutes that chat's
+  notifications on every paired phone. Tap it again to unmute. The choice is
+  saved on the computer and survives a restart.
+- **Who is notified:** only phones that could sign in now. A phone idle for 30
+  days, past its 180-day pairing or disconnected receives nothing, and its
+  subscription is deleted. Each phone keeps one subscription, and one the
+  browser's push service reports as gone (404 or 410) is deleted too.
+
+Notifications use Web Push through the browser's own push service (Google,
+Mozilla, Apple or Microsoft); the service sends only to those hosts. The message
+is encrypted for the phone and kept for at most an hour. The signing key pair is
+created on first use and kept in `.mrmak/mobile-access.json` beside the device
+hashes; only its public half reaches the phone.
 
 ## Voice input
 
