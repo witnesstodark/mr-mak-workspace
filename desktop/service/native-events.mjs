@@ -9,7 +9,11 @@ export function completedTurn(record, agent) {
   // Claude writes thinking and text as separate records with the same message ID
   // and stop reason. Only the actual final answer creates a completion notice.
   if (agent === 'claude' && !record.isSidechain && record.type === 'assistant' && record.message?.stop_reason === 'end_turn' && record.message.content?.some(item => item.type === 'text')) return { kind: 'turn-completed', id: record.message.id, text: 'The agent finished its turn. Review the result.', preview: record.message.content.filter(item => item.type === 'text').map(item => item.text).join('\n').slice(-350) };
-  if (agent === 'claude' && !record.isSidechain && record.type === 'system' && record.subtype === 'api_error') return { kind: 'attention', text: 'The agent reported an API error.' };
+  // An api_error with retryInMs only announces Claude's own retry; the turn goes on.
+  // When the retries run out, or the error cannot be retried, Claude writes an error
+  // message in place of the answer and waits for the person.
+  const retrying = record.type === 'system' && record.subtype === 'api_error' && typeof record.retryInMs === 'number';
+  if (agent === 'claude' && !record.isSidechain && !retrying && (record.type === 'system' && record.subtype === 'api_error' || record.type === 'assistant' && record.isApiErrorMessage)) return { kind: 'attention', text: 'The agent reported an API error.' };
   if (agent === 'antigravity' && record.type === 'PLANNER_RESPONSE' && record.content && (!record.tool_calls || !record.tool_calls.length)) return { kind: 'turn-completed', id: String(record.step_index ?? ''), text: 'The agent finished its turn. Review the result.', preview: String(record.content || '').slice(-350) };
   return null;
 }

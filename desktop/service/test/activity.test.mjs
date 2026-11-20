@@ -38,6 +38,11 @@ test('native activity separates accepted tasks, tool work, final answers and int
   assert.equal(nativeActivity({ type: 'user', message: { content: '[Request interrupted by user]' } }, 'claude').kind, 'turn-interrupted');
   assert.equal(nativeActivity({ type: 'user', message: { content: [{ type: 'text', text: '[Request interrupted by user for tool use]' }] } }, 'claude').kind, 'turn-interrupted');
   assert.equal(nativeActivity({ type: 'assistant', message: { stop_reason: 'end_turn' } }, 'kimi'), null);
+  // A retry notice is Claude still working; the error message written in place of an answer stops the turn.
+  assert.equal(nativeActivity({ type: 'system', subtype: 'api_error', level: 'error', retryInMs: 574, retryAttempt: 1, maxRetries: 10 }, 'claude'), null);
+  assert.equal(nativeActivity({ type: 'system', subtype: 'api_error', level: 'error' }, 'claude').kind, 'attention');
+  assert.equal(nativeActivity({ type: 'assistant', isApiErrorMessage: true, message: { model: '<synthetic>', stop_reason: 'stop_sequence', content: [{ type: 'text', text: 'API Error: 529 Overloaded' }] } }, 'claude').kind, 'attention');
+  assert.equal(nativeActivity({ type: 'assistant', isSidechain: true, isApiErrorMessage: true, message: { stop_reason: 'stop_sequence' } }, 'claude'), null);
 });
 
 test('unread answers survive new work and restart; stale acknowledgements and duplicate completions are ignored', async () => {
