@@ -91,7 +91,7 @@ The Linux AppImage also includes a launcher permission fix.
 The History fix can reconnect a Codex conversation whose original native record
 still exists but whose ID was not saved by Mr. Mak. If that native history was
 deleted or belongs to another account, the update cannot recreate it. Use
-New chat > Advanced > Resume with a known native ID when importing an existing CLI chat.
+New chat > More options > Resume with a known native ID when importing an existing CLI chat.
 Saved terminal screens are retained when automatic recovery is not possible.
 
 Version 0.4.18 adds Linux packaging and project/knowledge-provider foundations.
