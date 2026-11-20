@@ -88,7 +88,7 @@ export function codexSupportsNoDaemon(env = process.env) {
   return codexHelp.get(key);
 }
 
-export function terminalCommand(agent, { bypass = false, resumeId, nativeId, effort, opencodeMajor = 1, antigravityLog, initialPrompt, readDir, noDaemon = false } = {}) {
+export function terminalCommand(agent, { bypass = false, resumeId, nativeId, effort, model, settings, opencodeMajor = 1, antigravityLog, initialPrompt, readDir, noDaemon = false } = {}) {
   if (!AGENTS.some(item => item.id === agent)) throw new Error('Unknown agent');
   resumeId = nativeConversationId(resumeId); nativeId = nativeConversationId(nativeId);
   initialPrompt = initialPromptArgument(initialPrompt);
@@ -116,6 +116,9 @@ export function terminalCommand(agent, { bypass = false, resumeId, nativeId, eff
     else if (nativeId) args.push('--session-id', nativeId);
     if (bypass) args.push('--dangerously-skip-permissions');
     if (effort) args.push('--effort', effort);
+    // The model chosen in the chat footer, and the status line that reports the live model and effort.
+    if (model) { if (!/^[a-z0-9][a-z0-9.\-[\]]{0,80}$/i.test(model)) throw new Error('Choose one of the listed models.'); args.push('--model', model); }
+    if (settings) args.push('--settings', settings);
     if (readDir) args.push('--add-dir', readDir);
   } else if (agent === 'antigravity') {
     if (resumeId && !validAntigravityId(resumeId)) throw new Error('Use the Antigravity conversation UUID from its /resume picker.');

@@ -5,7 +5,10 @@ export type Effort = 'medium' | 'high' | 'xhigh' | 'max'
 export interface AgentInfo { id: AgentId; label: string; color: string; available: boolean; subscription: boolean }
 export interface ChatSession {
   id: string; name: string; agent: AgentId; cwd: string; bypass: boolean
-  effort?: Effort
+  /** The footer menu can also choose low for a Claude chat. */
+  effort?: Effort | 'low'
+  /** The model chosen in the chat footer; the CLI's default when absent. */
+  model?: string
   status: 'starting' | 'running' | 'stopped' | 'exited'; createdAt: string
   lastOutputAt: string | null; lastInputAt: string | null; nativeId: string | null
   attention: boolean; cols: number; rows: number; exitCode?: number | null
