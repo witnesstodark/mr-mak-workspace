@@ -1,12 +1,12 @@
 import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
-import { mkdir, realpath, stat } from 'node:fs/promises';
+import { mkdir, realpath, rename, stat } from 'node:fs/promises';
 import path from 'node:path';
 import pty from 'node-pty';
 import headless from '@xterm/headless';
 import { TerminalSnapshotAddon } from './terminal-snapshot.mjs';
 import { terminalCommand, childEnvironment, nativeConversationId, codexSupportsNoDaemon } from './agents.mjs';
-import { expandHome, readJson, saveJson } from './util.mjs';
+import { expandHome, readJson, readJsonFile, saveJson, sleep } from './util.mjs';
 import { claudeTranscript, codexTranscript, tailNativeFile } from './native-events.mjs';
 import { findCodexChat, newerCodexRollout } from './codex-history.mjs';
 import { englishTitle, groupLabel, restoredTitle } from './titles.mjs';
@@ -63,7 +63,7 @@ export class Sessions extends EventEmitter {
 
   async init() {
     await mkdir(this.stateDir, { recursive: true });
-    const saved = await readJson(path.join(this.stateDir, 'sessions.json'), []);
+    const saved = await this.loadList();
     for (const [index, metadata] of saved.entries()) {
       const item = this.make({ ...metadata, name: restoredTitle(metadata.name, index), open: metadata.open ?? metadata.agent !== 'kimi', pinned: !!metadata.pinned, updatedAt: metadata.updatedAt || metadata.lastInputAt || metadata.createdAt, hasConversation: metadata.hasConversation ?? (metadata.agent === 'codex' && !!metadata.nativeId), status: 'stopped', activity: 'idle', attention: !!metadata.unread });
       this.items.set(item.id, item);
@@ -731,10 +731,34 @@ export class Sessions extends EventEmitter {
     await this.persist();
     return publicSession(session);
   }
+  // An unreadable list (for example zero-filled by a power cut) must not become
+  // an empty History: keep it aside for inspection and load the last backup.
+  async loadList() {
+    const file = path.join(this.stateDir, 'sessions.json');
+    let main = await readJsonFile(file);
+    // A scanner can hold the file briefly at startup; that is not corruption.
+    for (let attempt = 0; main.error?.code && attempt < 5; attempt++) {
+      await sleep(100 * 2 ** attempt);
+      main = await readJsonFile(file);
+    }
+    if (Array.isArray(main.value)) return main.value;
+    if (!main.missing && !main.error?.code) {
+      const aside = `${file}.unreadable-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+      await rename(file, aside).catch(() => {});
+      console.warn(`sessions.json could not be read; kept as ${path.basename(aside)}, loading sessions.json.bak.`);
+    }
+    const backup = await readJsonFile(`${file}.bak`);
+    return Array.isArray(backup.value) ? backup.value : [];
+  }
+
   async persist() {
     this.saveChain = this.saveChain.catch(() => {}).then(async () => {
       this.dirty = false;
-      await saveJson(path.join(this.stateDir, 'sessions.json'), this.list().map(item => ({ ...item, projectGroup: this.items.get(item.id).projectGroup || undefined })));
+      const list = this.list().map(item => ({ ...item, projectGroup: this.items.get(item.id).projectGroup || undefined }));
+      await saveJson(path.join(this.stateDir, 'sessions.json'), list);
+      // A second durable copy, written after the main file, for recovery.
+      const text = JSON.stringify(list);
+      if (text !== this.backupText) { await saveJson(path.join(this.stateDir, 'sessions.json.bak'), list); this.backupText = text; }
       let screenError;
       for (const session of this.items.values()) {
         if (!session.terminal) continue;
