@@ -2,6 +2,7 @@ import type { WorkspaceEntity } from '../types'
 import { categoryIcon } from '../lib/categories'
 import MakCard from './MakCard'
 import MakLogo from './MakLogo'
+import { t } from '../lib/i18n'
 
 interface HomeGridProps {
   entities: WorkspaceEntity[]
@@ -14,10 +15,10 @@ interface HomeGridProps {
 
 function greeting(): string {
   const h = new Date().getHours()
-  if (h < 5) return 'Burning the midnight oil, sir?'
-  if (h < 12) return 'Good morning, sir.'
-  if (h < 18) return 'Good day, sir.'
-  return 'Good evening, sir.'
+  if (h < 5) return t('Burning the midnight oil, sir?')
+  if (h < 12) return t('Good morning, sir.')
+  if (h < 18) return t('Good day, sir.')
+  return t('Good evening, sir.')
 }
 
 export default function HomeGrid({
@@ -39,24 +40,24 @@ export default function HomeGrid({
         <div>
           <h1 className="home-title">{greeting()}</h1>
           <p className="home-sub">
-            <b>{activeCount}</b> active · <b>{entities.length}</b> entities ·{' '}
-            <b>{categoryCount}</b> categories
-            {offline && <span className="home-offline"> · workspace.json unreachable</span>}
+            <b>{activeCount}</b> {t('active ·', { count: activeCount })} <b>{entities.length}</b> {t('entities', { count: entities.length })} ·{' '}
+            <b>{categoryCount}</b> {t('categories', { count: categoryCount })}
+            {offline && <span className="home-offline"> {t('· workspace.json unreachable')}</span>}
           </p>
         </div>
       </header>
 
       {searching && (
         <p className="home-filter">
-          {shown === 0 ? 'No matches for' : `${shown} match${shown === 1 ? '' : 'es'} for`}{' '}
-          “{query.trim()}” — archive included
+          {shown === 0 ? t('No matches for') : t('{count} matches for', { count: shown })}{' '}
+          “{query.trim()}” — {t('archive included')}
         </p>
       )}
 
       {pinned.length > 0 && (
         <section className="home-section">
           <div className="section-head">
-            <span className="section-title">{'\u{1F4CC}'} pinned</span>
+            <span className="section-title">{'\u{1F4CC}'} {t('pinned')}</span>
             <span className="section-count">{pinned.length}</span>
           </div>
           <div className="card-grid">
@@ -86,8 +87,8 @@ export default function HomeGrid({
       {shown === 0 && !searching && (
         <div className="home-empty">
           {offline
-            ? 'Could not load workspace.json — is the public/workspace link in place? Run npm run dev again, sir.'
-            : 'Nothing here yet. New work will appear as cards, sir.'}
+            ? t('Could not load workspace.json — is the public/workspace link in place? Run npm run dev again, sir.')
+            : t('Nothing here yet. New work will appear as cards, sir.')}
         </div>
       )}
     </div>

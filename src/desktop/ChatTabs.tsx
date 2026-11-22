@@ -5,6 +5,7 @@ import { chatActivityLabel } from './chatActivity'
 import { Icon } from './Icons'
 import SessionLogo from './SessionLogo'
 import { groupedChats, tabColors, type TabGroup } from './chatOrder'
+import { t } from '../lib/i18n'
 
 /** A drag carries one tab, or a whole group when it starts on the group's chip. */
 type Drag = { id: string; group?: string; pinned: boolean; startX: number; startY: number; moving: boolean }
@@ -12,9 +13,9 @@ type Drop = { id: string; position: 'before' | 'after' } | { group: string } | {
 type Menu = { kind: 'tab'; item: ChatSession; x: number; y: number } | { kind: 'group'; group: TabGroup; x: number; y: number }
 
 function Swatches({ label, value, onChange }: { label: string; value: string | null; onChange: (value: string | null) => void }) {
-  return <div className="swatches" role="group" aria-label={label}>
-    <button type="button" className={`tab-color-swatch no-color ${!value ? 'selected' : ''}`} aria-label={`No ${label.toLowerCase()}`} aria-pressed={!value} title={label === 'Group color' ? 'Automatic' : 'No color'} onClick={() => onChange(null)} />
-    {tabColors.map(color => <button key={color.value} type="button" className={`tab-color-swatch ${value === color.value ? 'selected' : ''}`} style={{ '--swatch': color.value } as React.CSSProperties} aria-label={`${color.name} ${label.toLowerCase()}`} aria-pressed={value === color.value} title={color.name} onClick={() => onChange(color.value)} />)}
+  return <div className="swatches" role="group" aria-label={t(label)}>
+    <button type="button" className={`tab-color-swatch no-color ${!value ? 'selected' : ''}`} aria-label={label === 'Group color' ? t('No group color') : t('No tab color')} aria-pressed={!value} title={label === 'Group color' ? t('Automatic') : t('No color')} onClick={() => onChange(null)} />
+    {tabColors.map(color => <button key={color.value} type="button" className={`tab-color-swatch ${value === color.value ? 'selected' : ''}`} style={{ '--swatch': color.value } as React.CSSProperties} aria-label={label === 'Group color' ? t('{color} group color', { color: t(color.name) }) : t('{color} tab color', { color: t(color.name) })} aria-pressed={value === color.value} title={t(color.name)} onClick={() => onChange(color.value)} />)}
   </div>
 }
 
@@ -117,18 +118,18 @@ export default function ChatTabs({ items, selectedId, agents, groups, collapsed,
   const dragged = dragging?.group ? undefined : items.find(item => item.id === dragging?.id)
   const draggedGroup = dragging?.group ? grouped.find(group => group.name === dragging.group && group.pinned === dragging.pinned) : undefined
   const renderTab = (item: ChatSession) => <div key={item.id} data-chat-tab={item.id} className={`chat-tab ${selectedId === item.id ? 'selected' : ''} ${item.tabColor ? 'has-color' : ''} ${!dragging?.group && dragging?.id === item.id ? 'dragging' : ''} ${target && 'id' in target && target.id === item.id ? `drop-${target.position}` : ''}`} style={{ '--tab-accent': item.tabColor || 'var(--pink)' } as React.CSSProperties} onContextMenu={event => openMenu(event, { kind: 'tab', item, x: event.clientX, y: event.clientY })}>
-    {editing?.id === item.id ? <span className="chat-tab-select chat-tab-editing"><span style={{ color: agents.find(a => a.id === item.agent)?.color }}><SessionLogo session={item} /></span><input autoFocus value={editing.name} maxLength={100} aria-label="English chat name" onFocus={event => event.currentTarget.select()} onChange={event => setEditing({ id: item.id, name: event.target.value })} onBlur={() => { if (cancelEdit.current) { cancelEdit.current = false; setEditing(null) } else saveName() }}
+    {editing?.id === item.id ? <span className="chat-tab-select chat-tab-editing"><span style={{ color: agents.find(a => a.id === item.agent)?.color }}><SessionLogo session={item} /></span><input autoFocus value={editing.name} maxLength={100} aria-label={t('English chat name')} onFocus={event => event.currentTarget.select()} onChange={event => setEditing({ id: item.id, name: event.target.value })} onBlur={() => { if (cancelEdit.current) { cancelEdit.current = false; setEditing(null) } else saveName() }}
       onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); else if (event.key === 'Escape') { event.stopPropagation(); cancelEdit.current = true; event.currentTarget.blur() } }} /></span>
     : <button role="tab" aria-selected={selectedId === item.id} onClick={event => { if (!suppressClick.current || event.detail === 0) choose(item.id) }} onDoubleClick={() => setEditing({ id: item.id, name: item.name })} onKeyDown={event => { if (event.key === 'F2') { event.preventDefault(); setEditing({ id: item.id, name: item.name }) } }} onPointerDown={event => begin(event, item)} onPointerMove={move} onPointerUp={finish} onPointerCancel={clear} onLostPointerCapture={clear}
-      className="chat-tab-select" aria-label={`${item.name} · ${chatActivityLabel(item)}`} title={`${agents.find(a => a.id === item.agent)?.label} · ${item.name}${item.group ? ` · ${item.group}` : ''}\n${chatActivityLabel(item)}\nDrag to reorder ${item.pinned ? 'pinned' : 'unpinned'} tabs · right-click for options\n${item.cwd}`}>
-      <span style={{ color: agents.find(a => a.id === item.agent)?.color }}><SessionLogo session={item} /></span><span className="chat-tab-name">{item.name}</span>{item.pinned && <span className="tab-pinned" title="Pinned in History"><Icon name="pin" size={11} /></span>}
+      className="chat-tab-select" aria-label={`${item.name} · ${chatActivityLabel(item)}`} title={`${agents.find(a => a.id === item.agent)?.label} · ${item.name}${item.group ? ` · ${item.group}` : ''}\n${chatActivityLabel(item)}\n${item.pinned ? t('Drag to reorder pinned tabs · right-click for options') : t('Drag to reorder unpinned tabs · right-click for options')}\n${item.cwd}`}>
+      <span style={{ color: agents.find(a => a.id === item.agent)?.color }}><SessionLogo session={item} /></span><span className="chat-tab-name">{item.name}</span>{item.pinned && <span className="tab-pinned" title={t('Pinned in History')}><Icon name="pin" size={11} /></span>}
     </button>}
-    <button className="chat-tab-close" onClick={() => close(item.id)} aria-label={`Close ${item.name}`} title="Close tab · keep in History"><Icon name="close" size={12} /></button>
+    <button className="chat-tab-close" onClick={() => close(item.id)} aria-label={`Close ${item.name}`} title={t('Close tab · keep in History')}><Icon name="close" size={12} /></button>
   </div>
   // Reorders arrive one tab at a time, so a group can be split for a moment; a
   // second run of the same group needs its own key or React leaves a stale copy.
   const runs = new Map<string, number>()
-  return <div className={`chat-tabs ${dragging ? 'is-reordering' : ''}`} role="tablist" aria-label="Agent chats">
+  return <div className={`chat-tabs ${dragging ? 'is-reordering' : ''}`} role="tablist" aria-label={t('Agent chats')}>
     {grouped.map(group => {
       if (!group.name) return group.items.map(renderTab)
       const key = `group:${group.pinned}:${group.name}`, run = (runs.get(key) || 0) + 1
@@ -137,9 +138,9 @@ export default function ChatTabs({ items, selectedId, agents, groups, collapsed,
       const moving = draggedGroup?.name === group.name && draggedGroup.pinned === group.pinned
       const beside = target && 'beside' in target && target.beside === group.name && target.pinned === group.pinned ? `drop-${target.position}` : ''
       return <div key={run > 1 ? `${key}:${run}` : key} data-chat-group={group.name} className={`chat-tab-group ${folded ? 'collapsed' : ''} ${group.working ? 'working' : ''} ${moving ? 'dragging' : ''} ${beside} ${target && 'group' in target && target.group === group.name ? 'drop-into' : ''}`} style={{ '--tab-accent': group.color } as React.CSSProperties}>
-        <button type="button" className="chat-group-chip" aria-expanded={!folded} aria-label={`${group.name} group · ${group.items.length} tabs${group.unread ? ' · unread result' : ''}`} title={`${group.name} · ${group.items.length} tabs\nClick to ${folded ? 'expand' : 'collapse'} · drag to move the group · right-click to rename, color and more · drop a tab here to add it`}
+        <button type="button" className="chat-group-chip" aria-expanded={!folded} aria-label={`${t('{group} group', { group: group.name })} · ${t('{count} tabs', { count: group.items.length })}${group.unread ? ` · ${t('unread result')}` : ''}`} title={`${group.name} · ${t('{count} tabs', { count: group.items.length })}\n${folded ? t('Click to expand · drag to move the group · right-click to rename, color and more · drop a tab here to add it') : t('Click to collapse · drag to move the group · right-click to rename, color and more · drop a tab here to add it')}`}
           onClick={event => { if (!suppressClick.current || event.detail === 0) toggleGroup(group.name!) }} onKeyDown={event => shiftGroup(event, group)} onPointerDown={event => begin(event, group.items[0], group.name!)} onPointerMove={move} onPointerUp={finish} onPointerCancel={clear} onLostPointerCapture={clear} onContextMenu={event => openMenu(event, { kind: 'group', group, x: event.clientX, y: event.clientY })}>
-          <span className="chip-caret" aria-hidden="true">{folded ? '▸' : '▾'}</span><span className="chip-name">{group.name}</span><small>{group.items.length}</small>{group.unread && <i className="chip-unread" title="Unread result" />}{group.working && <i className="chip-working" title="Working" />}
+          <span className="chip-caret" aria-hidden="true">{folded ? '▸' : '▾'}</span><span className="chip-name">{group.name}</span><small>{group.items.length}</small>{group.unread && <i className="chip-unread" title={t('Unread result')} />}{group.working && <i className="chip-working" title={t('Working')} />}
         </button>
         {group.items.filter(item => !folded || item.id === selectedId).map(renderTab)}
       </div>
@@ -149,39 +150,39 @@ export default function ChatTabs({ items, selectedId, agents, groups, collapsed,
     {menu && <div className="tab-menu" role="menu" style={{ left: Math.max(4, Math.min(menu.x, window.innerWidth - 260)), top: Math.max(4, Math.min(menu.y, window.innerHeight - (menu.kind === 'tab' ? 500 : 290))) }}>
       {menu.kind === 'tab' ? <>
         <strong>{menu.item.name}</strong>
-        {rename === null ? <button type="button" role="menuitem" onClick={() => setRename(menu.item.name)}>Rename chat</button> : <form className="tab-menu-rename" onSubmit={event => { event.preventDefault(); if (rename.trim()) patch(menu.item.id, { name: rename.trim() }) }}><input autoFocus value={rename} maxLength={100} aria-label="English chat name" onChange={event => setRename(event.target.value)} /><button type="submit">Save</button></form>}
-        <button type="button" role="menuitem" onClick={() => patch(menu.item.id, { pinned: !menu.item.pinned })}>{menu.item.pinned ? 'Unpin from History' : 'Pin in History'}</button>
-        <button type="button" role="menuitem" onClick={() => { setMenu(null); mark(menu.item) }}>{menu.item.unread ? 'Mark as read' : 'Mark as unread'}</button>
-        <span>Tab color</span>
+        {rename === null ? <button type="button" role="menuitem" onClick={() => setRename(menu.item.name)}>{t('Rename chat')}</button> : <form className="tab-menu-rename" onSubmit={event => { event.preventDefault(); if (rename.trim()) patch(menu.item.id, { name: rename.trim() }) }}><input autoFocus value={rename} maxLength={100} aria-label={t('English chat name')} onChange={event => setRename(event.target.value)} /><button type="submit">{t('Save')}</button></form>}
+        <button type="button" role="menuitem" onClick={() => patch(menu.item.id, { pinned: !menu.item.pinned })}>{menu.item.pinned ? t('Unpin from History') : t('Pin in History')}</button>
+        <button type="button" role="menuitem" onClick={() => { setMenu(null); mark(menu.item) }}>{menu.item.unread ? t('Mark as read') : t('Mark as unread')}</button>
+        <span>{t('Tab color')}</span>
         <Swatches label="Tab color" value={menu.item.tabColor} onChange={value => patch(menu.item.id, { tabColor: value })} />
-        <span>{menu.item.group ? 'Move to group' : 'Add to group'}</span>
+        <span>{menu.item.group ? t('Move to group') : t('Add to group')}</span>
         {groups.filter(name => name !== menu.item.group).map(name => <button key={name} type="button" role="menuitem" onClick={() => patch(menu.item.id, { group: name })}>{name}</button>)}
-        <form onSubmit={event => { event.preventDefault(); if (draft.trim()) patch(menu.item.id, { group: draft.trim() }) }}><input placeholder="New group…" aria-label="New group name" value={draft} maxLength={60} onChange={event => setDraft(event.target.value)} /><button type="submit" disabled={!draft.trim()}>Add</button></form>
-        {menu.item.group && <button type="button" role="menuitem" onClick={() => patch(menu.item.id, { group: null })}>Remove from {menu.item.group}</button>}
+        <form onSubmit={event => { event.preventDefault(); if (draft.trim()) patch(menu.item.id, { group: draft.trim() }) }}><input placeholder={t('New group…')} aria-label={t('New group name')} value={draft} maxLength={60} onChange={event => setDraft(event.target.value)} /><button type="submit" disabled={!draft.trim()}>{t('Add')}</button></form>
+        {menu.item.group && <button type="button" role="menuitem" onClick={() => patch(menu.item.id, { group: null })}>{t('Remove from {group}', { group: menu.item.group })}</button>}
         <hr />
-        <button type="button" role="menuitem" onClick={() => { setMenu(null); api('/reveal', { path: menu.item.cwd }).catch(reportError) }}>Show working folder</button>
-        <button type="button" role="menuitem" title="Clear visible scrollback; keep the agent conversation" onClick={() => { setMenu(null); api(`/sessions/${menu.item.id}/clear`, {}).catch(reportError) }}>Clear terminal scrollback</button>
+        <button type="button" role="menuitem" onClick={() => { setMenu(null); api('/reveal', { path: menu.item.cwd }).catch(reportError) }}>{t('Show working folder')}</button>
+        <button type="button" role="menuitem" title={t('Clear visible scrollback; keep the agent conversation')} onClick={() => { setMenu(null); api(`/sessions/${menu.item.id}/clear`, {}).catch(reportError) }}>{t('Clear terminal scrollback')}</button>
         <hr />
-        <button type="button" role="menuitem" onClick={() => { setMenu(null); close(menu.item.id) }}>Close tab · keep in History</button>
+        <button type="button" role="menuitem" onClick={() => { setMenu(null); close(menu.item.id) }}>{t('Close tab · keep in History')}</button>
       </> : <>
         <strong>{menu.group.name}</strong>
-        {rename === null ? <button type="button" role="menuitem" onClick={() => setRename(menu.group.name)}>Rename group</button> : (() => {
+        {rename === null ? <button type="button" role="menuitem" onClick={() => setRename(menu.group.name)}>{t('Rename group')}</button> : (() => {
           // Another group's name merges the two, so the button says so.
           const to = rename.trim().replace(/\s+/g, ' ')
           const merge = to !== menu.group.name && groups.includes(to)
-          return <form className="tab-menu-rename" onSubmit={event => { event.preventDefault(); if (to) renameGroup(menu.group.name!, to) }}><input autoFocus value={rename} maxLength={60} aria-label="English group name" onChange={event => setRename(event.target.value)} /><button type="submit" disabled={!to} title={merge ? `Move these tabs into the existing ${to} group` : undefined}>{merge ? 'Merge' : 'Save'}</button></form>
+          return <form className="tab-menu-rename" onSubmit={event => { event.preventDefault(); if (to) renameGroup(menu.group.name!, to) }}><input autoFocus value={rename} maxLength={60} aria-label={t('English group name')} onChange={event => setRename(event.target.value)} /><button type="submit" disabled={!to} title={merge ? t('Move these tabs into the existing {group} group', { group: to }) : undefined}>{merge ? t('Merge') : t('Save')}</button></form>
         })()}
-        <button type="button" role="menuitem" onClick={() => { setMenu(null); toggleGroup(menu.group.name!) }}>{collapsed.includes(menu.group.name!) ? 'Expand group' : 'Collapse group'}</button>
-        <button type="button" role="menuitem" onClick={() => { setMenu(null); collapseOthers(menu.group.name!) }}>Collapse other groups</button>
-        <span>Group color</span>
+        <button type="button" role="menuitem" onClick={() => { setMenu(null); toggleGroup(menu.group.name!) }}>{collapsed.includes(menu.group.name!) ? t('Expand group') : t('Collapse group')}</button>
+        <button type="button" role="menuitem" onClick={() => { setMenu(null); collapseOthers(menu.group.name!) }}>{t('Collapse other groups')}</button>
+        <span>{t('Group color')}</span>
         <Swatches label="Group color" value={groupColors[menu.group.name!] || null} onChange={value => { setMenu(null); setGroupColor(menu.group.name!, value) }} />
         <hr />
-        <button type="button" role="menuitem" onClick={() => ungroup(menu.group)}>Ungroup {menu.group.items.length} {menu.group.items.length === 1 ? 'tab' : 'tabs'}</button>
+        <button type="button" role="menuitem" onClick={() => ungroup(menu.group)}>{t('Ungroup {count} tabs', { count: menu.group.items.length })}</button>
         {confirm ? (() => {
           // Ungroup only reaches the open tabs; deleting also clears the group from History chats and forgets its color.
           const history = historyCounts[menu.group.name!] || 0
-          return <div className="tab-menu-confirm"><p>Remove the {menu.group.name} group from {menu.group.items.length} open {menu.group.items.length === 1 ? 'tab' : 'tabs'}{history ? ` and ${history} ${history === 1 ? 'chat' : 'chats'} in History` : ''}. The chats stay where they are.</p><button type="button" className="danger" onClick={() => deleteGroup(menu.group.name!)}>Delete group</button><button type="button" onClick={() => setConfirm(false)}>Cancel</button></div>
-        })() : <button type="button" role="menuitem" className="danger" onClick={() => setConfirm(true)}>Delete group…</button>}
+          return <div className="tab-menu-confirm"><p>{history ? t('Remove the {group} group from {tabs} and {chats} in History. The chats stay where they are.', { group: menu.group.name!, tabs: t('{count} open tabs', { count: menu.group.items.length }), chats: t('{count} chats', { count: history }) }) : t('Remove the {group} group from {tabs}. The chats stay where they are.', { group: menu.group.name!, tabs: t('{count} open tabs', { count: menu.group.items.length }) })}</p><button type="button" className="danger" onClick={() => deleteGroup(menu.group.name!)}>{t('Delete group')}</button><button type="button" onClick={() => setConfirm(false)}>{t('Cancel')}</button></div>
+        })() : <button type="button" role="menuitem" className="danger" onClick={() => setConfirm(true)}>{t('Delete group…')}</button>}
       </>}
     </div>}
   </div>

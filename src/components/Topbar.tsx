@@ -3,6 +3,7 @@ import { isDesktop } from '../desktop/client'
 import BrowserSettings from './BrowserSettings'
 import { EntityStatusButton } from './EntityControls'
 import NewCard from './NewCard'
+import { t } from '../lib/i18n'
 
 interface TopbarProps {
   entity: WorkspaceEntity | null
@@ -15,7 +16,7 @@ interface TopbarProps {
 export default function Topbar({ entity, stepIndex, onStep, onHome, reportUrl }: TopbarProps) {
   return (
     <div className="topbar">
-      <nav className="breadcrumb" aria-label="Breadcrumb">
+      <nav className="breadcrumb" aria-label={t('Breadcrumb')}>
         <button className="crumb-link" onClick={onHome}>
           Workspace
         </button>
@@ -54,7 +55,7 @@ export default function Topbar({ entity, stepIndex, onStep, onHome, reportUrl }:
               href={reportUrl}
               target="_blank"
               rel="noreferrer"
-              title="Open report in a new tab"
+              title={t('Open report in a new tab')}
             >
               ↗
             </a>

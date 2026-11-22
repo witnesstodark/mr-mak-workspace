@@ -7,6 +7,7 @@ import { contentUrl } from '../desktop/client'
 import MakLogo from './MakLogo'
 import MakText from './MakText'
 import { EntityStatusButton } from './EntityControls'
+import { t } from '../lib/i18n'
 
 interface SidebarProps {
   pinned: WorkspaceEntity[]
@@ -71,8 +72,8 @@ export default function Sidebar({
         <button
           className="sidebar-collapse"
           onClick={onCollapse}
-          title="Hide menu ( [ )"
-          aria-label="Hide menu"
+          title={t('Hide menu ( [ )')}
+          aria-label={t('Hide menu')}
         >
           ‹
         </button>
@@ -92,11 +93,11 @@ export default function Sidebar({
               ev.currentTarget.blur()
             }
           }}
-          placeholder="Search…  ( / )"
-          aria-label="Search entities"
+          placeholder={t('Search…  ( / )')}
+          aria-label={t('Search entities')}
         />
         {query && (
-          <button className="search-clear" onClick={() => onQuery('')} aria-label="Clear search">
+          <button className="search-clear" onClick={() => onQuery('')} aria-label={t('Clear search')}>
             ×
           </button>
         )}
@@ -106,7 +107,7 @@ export default function Sidebar({
         {pinned.length > 0 && (
           <div>
             <div className="sidebar-section">
-              <span className="sidebar-label">{'\u{1F4CC}'} pinned</span>
+              <span className="sidebar-label">{'\u{1F4CC}'} {t('pinned')}</span>
             </div>
             {pinned.map(e => (
               <Item key={e.id} entity={e} active={e.id === activeId} />
@@ -126,13 +127,13 @@ export default function Sidebar({
           </div>
         ))}
 
-        {empty && <div className="sidebar-empty">Nothing matches, sir.</div>}
+        {empty && <div className="sidebar-empty">{t('Nothing matches, sir.')}</div>}
 
         {archivedCount > 0 && !query && (
           <button className="sidebar-archive-toggle" onClick={onToggleArchived}>
             {showArchived
-              ? `▼ Hide archive (${archivedCount})`
-              : `▶ Show archive (${archivedCount})`}
+              ? `▼ ${t('Hide archive')} (${archivedCount})`
+              : `▶ ${t('Show archive')} (${archivedCount})`}
           </button>
         )}
       </nav>
@@ -140,12 +141,12 @@ export default function Sidebar({
       <footer className="sidebar-foot">
         <span className={`sync-dot${offline ? ' offline' : ''}`} />
         <span>
-          {total} entities ·{' '}
+          {total} {t('entities', { count: total })} ·{' '}
           {offline
-            ? 'offline'
+            ? t('offline')
             : lastSync
-              ? `synced ${lastSync.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-              : 'syncing…'}
+              ? t('synced {time}', { time: lastSync.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) })
+              : t('syncing…')}
         </span>
       </footer>
     </aside>
