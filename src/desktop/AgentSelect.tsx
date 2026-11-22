@@ -2,8 +2,9 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { AgentId, AgentInfo } from './types'
 import { AgentLogo } from './Icons'
+import { t } from '../lib/i18n'
 
-const agentNote = (item: AgentInfo) => !item.available ? 'Not installed' : item.id === 'shell' ? 'Local terminal' : item.id === 'opencode' ? 'Your providers' : 'Your CLI account'
+const agentNote = (item: AgentInfo) => !item.available ? t('Not installed') : item.id === 'shell' ? t('Local terminal') : item.id === 'opencode' ? t('Your providers') : t('Your CLI account')
 
 // One row for the usual agent instead of a grid of six. The list is portaled so the
 // dialog's scroll area cannot clip it, and opens upward when there is no room below.
@@ -47,7 +48,7 @@ export default function AgentSelect({ agents, value, onChange }: { agents: Agent
       {current && <><span className="agent-mark"><AgentLogo agent={current.id} size={21} /></span><span className="agent-select-label">{current.label}<small>{agentNote(current)}</small></span></>}
       <svg className="agent-select-caret" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
     </button>
-    {open && createPortal(<div ref={list} className="agent-select-list" role="listbox" aria-label="Agent" tabIndex={-1} style={place} onKeyDown={keys}
+    {open && createPortal(<div ref={list} className="agent-select-list" role="listbox" aria-label={t('Agent')} tabIndex={-1} style={place} onKeyDown={keys}
       aria-activedescendant={choices[active] ? `agent-option-${choices[active].item.id}` : undefined}>
       {agents.map(item => {
         const index = choices.findIndex(choice => choice.item.id === item.id)

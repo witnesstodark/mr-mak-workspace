@@ -17,6 +17,7 @@ import { commandToken, completeCommand, matchingCommands, terminalCommand, type 
 import TerminalPrompt, { type PromptChoice, type TerminalPromptData } from '../components/TerminalPrompt'
 import './conversation.css'
 import { keepUrl, linkTarget } from '../components/messageLinks'
+import { t } from '../lib/i18n'
 
 interface ToolActivity { id: string; name: string; status: 'running' | 'completed' | 'failed'; at: string }
 interface Message { id: string; role: 'user' | 'assistant' | 'system'; text: string; at: string; images?: ConversationImage[]; event?: SystemEventData }
@@ -51,7 +52,7 @@ const MessageMarkdown = memo(function MessageMarkdown({ text, role, sessionId }:
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false)
-  return <button type="button" className="conversation-copy" title="Copy message" aria-label={copied ? 'Copied' : 'Copy message'} onClick={() => navigator.clipboard.writeText(text).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1400) }).catch(reportError)}><Icon name="copy" size={14} />{copied && <span>Copied</span>}</button>
+  return <button type="button" className="conversation-copy" title={t('Copy message')} aria-label={copied ? t('Copied') : t('Copy message')} onClick={() => navigator.clipboard.writeText(text).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1400) }).catch(reportError)}><Icon name="copy" size={14} />{copied && <span>{t('Copied')}</span>}</button>
 }
 
 export default function Conversation({ session, connected, agentLabel, openTerminal, systemEvents = 'compact' }: { session: ChatSession; connected: boolean; agentLabel: string; openTerminal: () => void; systemEvents?: SystemEventsMode }) {
@@ -96,7 +97,7 @@ export default function Conversation({ session, connected, agentLabel, openTermi
         const at = Date.now(), next = JSON.stringify(result.messages)
         if (next !== fingerprint.current) { fingerprint.current = next; setChangedAt(at) }
         setTranscript(result); setReadError(''); setNow(at)
-      } catch { if (!stopped) { setReadError('The conversation could not refresh. Earlier messages are still shown.'); setNow(Date.now()) } }
+      } catch { if (!stopped) { setReadError(t('The conversation could not refresh. Earlier messages are still shown.')); setNow(Date.now()) } }
       finally { busy = false }
     }
     reload.current = load
@@ -140,8 +141,8 @@ export default function Conversation({ session, connected, agentLabel, openTermi
   }
   async function addImages(files: File[]) {
     if (!files.length || uploading) return
-    if (files.length > 12) { setStatus('Attach up to 12 images at a time.'); return }
-    setUploading(true); setStatus('Saving images to inbox…')
+    if (files.length > 12) { setStatus(t('Attach up to 12 images at a time.')); return }
+    setUploading(true); setStatus(t('Saving images to inbox…'))
     try { const paths: string[] = []; for (const file of files) paths.push((await uploadImage(file)).path); addPaths(paths); setStatus('') }
     catch (error) { setStatus(error instanceof Error ? error.message : String(error)) }
     finally { setUploading(false) }
@@ -182,7 +183,7 @@ export default function Conversation({ session, connected, agentLabel, openTermi
       setDraft({ text: '', paths: [] }); setCaret(0); follow.current = true; setShowJump(false)
       if (terminalCommand(commands, text)) openTerminal()
       void reload.current()
-    } catch (error) { setStatus(`${error instanceof Error ? error.message : String(error)} Your draft is kept.`) }
+    } catch (error) { setStatus(`${error instanceof Error ? error.message : String(error)} ${t('Your draft is kept.')}`) }
     finally { setSending(false); input.current?.focus() }
   }
   const stop = () => api(`/sessions/${session.id}/input`, { text: '\x1b', paste: false, submit: false }).catch(reportError)
@@ -200,7 +201,7 @@ export default function Conversation({ session, connected, agentLabel, openTermi
     } catch (error) {
       // The conversation is already rewound, so keep the edited text in the composer.
       setDraft(current => ({ ...current, text: current.text ? `${text}\n\n${current.text}` : text }))
-      setStatus(`${error instanceof Error ? error.message : String(error)} Your edited message is in the composer.`)
+      setStatus(`${error instanceof Error ? error.message : String(error)} ${t('Your edited message is in the composer.')}`)
     } finally { setEditing(null); setRewinding(false); void reload.current() }
   }
 
@@ -209,14 +210,14 @@ export default function Conversation({ session, connected, agentLabel, openTermi
   return <div ref={area} className="desk-conversation">
     <div className="conversation-scroll" ref={scroller} onScroll={() => { const box = scroller.current; if (!box) return; const nearEnd = box.scrollHeight - box.scrollTop - box.clientHeight < 120; follow.current = nearEnd; setShowJump(!nearEnd) }}>
       <div className="conversation-column">
-        {transcript?.truncated && <p className="conversation-note">Showing the latest part of a long conversation. The terminal keeps the full history.</p>}
+        {transcript?.truncated && <p className="conversation-note">{t('Showing the latest part of a long conversation. The terminal keeps the full history.')}</p>}
         {messages.map((message, index) => message.role === 'system' ? systemEvents !== 'hidden' && message.event && <SystemEvent key={`${message.id}:${systemEvents}`} event={message.event} time={message.at ? time(message.at) : undefined} expanded={systemEvents === 'full'}
           components={{ a: ({ href, children }) => <MessageLink href={href} sessionId={session.id}>{children}</MessageLink> }} fileLink={(file, label) => <MessageLink href={file} sessionId={session.id}>{label}</MessageLink>} />
         : <article key={message.id} data-index={index} className={`conversation-message ${message.role}`}>
-          <header>{message.role === 'user' ? <span>You</span> : <span className="conversation-agent"><AgentLogo agent={session.agent} size={15} />{agentLabel}</span>}{message.at && <time>{time(message.at)}</time>}{message.role === 'assistant' && message.text.trim() && <CopyButton text={message.text} />}
-            {message.role === 'user' && canEdit && !openEdit && message.text.trim() && <button type="button" className="conversation-copy" title="Edit and send again" aria-label="Edit message" onClick={() => { setEditError(''); setEditing({ id: message.id, text: visibleUserMessage(message.text) }) }}><Icon name="edit" size={14} /></button>}</header>
+          <header>{message.role === 'user' ? <span>{t('You')}</span> : <span className="conversation-agent"><AgentLogo agent={session.agent} size={15} />{agentLabel}</span>}{message.at && <time>{time(message.at)}</time>}{message.role === 'assistant' && message.text.trim() && <CopyButton text={message.text} />}
+            {message.role === 'user' && canEdit && !openEdit && message.text.trim() && <button type="button" className="conversation-copy" title={t('Edit and send again')} aria-label={t('Edit message')} onClick={() => { setEditError(''); setEditing({ id: message.id, text: visibleUserMessage(message.text) }) }}><Icon name="edit" size={14} /></button>}</header>
           {openEdit?.id === message.id ? <form className="conversation-edit" onSubmit={event => { event.preventDefault(); void sendEdit() }}>
-            <textarea autoFocus aria-label="Edit message" value={openEdit.text} disabled={rewinding} rows={Math.min(12, openEdit.text.split('\n').length + 1)} onChange={event => setEditing({ id: message.id, text: event.target.value })}
+            <textarea autoFocus aria-label={t('Edit message')} value={openEdit.text} disabled={rewinding} rows={Math.min(12, openEdit.text.split('\n').length + 1)} onChange={event => setEditing({ id: message.id, text: event.target.value })}
               onKeyDown={event => {
                 // WebKit may clear isComposing before the IME-confirming Enter.
                 if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return
@@ -224,42 +225,42 @@ export default function Conversation({ session, connected, agentLabel, openTermi
                 if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void sendEdit() }
               }} />
             {editError && <p role="alert">{editError}</p>}
-            <footer><span>{rewinding ? 'Rewinding the conversation…' : 'Rewinds the conversation to before this message and sends the edited text. Files are not changed.'}</span>
-              <button type="button" disabled={rewinding} onClick={() => setEditing(null)}>Cancel</button>
-              <button type="submit" disabled={rewinding || !canEdit || !openEdit.text.trim()}>Send</button></footer>
+            <footer><span>{rewinding ? t('Rewinding the conversation…') : t('Rewinds the conversation to before this message and sends the edited text. Files are not changed.')}</span>
+              <button type="button" disabled={rewinding} onClick={() => setEditing(null)}>{t('Cancel')}</button>
+              <button type="submit" disabled={rewinding || !canEdit || !openEdit.text.trim()}>{t('Send')}</button></footer>
           </form>
           : message.text.trim() && <div className="conversation-copy-text"><MessageMarkdown text={message.text} role={message.role} sessionId={session.id} /></div>}
           <ConversationImages images={message.images} />
           {index === messages.length - 1 && message.role === 'assistant' && index > readStart && <div className="conversation-read-aloud">
-            <button type="button" onClick={() => readAloud(message.id)} aria-label={speech.activeId ? speech.paused ? 'Resume reading' : 'Pause reading' : 'Read aloud'} title={speech.activeId ? speech.paused ? 'Resume reading' : 'Pause reading' : 'Read this reply aloud'}><Icon name={speech.activeId ? speech.paused ? 'play' : 'pause' : 'speaker'} size={15} />{speech.activeId ? speech.paused ? 'Resume' : 'Pause' : 'Read aloud'}</button>
-            {speech.activeId && <button type="button" onClick={speech.stop} aria-label="Stop reading" title="Stop reading"><Icon name="stop" size={13} /></button>}
-            <select aria-label="Reading voice" value={voice} onChange={event => { setVoice(event.target.value); saveReadingVoice(event.target.value); window.dispatchEvent(new Event(readingVoiceChanged)) }}>{readingVoices.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select>
-            {speech.loading && <span role="status">Preparing audio…</span>}
+            <button type="button" onClick={() => readAloud(message.id)} aria-label={speech.activeId ? speech.paused ? t('Resume reading') : t('Pause reading') : t('Read aloud')} title={speech.activeId ? speech.paused ? t('Resume reading') : t('Pause reading') : t('Read this reply aloud')}><Icon name={speech.activeId ? speech.paused ? 'play' : 'pause' : 'speaker'} size={15} />{speech.activeId ? speech.paused ? t('Resume') : t('Pause') : t('Read aloud')}</button>
+            {speech.activeId && <button type="button" onClick={speech.stop} aria-label={t('Stop reading')} title={t('Stop reading')}><Icon name="stop" size={13} /></button>}
+            <select aria-label={t('Reading voice')} value={voice} onChange={event => { setVoice(event.target.value); saveReadingVoice(event.target.value); window.dispatchEvent(new Event(readingVoiceChanged)) }}>{readingVoices.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select>
+            {speech.loading && <span role="status">{t('Preparing audio…')}</span>}
             {speech.error && <span role="alert">{speech.error}</span>}
           </div>}
         </article>)}
         {!messages.length && <div className="conversation-empty">
           <AgentLogo agent={session.agent} size={34} />
-          <h2>{!transcript ? 'Loading conversation…' : unreadable ? 'This conversation is in the terminal' : 'Ready when you are'}</h2>
-          <p>{unreadable ? 'Its history could not be read here. The terminal shows everything.' : `Messages appear here as ${agentLabel} writes them. If the CLI asks a startup question, such as trusting this folder or signing in, answer it in the terminal.`}</p>
-          <button type="button" onClick={openTerminal}><Icon name="terminal" size={15} />Open terminal</button>
+          <h2>{!transcript ? t('Loading conversation…') : unreadable ? t('This conversation is in the terminal') : t('Ready when you are')}</h2>
+          <p>{unreadable ? t('Its history could not be read here. The terminal shows everything.') : t('Messages appear here as {agent} writes them. If the CLI asks a startup question, such as trusting this folder or signing in, answer it in the terminal.', { agent: agentLabel })}</p>
+          <button type="button" onClick={openTerminal}><Icon name="terminal" size={15} />{t('Open terminal')}</button>
         </div>}
-        {!!transcript?.activity?.length && <details className="conversation-activity"><summary>Recent tool activity</summary>{transcript.activity.map(item => <div key={item.id}><Icon name={item.status === 'running' ? 'terminal' : item.status === 'failed' ? 'bell' : 'history'} size={13} /><span>{item.name}</span><small>{item.status === 'running' && !running ? 'interrupted' : item.status}{item.at && ` · ${time(item.at)}`}</small></div>)}</details>}
+        {!!transcript?.activity?.length && <details className="conversation-activity"><summary>{t('Recent tool activity')}</summary>{transcript.activity.map(item => <div key={item.id}><Icon name={item.status === 'running' ? 'terminal' : item.status === 'failed' ? 'bell' : 'history'} size={13} /><span>{item.name}</span><small>{item.status === 'running' && !running ? 'interrupted' : item.status}{item.at && ` · ${time(item.at)}`}</small></div>)}</details>}
         {transcript?.prompt && <TerminalPrompt prompt={transcript.prompt} answering={answering} onAnswer={choice => void answer(transcript.prompt!, choice)} onOpenTerminal={openTerminal} />}
-        {working && <p className="conversation-working"><i />{agentLabel} is working…</p>}
-        {!transcript?.prompt && (session.activity === 'waiting' || stale || readError) && <div className="conversation-notice" role="status"><p>{readError || (session.activity === 'waiting' ? `${agentLabel} is waiting for you in the terminal.` : 'No new messages for a while. A permission prompt or question may be waiting in the terminal.')}</p><button type="button" onClick={openTerminal}><Icon name="terminal" size={14} />Open terminal</button></div>}
+        {working && <p className="conversation-working"><i />{t('{agent} is working…', { agent: agentLabel })}</p>}
+        {!transcript?.prompt && (session.activity === 'waiting' || stale || readError) && <div className="conversation-notice" role="status"><p>{readError || (session.activity === 'waiting' ? t('{agent} is waiting for you in the terminal.', { agent: agentLabel }) : t('No new messages for a while. A permission prompt or question may be waiting in the terminal.'))}</p><button type="button" onClick={openTerminal}><Icon name="terminal" size={14} />{t('Open terminal')}</button></div>}
       </div>
     </div>
-    {showJump && <button type="button" className="conversation-jump" onClick={() => { follow.current = true; setShowJump(false); const box = scroller.current; if (box) box.scrollTop = box.scrollHeight }}><Icon name="down" size={15} />Latest</button>}
-    {dragging && <div className="terminal-drop"><Icon name="attach" size={30} /><strong>Drop to attach</strong><span>Files, folders and images</span></div>}
+    {showJump && <button type="button" className="conversation-jump" onClick={() => { follow.current = true; setShowJump(false); const box = scroller.current; if (box) box.scrollTop = box.scrollHeight }}><Icon name="down" size={15} />{t('Latest')}</button>}
+    {dragging && <div className="terminal-drop"><Icon name="attach" size={30} /><strong>{t('Drop to attach')}</strong><span>{t('Files, folders and images')}</span></div>}
     <BackgroundWork agents={transcript?.agents} commands={transcript?.commands} now={now} />
     <form className="conversation-composer" onSubmit={event => { event.preventDefault(); void send() }}>
-      {!!suggestions.length && <ul className="conversation-commands" id="conversation-commands" role="listbox" aria-label="Commands">{suggestions.map((command, index) => <li key={`${command.trigger}${command.name}`} id={`conversation-command-${index}`} role="option" aria-selected={command === highlighted}
+      {!!suggestions.length && <ul className="conversation-commands" id="conversation-commands" role="listbox" aria-label={t('Commands')}>{suggestions.map((command, index) => <li key={`${command.trigger}${command.name}`} id={`conversation-command-${index}`} role="option" aria-selected={command === highlighted}
         onMouseDown={event => { event.preventDefault(); complete(command) }} onMouseEnter={() => setPicked(index)}>
         <strong>{command.trigger}{command.name}</strong><span>{command.description}</span>{command.terminal && <Icon name="terminal" size={12} />}<small>{command.source}</small>
       </li>)}</ul>}
       {!!draft.paths.length && <div className="conversation-chips">{draft.paths.map(file => <span key={file} title={file}><Icon name="attach" size={12} /><span>{fileName(file)}</span><button type="button" aria-label={`Remove ${fileName(file)}`} onClick={() => setDraft(current => ({ ...current, paths: current.paths.filter(item => item !== file) }))}>×</button></span>)}</div>}
-      <textarea ref={input} rows={1} value={draft.text} aria-label={`Message ${agentLabel}`} placeholder={running ? `Message ${agentLabel}…` : 'Reconnect this chat to send'} onChange={event => { setDraft(current => ({ ...current, text: event.target.value })); setCaret(event.target.selectionStart); setPicked(0) }}
+      <textarea ref={input} rows={1} value={draft.text} aria-label={`Message ${agentLabel}`} placeholder={running ? `Message ${agentLabel}…` : t('Reconnect this chat to send')} onChange={event => { setDraft(current => ({ ...current, text: event.target.value })); setCaret(event.target.selectionStart); setPicked(0) }}
         onSelect={event => setCaret(event.currentTarget.selectionStart)}
         role="combobox" aria-autocomplete="list" aria-expanded={!!suggestions.length} aria-controls="conversation-commands" aria-activedescendant={highlighted ? `conversation-command-${suggestions.indexOf(highlighted)}` : undefined}
         onKeyDown={event => {
@@ -275,11 +276,11 @@ export default function Conversation({ session, connected, agentLabel, openTermi
         }}
         onPaste={event => { const files = Array.from(event.clipboardData.files).filter(file => file.type.startsWith('image/')); if (files.length) { event.preventDefault(); void addImages(files) } }} />
       <div className="conversation-actions">
-        <button type="button" className="desk-icon" title="Attach files or folders" aria-label="Attach files" onClick={() => window.dispatchEvent(new Event('mrmak-attach-file'))}><Icon name="attach" size={16} /></button>
+        <button type="button" className="desk-icon" title={t('Attach files or folders')} aria-label={t('Attach files')} onClick={() => window.dispatchEvent(new Event('mrmak-attach-file'))}><Icon name="attach" size={16} /></button>
         <div className="terminal-dictation"><VoiceInput id={`desktop-conversation-${session.id}`} connected={connected} disabled={sending} config={dictation} hotkey transcriber={transcribeDesktopAudio} onBusy={setVoiceBusy} onText={text => setDraft(current => ({ ...current, text: current.text ? `${current.text}${/\s$/.test(current.text) ? '' : '\n'}${text}` : text }))} /></div>
-        <span className="conversation-status" role="status">{status || (uploading ? 'Saving images…' : 'Enter to send · Shift+Enter for a new line')}</span>
-        {working && <button type="button" className="conversation-stop" onClick={stop} title="Interrupt the agent (Esc)"><Icon name="stop" size={14} />Stop</button>}
-        <button type="submit" className="conversation-send" aria-label={sending ? 'Sending…' : 'Send'} title="Send" disabled={!connected || !running || sending || uploading || voiceBusy || (!draft.text.trim() && !draft.paths.length)}><Icon name="send" size={16} /></button>
+        <span className="conversation-status" role="status">{status || (uploading ? t('Saving images…') : t('Enter to send · Shift+Enter for a new line'))}</span>
+        {working && <button type="button" className="conversation-stop" onClick={stop} title={t('Interrupt the agent (Esc)')}><Icon name="stop" size={14} />{t('Stop')}</button>}
+        <button type="submit" className="conversation-send" aria-label={sending ? t('Sending…') : t('Send')} title={t('Send')} disabled={!connected || !running || sending || uploading || voiceBusy || (!draft.text.trim() && !draft.paths.length)}><Icon name="send" size={16} /></button>
       </div>
     </form>
   </div>

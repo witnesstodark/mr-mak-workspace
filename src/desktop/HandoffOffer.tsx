@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api, onServiceEvent, reportError, selectChat } from './client'
 import type { ChatSession, Handoff } from './types'
 import { Icon } from './Icons'
+import { t } from '../lib/i18n'
 
 interface Stats { supported: boolean; handoff: Handoff | null }
 
@@ -37,9 +38,9 @@ export default function HandoffOffer({ session, threshold, agentLabel }: { sessi
   }, [until, now])
   const dismiss = (value: 'later' | 'never') => api(`/sessions/${session.id}`, { handoffSnooze: value }, 'PATCH').catch(reportError)
   const job = stats?.handoff
-  if (job?.status === 'summarizing' || job?.status === 'opening') return <div className="handoff-offer working" role="status"><i /><span>{job.status === 'summarizing' ? `${agentLabel} is writing a handoff summary. A new chat opens when it is ready.` : 'Opening the new chat with the handoff…'}</span></div>
-  if (job?.status === 'failed') return <div className="handoff-offer failed" role="alert"><Icon name="bell" size={14} /><span>{job.error || 'The handoff could not be completed.'}</span><button onClick={() => { setStats(current => current && { ...current, handoff: null }) }}>Dismiss</button></div>
-  if (job?.status === 'done' && !snooze?.never) return <div className="handoff-offer" role="status"><Icon name="chats" size={14} /><span>This work continues in a new chat. The handoff is saved in inbox/handoffs.</span>{job.sessionId && <button onClick={() => selectChat(job.sessionId!)}>Open new chat</button>}<button onClick={() => void dismiss('never')}>Dismiss</button></div>
+  if (job?.status === 'summarizing' || job?.status === 'opening') return <div className="handoff-offer working" role="status"><i /><span>{job.status === 'summarizing' ? t('{agent} is writing a handoff summary. A new chat opens when it is ready.', { agent: agentLabel }) : t('Opening the new chat with the handoff…')}</span></div>
+  if (job?.status === 'failed') return <div className="handoff-offer failed" role="alert"><Icon name="bell" size={14} /><span>{job.error || t('The handoff could not be completed.')}</span><button onClick={() => { setStats(current => current && { ...current, handoff: null }) }}>{t('Dismiss')}</button></div>
+  if (job?.status === 'done' && !snooze?.never) return <div className="handoff-offer" role="status"><Icon name="chats" size={14} /><span>{t('This work continues in a new chat. The handoff is saved in inbox/handoffs.')}</span>{job.sessionId && <button onClick={() => selectChat(job.sessionId!)}>{t('Open new chat')}</button>}<button onClick={() => void dismiss('never')}>{t('Dismiss')}</button></div>
   const share = contextShare(session)
   const due = threshold > 0 && !!stats?.supported && share !== null && share >= threshold / 100 && !snooze?.never && until <= now
   if (!due) return null
@@ -52,9 +53,9 @@ export default function HandoffOffer({ session, threshold, agentLabel }: { sessi
   const usage = session.contextUsage!
   return <div className="handoff-offer" role="status">
     <Icon name="history" size={14} />
-    <span><strong>Context is {Math.round(share * 100)}% full</strong> ({number.format(usage.usedTokens!)} of {number.format(usage.limitTokens!)} tokens). Every turn resends it, so a fresh chat that starts from a summary saves tokens.</span>
-    <button className="primary" disabled={starting || working || session.status !== 'running'} title={working ? 'Available when the agent finishes its turn' : `${agentLabel} writes a handoff; a new chat in the same project starts from it`} onClick={() => void start()}>Summarize and continue</button>
-    <button title="Ask again in 24 hours" onClick={() => void dismiss('later')}>Later</button>
-    <button onClick={() => void dismiss('never')}>Not for this chat</button>
+    <span><strong>{t('Context is {percent}% full', { percent: Math.round(share * 100) })}</strong> {t('({used} of {limit} tokens). Every turn resends it, so a fresh chat that starts from a summary saves tokens.', { used: number.format(usage.usedTokens!), limit: number.format(usage.limitTokens!) })}</span>
+    <button className="primary" disabled={starting || working || session.status !== 'running'} title={working ? t('Available when the agent finishes its turn') : t('{agent} writes a handoff; a new chat in the same project starts from it', { agent: agentLabel })} onClick={() => void start()}>{t('Summarize and continue')}</button>
+    <button title={t('Ask again in 24 hours')} onClick={() => void dismiss('later')}>{t('Later')}</button>
+    <button onClick={() => void dismiss('never')}>{t('Not for this chat')}</button>
   </div>
 }

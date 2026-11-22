@@ -5,6 +5,7 @@ import { cardCover, cardIcon, cardImageUrl, cardPhase, cardProgress } from '../l
 import { categoryIcon } from '../lib/categories'
 import { contentUrl } from '../desktop/client'
 import { EntityStatusButton } from './EntityControls'
+import { t } from '../lib/i18n'
 
 /**
  * The design-system card: glass surface over the aura, gradient edge
@@ -65,7 +66,7 @@ export default function MakCard({ entity }: { entity: WorkspaceEntity }) {
               <div
                 className="card-progress-bar"
                 role="progressbar"
-                aria-label="Progress"
+                aria-label={t('Progress')}
                 aria-valuemin={0}
                 aria-valuemax={progress.total}
                 aria-valuenow={progress.done}

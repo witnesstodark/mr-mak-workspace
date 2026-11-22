@@ -2,6 +2,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { api } from './client'
 import { modelLabel, refreshChatStats } from './chatModel'
 import type { ChatSession } from './types'
+import { t } from '../lib/i18n'
 
 // The chat footer's "Opus · high" chip. Its menu applies a model or effort to the
 // running Claude chat at once, through `/model <id>` and `/effort <level>`: the CLI
@@ -24,9 +25,9 @@ function shortModel(model: string | null, name: string | null, models: ModelChoi
   const family = model && /^claude-([a-z]+)/i.exec(model)?.[1]
   if (family) return family[0].toUpperCase() + family.slice(1)
   if (name) return name.split(/\s+/)[0]
-  return model ? modelLabel(model) : 'Model'
+  return model ? modelLabel(model) : t('Model')
 }
-const effortName = (effort: string) => effort === 'xhigh' ? 'extra high' : effort
+const effortName = (effort: string) => effort === 'xhigh' ? t('extra high') : t(effort)
 
 export default function ModelMenu({ session, model, modelName, effort, running, onOpenTerminal }: {
   session: ChatSession; model: string | null; modelName: string | null; effort: string | null; running: boolean; onOpenTerminal: () => void
@@ -97,7 +98,7 @@ export default function ModelMenu({ session, model, modelName, effort, running, 
       // Only the parts Claude Code confirmed replace what the chip shows.
       const confirmed = { ...(result.model && { model: result.model }), ...(result.effort && { effort: result.effort }) }
       if (confirmed.model || confirmed.effort) setApplied(value => ({ ...value, ...confirmed }))
-      if (!result.applied) setError(result.note || 'Claude Code did not confirm this change, so the previous setting is kept.')
+      if (!result.applied) setError(result.note || t('Claude Code did not confirm this change, so the previous setting is kept.'))
       refreshChatStats(session.id)
     } catch (err) { setError(err instanceof Error ? err.message : String(err)) }
     finally { setBusy(null) }
@@ -114,39 +115,39 @@ export default function ModelMenu({ session, model, modelName, effort, running, 
 
   return <div className="model-menu">
     <button ref={chip} type="button" className="model-menu-chip" aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? menuId : undefined}
-      title={`${modelName || model || 'Model'}${shownEffort ? ` · ${effortName(shownEffort)} effort` : ''} · change`}
+      title={`${modelName || model || t('Model')}${shownEffort ? ` · ${t('{effort} effort', { effort: effortName(shownEffort) })}` : ''} · ${t('change')}`}
       onClick={() => setOpen(value => !value)} onKeyDown={event => { if (event.key === 'ArrowUp' && !open) { event.preventDefault(); setOpen(true) } }}>
       <span>{label}</span><i aria-hidden="true">▾</i>
     </button>
-    {open && <div ref={panel} id={menuId} className="model-menu-panel" role="dialog" aria-label="Model and effort" tabIndex={-1} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close() } }}>
+    {open && <div ref={panel} id={menuId} className="model-menu-panel" role="dialog" aria-label={t('Model and effort')} tabIndex={-1} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close() } }}>
       {claude ? <>
-        <div className="model-menu-title">Model</div>
-        <div className="model-menu-list" role="radiogroup" aria-label="Model" onKeyDown={event => roving(event, 'ArrowDown', 'ArrowUp')}>
-          {!options && !error && <p className="model-menu-note">Loading models…</p>}
+        <div className="model-menu-title">{t('Model')}</div>
+        <div className="model-menu-list" role="radiogroup" aria-label={t('Model')} onKeyDown={event => roving(event, 'ArrowDown', 'ArrowUp')}>
+          {!options && !error && <p className="model-menu-note">{t('Loading models…')}</p>}
           {models.map((item, index) => {
             const checked = sameModel(item.id, shownModel)
             const focusable = checked || (!current && index === 0)
             return <button key={item.id} type="button" role="radio" aria-checked={checked} tabIndex={focusable ? 0 : -1} disabled={!running || !!busy}
               className={`model-menu-option ${checked ? 'selected' : ''}`} onClick={() => { if (!checked) void apply({ model: item.id }) }}>
-              <span>{item.name}</span>{item.contextWindow ? <small>{item.contextWindow >= 1_000_000 ? `${item.contextWindow / 1_000_000}M` : `${Math.round(item.contextWindow / 1000)}k`} context</small> : null}
+              <span>{item.name}</span>{item.contextWindow ? <small>{item.contextWindow >= 1_000_000 ? `${item.contextWindow / 1_000_000}M` : `${Math.round(item.contextWindow / 1000)}k`} {t('context')}</small> : null}
               {checked && <b aria-hidden="true">✓</b>}
             </button>
           })}
         </div>
-        <div className="model-menu-title">Effort</div>
-        <div className="model-menu-efforts" role="radiogroup" aria-label="Reasoning effort" onKeyDown={event => roving(event, 'ArrowRight', 'ArrowLeft')}>
+        <div className="model-menu-title">{t('Effort')}</div>
+        <div className="model-menu-efforts" role="radiogroup" aria-label={t('Reasoning effort')} onKeyDown={event => roving(event, 'ArrowRight', 'ArrowLeft')}>
           {efforts.map((level, index) => {
             const checked = level === shownEffort
-            return <button key={level} type="button" role="radio" aria-checked={checked} aria-label={`${effortName(level)} effort`} tabIndex={checked || (!efforts.includes(shownEffort || '') && index === 0) ? 0 : -1} disabled={!running || !!busy}
+            return <button key={level} type="button" role="radio" aria-checked={checked} aria-label={t('{effort} effort', { effort: effortName(level) })} tabIndex={checked || (!efforts.includes(shownEffort || '') && index === 0) ? 0 : -1} disabled={!running || !!busy}
               className={checked ? 'selected' : ''} onClick={() => { if (!checked) void apply({ effort: level }) }}>{level}</button>
           })}
         </div>
-        <p className="model-menu-note" role="status">{busy ? `Applying the ${busy}…` : error || (!running ? 'Resume the chat to change its model.' : 'Applies to this chat now and to new chats in this folder; Claude Code also keeps it as its default for new sessions. Mid-conversation, the next reply rereads the history without the prompt cache.')}</p>
+        <p className="model-menu-note" role="status">{busy ? (busy === 'model' ? t('Applying the model…') : t('Applying the effort…')) : error || (!running ? t('Resume the chat to change its model.') : t('Applies to this chat now and to new chats in this folder; Claude Code also keeps it as its default for new sessions. Mid-conversation, the next reply rereads the history without the prompt cache.'))}</p>
       </> : <>
         <div className="model-menu-title">{({ codex: 'Codex', antigravity: 'Antigravity', opencode: 'OpenCode', kimi: 'Kimi' } as Record<string, string>)[session.agent] || session.agent}</div>
-        <p className="model-menu-note">{modelName || model || 'Model not reported yet'}{effort ? ` · ${effortName(effort)} effort` : ''}</p>
-        <p className="model-menu-note">This CLI changes its model only in its own picker, which opens in the terminal.</p>
-        <button type="button" className="model-menu-action" disabled={!running} onClick={() => { close(); onOpenTerminal(); api(`/sessions/${session.id}/send`, { text: picker, paths: [] }).catch(err => setError(err instanceof Error ? err.message : String(err))) }}>Open its {picker} picker in Terminal</button>
+        <p className="model-menu-note">{modelName || model || t('Model not reported yet')}{effort ? ` · ${effortName(effort)} effort` : ''}</p>
+        <p className="model-menu-note">{t('This CLI changes its model only in its own picker, which opens in the terminal.')}</p>
+        <button type="button" className="model-menu-action" disabled={!running} onClick={() => { close(); onOpenTerminal(); api(`/sessions/${session.id}/send`, { text: picker, paths: [] }).catch(err => setError(err instanceof Error ? err.message : String(err))) }}>{t('Open its {picker} picker in Terminal', { picker })}</button>
         {error && <p className="model-menu-note" role="status">{error}</p>}
       </>}
     </div>}
