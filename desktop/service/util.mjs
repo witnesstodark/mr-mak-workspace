@@ -1,4 +1,4 @@
-import { readFile, writeFile, rename, mkdir, realpath, stat, unlink } from 'node:fs/promises';
+import { readFile, writeFile, rename, mkdir, realpath, stat, unlink, open } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
@@ -12,6 +12,15 @@ export function equalSecret(a, b) {
 }
 export async function readJson(file, fallback) {
   try { return JSON.parse((await readFile(file, 'utf8')).replace(/^\uFEFF/, '')); } catch { return fallback; }
+}
+// Distinguishes a missing file, an unreadable file (error with a code) and
+// invalid contents (error without a code), so state can be recovered instead of
+// silently replaced by a fallback.
+export async function readJsonFile(file) {
+  let text;
+  try { text = await readFile(file, 'utf8'); }
+  catch (error) { return error.code === 'ENOENT' ? { missing: true } : { error }; }
+  try { return { value: JSON.parse(text.replace(/^\uFEFF/, '')) }; } catch (error) { return { error }; }
 }
 const jsonSaves = new Map();
 export async function saveJson(file, value, { beforeReplace } = {}) {
@@ -28,7 +37,10 @@ async function writeJson(file, data, beforeReplace) {
   await mkdir(path.dirname(file), { recursive: true });
   const temp = `${file}.${randomBytes(5).toString('hex')}.tmp`;
   try {
-    await writeFile(temp, data, { mode: 0o600 });
+    // Flush the contents before the rename. Otherwise a power cut can keep the
+    // rename but lose the data, leaving a zero-filled file in place of the old one.
+    const handle = await open(temp, 'w', 0o600);
+    try { await handle.writeFile(data); await handle.sync(); } finally { await handle.close(); }
     // Windows can briefly deny replacement while a reader or scanner holds the
     // destination. Keep the previous file intact and retry the atomic rename.
     for (let attempt = 0; ; attempt++) {

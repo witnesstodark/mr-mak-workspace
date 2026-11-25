@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.6.6 - 2026-11-20
+
+- Simplify New chat: the name field comes first, one agent dropdown replaces the six tiles, the permission choice stays visible, and project, folder, group, effort and resume are under **More options**, whose folded row shows the current folder, group and effort.
+- Suggest a fresh chat by context occupancy (Off, 50, 70 or 85 percent; 70 by default) instead of message counts or transcript size. **Later** now waits 24 hours and **Not for this chat** lasts; both are saved with the chat, so restarts no longer bring the suggestion back. A suggestion that was off stays off.
+- Change a Claude Code chat's model and reasoning effort from the chat footer. A change the CLI does not confirm, including a declined switch, keeps the previous model. Other agents open their own picker in the terminal.
+- Notify paired phones when an agent finishes its turn or a chat starts waiting, with per-chat mute, no notification while a phone shows that chat, and no sends to idle, expired or revoked phones. Payloads carry only the chat's name and id, encrypted for the phone. Claude's automatic API retries no longer count as waiting; a turn stopped by an API error does.
+- Show Git state, changed lines, the selected agent's reads and writes, diffs and a folder size map in Files. Git runs read-only with repository hooks, filter drivers, external diff and fsmonitor disabled.
+- Show an optional cover, phase and progress on Workspace cards, on desktop and phone. Covers and icons must stay inside their card folder.
+
+Thanks to @vanderleitelesjr for the footer model menu, phone notifications, Files insights and card covers. This release includes #82, #83, #85, #86 and #100.
+
+## 0.6.5 - 2026-11-20
+
+- Keep chat History through a power cut. The chat list is flushed to disk before it replaces the previous copy, and a second copy is kept in `sessions.json.bak`. If the list cannot be read on start, it is kept aside as `sessions.json.unreadable-<time>` and History loads from the backup instead of starting empty.
+- Mark a chat as unread, or as read without opening it, from its tab's right-click menu. The mark survives restart and clears when the chat is opened.
+- Copy and paste in the terminal also work when a dictation or automation tool sends Ctrl+C or Ctrl+V without a scan code, including on non-Latin keyboard layouts. The shortcut no longer reaches the agent CLI as `^C` or `^V`.
+- Update the bundled hono and `@hono/node-server` to clear five moderate advisories, and update vite, zod, eslint and typescript-eslint in the build tools.
+
+Thanks to @nsoth for the unread mark and the terminal shortcut fix. This release includes #97, #98 and #99.
+
+## 0.6.4 - 2026-11-12
+
+- Keep New chat compact. Agent selection, chat name and the permission checkbox stay visible; project, working folder, group, reasoning effort and native resume are under Advanced, closed by default. Existing defaults and entered values are preserved.
+- Reduce typing lag in long Conversation histories by reusing rendered Markdown when a message has not changed.
+- Keep Japanese IME confirmation in macOS/WebKit from sending a message, submitting an edit or accepting a slash command. Ordinary Enter and Shift+Enter keep their existing behavior.
+
+Thanks to @noprops for the Conversation fixes. This release includes #90, #91 and #92.
+
 ## 0.6.3 - 2026-11-06
 
 - Answer CLI questions in Conversation and on the phone, including multiple selections, typed answers and long option descriptions. Keep unread indicators and compaction messages current, and ignore terminal device replies when deciding whether you are typing.

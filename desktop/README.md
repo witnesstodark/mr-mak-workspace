@@ -89,6 +89,34 @@ both mouse tracking and the requested SGR encoding, including saved screens,
 so switching tabs or reconnecting does not disable its mouse wheel. Classic
 Claude and Codex continue using local terminal scrollback.
 
+## The model menu
+
+The chat footer's "Opus · high" chip opens a menu with Claude Code's models
+(from its model catalog cache, with the `opus`, `sonnet` and `haiku` aliases as
+the fallback) and effort levels. `POST /api/sessions/:id/model` pastes
+`/model <id>` or `/effort <level>`: with an argument the CLI opens no picker.
+Mid-conversation Claude Code may ask "Switch model?" or "Change effort level?"
+because the prompt cache is lost. That warning belongs to the switch the person
+just chose, so the service confirms it once (`cacheWarning` in
+`chat-models.mjs`), hides it from Conversation meanwhile and keeps waiting for
+the result. A confirmation a PreModelSwitch hook asks for is left to the person.
+
+A change counts only once Claude Code prints its success line ("Set model to",
+"Set effort level to"). A refusal such as "Failed to validate model", "Kept
+model as" (the switch was declined), or no confirmation within 8 seconds, keeps
+the previous model or effort:
+nothing is saved, `/effort` is not sent after an unconfirmed `/model`, and the
+answer is `applied: false` with a `note` the menu shows. Confirmed parts are kept
+on the chat (`--model`/`--effort` on resume) and per project in
+`<state>/chat-models.json` for new chats there. Other CLIs change models only in
+their own picker, which the menu opens in Terminal.
+
+To show a `/model` or `/effort` typed in the terminal too, each Claude chat starts
+with `--settings <state>/claude-status/<chat>.settings.json`, whose status line
+runs `claude-statusline.mjs`. It saves only the live model and effort and prints
+nothing. A status line in the person's user or project settings is left in place;
+the footer then reads the transcript's model and the confirmed choice.
+
 ## Local microphone dictation
 
 Desktop chats, the Mak composer and paired mobile chats support free local Whisper
@@ -146,6 +174,26 @@ Root-session identity is captured from an actual native event, not inferred from
 a shared working directory. Resume passes `--session` with that recorded ID.
 A launch-specific marker prevents stale events from changing a new terminal's
 activity. Native CLI history must remain on disk for conversation restoration.
+
+## Files: Git state, agent activity, diffs and size maps
+
+The Files tab shows each file's Git state (`M`, `A`, `D`, `R`, `U`, `!`) with its
+changed lines, a dot on folders holding changes, and the branch with ahead and
+behind (`file-insights.mjs`, `git status --porcelain -z` and `git diff HEAD
+--numstat`). Rows the selected chat's agent read glow purple and rows it wrote
+orange, from Claude's Read/Edit/Write tools and the files Codex patches; the eye
+button follows the agent, opening the folders down to each new file. A changed
+file has a diff button; a folder has a size map (squarified, by bytes, with
+changed entries outlined). Deep folders keep indenting in smaller steps past level
+six, with a guide line per open folder.
+
+All of this only reads. Git runs without a shell, with `--no-optional-locks`,
+`core.fsmonitor=false`, `--no-ext-diff`, `--no-textconv`, every configured
+filter driver blanked and `--ignore-submodules=dirty`, so a repository's own
+config cannot run hooks or drivers, and nothing rewrites its index. A submodule
+shows as changed only when its commit moves. Each
+call has a 15 s limit; a diff is cut at 1 MB, an untracked file is shown only up
+to 1 MB, and a size map stops at 40,000 files or 4 s and says it is partial.
 
 ## Checks
 

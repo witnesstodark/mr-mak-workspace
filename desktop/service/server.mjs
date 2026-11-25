@@ -29,6 +29,8 @@ import { ConversationTranscripts } from './mobile-transcript.mjs';
 import { ConversationMedia } from './conversation-media.mjs';
 import { projectKey, recentProjects } from './recent-projects.mjs';
 import { answerPrompt, readPrompt } from './terminal-prompt.mjs';
+import { FileInsights, folderMap } from './file-insights.mjs';
+import { applyChoice, liveStats, modelOptions, switchingModel } from './chat-models.mjs';
 import { rewindToMessage } from './message-edit.mjs';
 import { LocalReadAloud } from './local-read-aloud.mjs';
 import { Handoffs } from './handoff.mjs';
@@ -53,12 +55,13 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
   const mcp = new McpInventory(repo, mcpOptions);
   const sessions = await new Sessions(repo, stateDir).init();
   const transcripts = new ConversationTranscripts();
+  const fileInsights = new FileInsights();
   const conversationMedia = new ConversationMedia();
   const readAloud = mobileOptions?.readAloud || new LocalReadAloud(repo);
   const environment = parseEnv(await readFile(path.join(repo, '.env'), 'utf8').catch(() => ''));
   const settingsPath = path.join(stateDir, 'settings.json');
   const savedSettings = await readJson(settingsPath, null);
-  let settings = { defaultAgent: 'codex', defaultBypass: false, defaultEffort: defaultWorkerEffort, coordinatorModel: environment.MRMAK_COORDINATOR_MODEL?.trim() || null, terminalFontSize: 13, terminalAppearance: 'original', workspaceTheme: 'dark', coordinatorEffort: 'medium', voiceName: 'cedar', voiceStyle: defaultVoiceStyle, handoffAfter: 40, groupTabsByProject: false, projectOrder: [], systemEvents: 'compact', ...savedSettings };
+  let settings = { defaultAgent: 'codex', defaultBypass: false, defaultEffort: defaultWorkerEffort, coordinatorModel: environment.MRMAK_COORDINATOR_MODEL?.trim() || null, terminalFontSize: 13, terminalAppearance: 'original', workspaceTheme: 'dark', coordinatorEffort: 'medium', voiceName: 'cedar', voiceStyle: defaultVoiceStyle, handoffAfter: 40, handoffAt: savedSettings?.handoffAfter === 0 ? 0 : 70, groupTabsByProject: false, projectOrder: [], systemEvents: 'compact', ...savedSettings };
   if (settings.groupTabsByProject === true) {
     await sessions.groupByProject(settings.projectOrder);
     settings.groupTabsByProject = false;
@@ -316,6 +319,12 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
           native({ type: 'recycle-file', path: file });
           return json(response, 200, { requested: true, path: file });
         }
+        // Read-only views for the Files tab: Git state, one file's diff, a folder's size map
+        // and what the chosen chat's agent read and wrote.
+        if (method === 'GET' && url.pathname === '/api/files/git') return json(response, 200, await fileInsights.status(url.searchParams.get('path') || repo));
+        if (method === 'GET' && url.pathname === '/api/files/diff') return json(response, 200, await fileInsights.diff(url.searchParams.get('path') || ''));
+        if (method === 'GET' && url.pathname === '/api/files/map') return json(response, 200, await folderMap(url.searchParams.get('path') || repo));
+        if (method === 'GET' && url.pathname === '/api/files/activity') { const id = url.searchParams.get('id'); const session = id && sessions.items.get(id); return json(response, 200, { id: session?.id || null, cwd: session?.cwd || null, files: session ? (await transcripts.read(session)).files || [] : [] }); }
         if (method === 'GET' && url.pathname === '/api/preview') return json(response, 200, await files.preview(url.searchParams.get('path') || ''));
         if (method === 'POST' && url.pathname === '/api/files/markdown') {
           const preview = await files.saveMarkdown(data); await integrations.publish('artifact', { kind: 'updated', path: preview.path, name: preview.name }); broadcast('workspace-changed', {});
@@ -336,6 +345,7 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
           if (['focus', 'original'].includes(data.terminalAppearance)) settings.terminalAppearance = data.terminalAppearance;
           if (typeof data.terminalOptionMeta === 'boolean') settings.terminalOptionMeta = data.terminalOptionMeta;
           if (Number.isInteger(data.handoffAfter) && (data.handoffAfter === 0 || (data.handoffAfter >= 10 && data.handoffAfter <= 500))) settings.handoffAfter = data.handoffAfter;
+          if (Number.isInteger(data.handoffAt) && (data.handoffAt === 0 || (data.handoffAt >= 30 && data.handoffAt <= 95))) settings.handoffAt = data.handoffAt;
           if (['full', 'compact', 'hidden'].includes(data.systemEvents)) settings.systemEvents = data.systemEvents;
           if (isThemePreference(data.workspaceTheme)) settings.workspaceTheme = data.workspaceTheme;
           if (isThemePreference(data.chatTheme)) settings.chatTheme = data.chatTheme;
@@ -380,13 +390,17 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
           if (method === 'GET' && action === 'messages') {
             const session = sessions.get(id);
             const value = await conversationMedia.present(await transcripts.read(session), session, 'desktop', grant => `/media/${session.id}/${grant}`);
-            return json(response, 200, { ...value, prompt: session.process ? await readPrompt(sessions, id) : null });
+            // Mr. Mak answers Claude Code's cache warning itself while it applies a footer model change.
+            return json(response, 200, { ...value, prompt: session.process && !switchingModel(id) ? await readPrompt(sessions, id) : null });
           }
           if (method === 'GET' && action === 'commands') { const session = sessions.get(id); return json(response, 200, await chatCommands(session.agent, session.cwd, mcpOptions)); }
           if (method === 'GET' && action === 'stats') {
-            const { supported, userMessages = 0, truncated = false, model = null } = await transcripts.read(sessions.get(id));
-            return json(response, 200, { supported, userMessages, truncated, model, handoff: handoffs.state(id) });
+            const session = sessions.get(id);
+            const { supported, userMessages = 0, truncated = false, model = null, effort = null, modelName = null } = await liveStats(session, await transcripts.read(session), stateDir);
+            return json(response, 200, { supported, userMessages, truncated, model, ...(modelName && { modelName }), effort, handoff: handoffs.state(id) });
           }
+          if (method === 'GET' && action === 'models') return json(response, 200, await modelOptions(sessions.get(id)));
+          if (method === 'POST' && action === 'model') return json(response, 200, await applyChoice(sessions, stateDir, id, { model: data.model ?? undefined, effort: data.effort ?? undefined }));
           if (method === 'POST' && action === 'handoff') return json(response, 200, handoffs.start(id));
           if (method === 'POST' && action === 'prompt') return json(response, 200, await answerPrompt(sessions, id, data.id, data.choice));
           if (method === 'POST' && action === 'rewind') return json(response, 200, await rewindToMessage(sessions, transcripts, id, String(data.messageId || '')));
@@ -412,7 +426,7 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
           if (method === 'POST' && action === 'clear') return json(response, 200, await sessions.clearScreen(id));
           if (method === 'POST' && action === 'reorder') return json(response, 200, await sessions.reorder(id, data.targetId, data.position));
           if (method === 'POST' && action === 'input') return json(response, 200, sessions.input(id, data.text, { coordinator: data.paste !== false, submit: data.submit !== false }));
-          if (method === 'PATCH' && !action) return json(response, 200, typeof data.pinned === 'boolean' ? sessions.pin(id, data.pinned) : 'tabColor' in data ? sessions.color(id, data.tabColor) : 'group' in data ? await sessions.assign(id, data.group) : sessions.rename(id, data.name));
+          if (method === 'PATCH' && !action) return json(response, 200, typeof data.pinned === 'boolean' ? sessions.pin(id, data.pinned) : typeof data.unread === 'boolean' ? sessions.mark(id, data.unread) : 'handoffSnooze' in data ? sessions.snoozeHandoff(id, data.handoffSnooze) : 'tabColor' in data ? sessions.color(id, data.tabColor) : 'group' in data ? await sessions.assign(id, data.group) : sessions.rename(id, data.name));
           if (method === 'DELETE' && !action) return json(response, 200, await closeChat(id));
         }
         if (method === 'POST' && url.pathname === '/api/window') {

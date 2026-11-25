@@ -48,6 +48,26 @@ from the disk image over the one in Applications and choose Replace.
 macOS asks again for permissions such as microphone access after each rebuild,
 because the ad-hoc signature changes. See [macOS notes](macos.md).
 
+Version 0.6.6 moves project, folder, group, effort and resume in New chat
+under **More options** and picks the agent from one dropdown. The fresh-chat
+suggestion now follows context occupancy, 70 percent by default; choose
+another share or Off in the chat options. Phone notifications are off until
+you turn them on in the phone's settings. Claude Code chats get a hidden
+status line that reports the model to the footer, unless you have your own.
+
+Version 0.6.5 keeps a second copy of the chat list and flushes it to disk
+before replacing the old one, so a power cut no longer empties History. The
+copy appears as `sessions.json.bak` next to `sessions.json` after the first
+save.
+A chat's tab menu can mark it unread or read, and terminal copy and paste
+accept shortcuts sent by dictation tools.
+
+Version 0.6.4 puts project, working folder, group, reasoning effort and native
+resume in **New chat > Advanced**, closed by default. Your existing defaults
+are preserved. Conversation avoids reparsing unchanged messages while you type,
+and Japanese IME confirmation in macOS/WebKit no longer sends a message or
+submits an edit.
+
 Version 0.6.3 extends **Conversation** to Antigravity and OpenCode and adds CLI
 question controls on desktop and phone. Each desktop chat shows its latest
 context usage; inferred Claude limits are labelled as estimates. **Settings →
@@ -78,7 +98,7 @@ The Linux AppImage also includes a launcher permission fix.
 The History fix can reconnect a Codex conversation whose original native record
 still exists but whose ID was not saved by Mr. Mak. If that native history was
 deleted or belongs to another account, the update cannot recreate it. Use
-New chat > Resume with a known native ID when importing an existing CLI chat.
+New chat > More options > Resume with a known native ID when importing an existing CLI chat.
 Saved terminal screens are retained when automatic recovery is not possible.
 
 Version 0.4.18 adds Linux packaging and project/knowledge-provider foundations.

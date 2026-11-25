@@ -1,17 +1,19 @@
 import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
-import { mkdir, realpath, stat } from 'node:fs/promises';
+import { mkdir, realpath, rename, stat } from 'node:fs/promises';
 import path from 'node:path';
 import pty from 'node-pty';
 import headless from '@xterm/headless';
 import { TerminalSnapshotAddon } from './terminal-snapshot.mjs';
 import { terminalCommand, childEnvironment, nativeConversationId, codexSupportsNoDaemon } from './agents.mjs';
-import { expandHome, readJson, saveJson } from './util.mjs';
+import { expandHome, readJson, readJsonFile, saveJson, sleep } from './util.mjs';
 import { claudeTranscript, codexTranscript, tailNativeFile } from './native-events.mjs';
 import { findCodexChat, newerCodexRollout } from './codex-history.mjs';
 import { englishTitle, groupLabel, restoredTitle } from './titles.mjs';
 import { defaultWorkerEffort, workerEfforts } from './effort.mjs';
 import { projectKey } from './recent-projects.mjs';
+import { rememberedChoice } from './chat-models.mjs';
+import { statusSettings } from './claude-status.mjs';
 import { ptyOptions } from './platform.mjs';
 import { composerText, terminalPrompt } from './terminal-prompt.mjs';
 import { opencodeVersion, opencodeEnvironment, readOpencodeState, watchOpencode } from './opencode.mjs';
@@ -28,8 +30,8 @@ async function workingFolder(value) {
   return process.platform === 'win32' ? folder : realpath(folder).catch(() => folder);
 }
 const publicSession = session => {
-  const { id, name, agent, cwd, bypass, effort, status, createdAt, lastOutputAt, lastInputAt, exitCode, nativeId, attention, activity, unread, completionVersion, lastCompletedId, cols, rows, open, pinned, tabOrder, tabColor, group, updatedAt, preview, hasConversation, restoreError } = session;
-  return { id, name, agent, cwd, bypass, effort, status, createdAt, lastOutputAt, lastInputAt, exitCode, nativeId, attention, activity, unread, completionVersion, lastCompletedId, cols, rows, open, pinned, tabOrder, tabColor, group, updatedAt, preview, hasConversation, restoreError, contextUsage: session.contextUsage };
+  const { id, name, agent, cwd, bypass, effort, model, status, createdAt, lastOutputAt, lastInputAt, exitCode, nativeId, attention, activity, unread, completionVersion, lastCompletedId, cols, rows, open, pinned, tabOrder, tabColor, group, updatedAt, preview, hasConversation, restoreError, handoffSnooze } = session;
+  return { id, name, agent, cwd, bypass, effort, model, status, createdAt, lastOutputAt, lastInputAt, exitCode, nativeId, attention, activity, unread, completionVersion, lastCompletedId, cols, rows, open, pinned, tabOrder, tabColor, group, updatedAt, preview, hasConversation, restoreError, handoffSnooze: handoffSnooze || null, contextUsage: session.contextUsage };
 };
 
 // Grouped tabs sit together at the position of their earliest open member; a tab
@@ -66,7 +68,7 @@ export class Sessions extends EventEmitter {
 
   async init() {
     await mkdir(this.stateDir, { recursive: true });
-    const saved = await readJson(path.join(this.stateDir, 'sessions.json'), []);
+    const saved = await this.loadList();
     for (const [index, metadata] of saved.entries()) {
       const item = this.make({ ...metadata, name: restoredTitle(metadata.name, index), open: metadata.open ?? metadata.agent !== 'kimi', pinned: !!metadata.pinned, updatedAt: metadata.updatedAt || metadata.lastInputAt || metadata.createdAt, hasConversation: metadata.hasConversation ?? (metadata.agent === 'codex' && !!metadata.nativeId), status: 'stopped', activity: 'idle', attention: !!metadata.unread });
       this.items.set(item.id, item);
@@ -130,11 +132,13 @@ export class Sessions extends EventEmitter {
     const cwd = await workingFolder(options.cwd || this.repo);
     if (!(await stat(cwd)).isDirectory()) throw new Error('Working folder must be a directory');
     const now = new Date().toISOString();
+    // The model and effort last chosen in this folder's chat footer, unless the caller chose.
+    const remembered = await rememberedChoice(this.stateDir, cwd, agent).catch(() => ({}));
     const session = this.make({
       id: randomUUID(), agent, name: englishTitle(options.name, `Conversation ${this.items.size + 1}`),
       tabOrder: Math.max(-1, ...this.list().map(item => item.tabOrder)) + 1,
       cwd, bypass: options.bypass === true, createdAt: now, lastInputAt: null, lastOutputAt: null,
-      effort: options.effort, group: groupLabel(options.group),
+      effort: options.effort || remembered.effort, model: remembered.model, group: groupLabel(options.group),
       status: 'starting', nativeId: options.resumeId || (agent === 'claude' ? randomUUID() : null),
       open: true, pinned: false, updatedAt: now, preview: '', hasConversation: !!options.resumeId || !!options.initialPrompt, restoreError: null,
       attention: false, cols: Math.min(500, Math.max(20, options.cols || 90)), rows: Math.min(200, Math.max(5, options.rows || 32)),
@@ -199,7 +203,9 @@ export class Sessions extends EventEmitter {
       Object.assign(env, chatEnv);
       if (session.agent === 'opencode') env.OPENCODE_CONFIG_CONTENT = opencodeChatToolConfig(env.OPENCODE_CONFIG_CONTENT, opencodeMajor, chatEnv);
     }
-    const command = terminalCommand(session.agent, { bypass: session.bypass, resumeId, nativeId: session.nativeId, effort: session.effort, opencodeMajor, antigravityLog, noDaemon, chatTools: chatTools ? chatToolArguments(session.agent, chatTools) : undefined, ...first });
+    const settings = session.agent === 'claude' ? await statusSettings(this.stateDir, session, env).catch(() => null) : undefined;
+    if (this.closed || !session.open) throw new Error('The chat was closed before its terminal started.');
+    const command = terminalCommand(session.agent, { bypass: session.bypass, resumeId, nativeId: session.nativeId, effort: session.effort, model: session.agent === 'claude' ? session.model : undefined, settings, opencodeMajor, antigravityLog, noDaemon, chatTools: chatTools ? chatToolArguments(session.agent, chatTools) : undefined, ...first });
     if (session.agent === 'codex') env.CODEX_INTERNAL_ORIGINATOR_OVERRIDE = `mrmak_chat_${session.id}`;
     if (session.terminal) this.resetTerminal(session);
     const proc = pty.spawn(command.file, command.args, ptyOptions({ cwd: session.cwd, env, cols: session.cols, rows: session.rows }));
@@ -508,6 +514,15 @@ export class Sessions extends EventEmitter {
     }
     return publicSession(session);
   }
+  // "Later" hides the fresh-chat suggestion for a day and "Not for this chat" for good.
+  // It is kept with the chat, so a restart or another window does not bring it back.
+  snoozeHandoff(id, value) {
+    if (![null, 'later', 'never'].includes(value)) throw Object.assign(new Error('Choose later or never.'), { status: 400 });
+    const session = this.get(id);
+    session.handoffSnooze = value === 'never' ? { never: true } : value === 'later' ? { until: new Date(Date.now() + 24 * 3600_000).toISOString() } : null;
+    this.changed(session);
+    return publicSession(session);
+  }
   color(id, value) {
     if (value !== null && (typeof value !== 'string' || !/^#[0-9a-f]{6}$/i.test(value))) throw new Error('Choose a valid tab color.');
     const session = this.get(id); session.tabColor = value?.toLowerCase() || null; this.changed(session);
@@ -674,6 +689,12 @@ export class Sessions extends EventEmitter {
     if (!session.unread || completionVersion !== session.completionVersion) return;
     session.unread = false; session.attention = false; this.changed(session);
   }
+  // A mark set by hand keeps the answer's version, so opening the chat clears it like a new answer.
+  mark(id, unread) {
+    const session = this.get(id);
+    if (session.unread !== !!unread) { session.unread = !!unread; session.attention = session.unread; this.changed(session); }
+    return publicSession(session);
+  }
   async nativeBoundary(session, resumeId) {
     const file = !resumeId ? null : session.agent === 'codex' ? await codexTranscript(resumeId) : session.agent === 'claude' ? await claudeTranscript(session.cwd, resumeId) : session.agent === 'antigravity' ? await antigravityTranscript(resumeId) : null;
     return file ? { file, offset: (await stat(file).catch(() => null))?.size || 0 } : null;
@@ -740,10 +761,34 @@ export class Sessions extends EventEmitter {
     await this.persist();
     return publicSession(session);
   }
+  // An unreadable list (for example zero-filled by a power cut) must not become
+  // an empty History: keep it aside for inspection and load the last backup.
+  async loadList() {
+    const file = path.join(this.stateDir, 'sessions.json');
+    let main = await readJsonFile(file);
+    // A scanner can hold the file briefly at startup; that is not corruption.
+    for (let attempt = 0; main.error?.code && attempt < 5; attempt++) {
+      await sleep(100 * 2 ** attempt);
+      main = await readJsonFile(file);
+    }
+    if (Array.isArray(main.value)) return main.value;
+    if (!main.missing && !main.error?.code) {
+      const aside = `${file}.unreadable-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+      await rename(file, aside).catch(() => {});
+      console.warn(`sessions.json could not be read; kept as ${path.basename(aside)}, loading sessions.json.bak.`);
+    }
+    const backup = await readJsonFile(`${file}.bak`);
+    return Array.isArray(backup.value) ? backup.value : [];
+  }
+
   async persist() {
     this.saveChain = this.saveChain.catch(() => {}).then(async () => {
       this.dirty = false;
-      await saveJson(path.join(this.stateDir, 'sessions.json'), this.list().map(item => ({ ...item, projectGroup: this.items.get(item.id).projectGroup || undefined })));
+      const list = this.list().map(item => ({ ...item, projectGroup: this.items.get(item.id).projectGroup || undefined }));
+      await saveJson(path.join(this.stateDir, 'sessions.json'), list);
+      // A second durable copy, written after the main file, for recovery.
+      const text = JSON.stringify(list);
+      if (text !== this.backupText) { await saveJson(path.join(this.stateDir, 'sessions.json.bak'), list); this.backupText = text; }
       let screenError;
       for (const session of this.items.values()) {
         if (!session.terminal) continue;

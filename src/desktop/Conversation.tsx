@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { api, pickFiles, reportError, speakDesktopText, transcribeDesktopAudio, uploadImage } from './client'
@@ -42,6 +42,12 @@ function MessageLink({ href, sessionId, children }: { href?: string; sessionId: 
   if (target.kind === 'text') return <span className="conversation-link-text">{children}</span>
   return <a href={href} title={`Open ${target.path}`} onClick={event => { event.preventDefault(); api('/preview/show', { path: target.path, sessionId }).catch(reportError) }}>{children}</a>
 }
+
+// Draft edits and transcript polls must not parse every old Markdown message
+// again. Primitive props stay equal when the API returns new message objects.
+const MessageMarkdown = memo(function MessageMarkdown({ text, role, sessionId }: { text: string; role: Message['role']; sessionId: string }) {
+  return <ReactMarkdown remarkPlugins={[remarkGfm]} urlTransform={keepUrl} components={{ img: () => null, a: ({ href, children }) => <MessageLink href={href} sessionId={sessionId}>{children}</MessageLink> }}>{role === 'user' ? visibleUserMessage(text) : text}</ReactMarkdown>
+})
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false)
@@ -212,7 +218,8 @@ export default function Conversation({ session, connected, agentLabel, openTermi
           {openEdit?.id === message.id ? <form className="conversation-edit" onSubmit={event => { event.preventDefault(); void sendEdit() }}>
             <textarea autoFocus aria-label="Edit message" value={openEdit.text} disabled={rewinding} rows={Math.min(12, openEdit.text.split('\n').length + 1)} onChange={event => setEditing({ id: message.id, text: event.target.value })}
               onKeyDown={event => {
-                if (event.nativeEvent.isComposing) return
+                // WebKit may clear isComposing before the IME-confirming Enter.
+                if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return
                 if (event.key === 'Escape' && !rewinding) { event.preventDefault(); event.stopPropagation(); setEditing(null) }
                 if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void sendEdit() }
               }} />
@@ -221,7 +228,7 @@ export default function Conversation({ session, connected, agentLabel, openTermi
               <button type="button" disabled={rewinding} onClick={() => setEditing(null)}>Cancel</button>
               <button type="submit" disabled={rewinding || !canEdit || !openEdit.text.trim()}>Send</button></footer>
           </form>
-          : message.text.trim() && <div className="conversation-copy-text"><ReactMarkdown remarkPlugins={[remarkGfm]} urlTransform={keepUrl} components={{ img: () => null, a: ({ href, children }) => <MessageLink href={href} sessionId={session.id}>{children}</MessageLink> }}>{message.role === 'user' ? visibleUserMessage(message.text) : message.text}</ReactMarkdown></div>}
+          : message.text.trim() && <div className="conversation-copy-text"><MessageMarkdown text={message.text} role={message.role} sessionId={session.id} /></div>}
           <ConversationImages images={message.images} />
           {index === messages.length - 1 && message.role === 'assistant' && index > readStart && <div className="conversation-read-aloud">
             <button type="button" onClick={() => readAloud(message.id)} aria-label={speech.activeId ? speech.paused ? 'Resume reading' : 'Pause reading' : 'Read aloud'} title={speech.activeId ? speech.paused ? 'Resume reading' : 'Pause reading' : 'Read this reply aloud'}><Icon name={speech.activeId ? speech.paused ? 'play' : 'pause' : 'speaker'} size={15} />{speech.activeId ? speech.paused ? 'Resume' : 'Pause' : 'Read aloud'}</button>
@@ -256,7 +263,8 @@ export default function Conversation({ session, connected, agentLabel, openTermi
         onSelect={event => setCaret(event.currentTarget.selectionStart)}
         role="combobox" aria-autocomplete="list" aria-expanded={!!suggestions.length} aria-controls="conversation-commands" aria-activedescendant={highlighted ? `conversation-command-${suggestions.indexOf(highlighted)}` : undefined}
         onKeyDown={event => {
-          if (event.nativeEvent.isComposing) return
+          // WebKit may clear isComposing before the IME-confirming Enter.
+          if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return
           if (suggestions.length && highlighted) {
             if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); setPicked((suggestions.indexOf(highlighted) + (event.key === 'ArrowDown' ? 1 : suggestions.length - 1)) % suggestions.length); return }
             if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setDismissed(tokenKey); return }

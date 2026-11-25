@@ -388,3 +388,37 @@ test('a phone starts chats only in a listed project folder', async t => {
   assert.equal(outside.status, 400); assert.match(outside.data.error, /project from the list/);
   assert.deepEqual(created, [project, repo]);
 });
+
+test('report list carries a valid cover, phase and progress, and drops anything that cannot be drawn', async t => {
+  const { gateway, pair, request, repo } = await fixture(t), device = await pair();
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jvWQAAAAASUVORK5CYII=', 'base64');
+  const outside = await mkdtemp(path.join(os.tmpdir(), 'mrmak-mobile-cover-outside-'));
+  await writeFile(path.join(outside, 'secret.png'), png);
+  await mkdir(path.join(repo, 'workspace/example/media'), { recursive: true });
+  await writeFile(path.join(repo, 'workspace/example/media/cover.png'), png);
+  await writeFile(path.join(repo, 'workspace/example/notes.html'), '<h1>Not an image</h1>');
+  await symlink(outside, path.join(repo, 'workspace/example/out'), process.platform === 'win32' ? 'junction' : 'dir');
+  const steps = [{ name: 'Report', path: 'notes.html' }], base = { folder: 'example', category: 'game', created: '2026-10-17', steps };
+  await writeFile(path.join(repo, 'workspace/workspace.json'), JSON.stringify({ entities: [
+    { ...base, id: 'good', title: 'Good', cover: 'media/cover.png', progress: { done: 3, total: 8, label: ' M1 ' }, phase: '  Alpha  ' },
+    { ...base, id: 'escape', title: 'Escape', cover: '../../../secret.png', progress: { done: 9, total: 8 }, phase: 7 },
+    { ...base, id: 'html', title: 'Html', cover: 'notes.html', progress: { done: 0, total: 0 } },
+    { ...base, id: 'missing', title: 'Missing', cover: 'media/missing.png', progress: { done: '3', total: 8 }, phase: '   ' },
+    { ...base, id: 'linked', title: 'Linked', cover: 'out/secret.png', progress: { done: -1, total: 5 } },
+    { ...base, id: 'bare', title: 'Bare' },
+    { ...base, id: 'full', title: 'Full', progress: { done: 8, total: 8 }, cover: 7 },
+  ] }));
+  const list = (await request('/reports', undefined, device.cookie)).data, byId = id => list.find(item => item.id === id);
+  assert.match(byId('good').cover, /^\/mobile\/api\/reports\/good\/cover\?v=\d+$/);
+  assert.deepEqual(byId('good').progress, { done: 3, total: 8, label: 'M1' }); assert.equal(byId('good').phase, 'Alpha');
+  assert.deepEqual(byId('full').progress, { done: 8, total: 8 });
+  for (const id of ['escape', 'html', 'missing', 'linked', 'bare']) for (const key of ['cover', 'progress', 'phase']) assert.ok(!(key in byId(id)), `${id} must not carry ${key}`);
+  assert.ok(!('cover' in byId('full')) && !('phase' in byId('full')));
+  const cover = id => fetch(`${gateway.origin}/mobile/api/reports/${id}/cover`, { headers: device.cookie ? { Cookie: device.cookie } : {} });
+  const served = await fetch(`${gateway.origin}${byId('good').cover}`, { headers: { Cookie: device.cookie } });
+  assert.equal(served.status, 200); assert.equal(served.headers.get('content-type'), 'image/png'); assert.deepEqual(Buffer.from(await served.arrayBuffer()), png);
+  for (const id of ['escape', 'html', 'missing', 'linked', 'bare', 'unknown', '%E0%A4%A']) assert.equal((await cover(id)).status, 404, id);
+  assert.equal((await fetch(`${gateway.origin}${byId('good').cover}`)).status, 401);
+  await gateway.revoke(device.pending.id);
+  assert.equal((await fetch(`${gateway.origin}${byId('good').cover}`, { headers: { Cookie: device.cookie } })).status, 401);
+});

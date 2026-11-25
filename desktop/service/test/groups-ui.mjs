@@ -65,7 +65,7 @@ try {
   // Right-click: move an ungrouped tab into an existing group, then into a new one, then ungroup from the chip.
   await tab('Animator').click({ button: 'right' });
   await page.locator('.tab-menu').waitFor();
-  assert.deepEqual(await page.locator('.tab-menu [role=menuitem]').allTextContents(), ['Rename chat', 'Pin in History', 'Dungeon', 'ThugLife', 'Show working folder', 'Clear terminal scrollback', 'Close tab · keep in History'], 'the tab menu keeps the chat settings and offers groups most recently active first');
+  assert.deepEqual(await page.locator('.tab-menu [role=menuitem]').allTextContents(), ['Rename chat', 'Pin in History', 'Mark as unread', 'Dungeon', 'ThugLife', 'Show working folder', 'Clear terminal scrollback', 'Close tab · keep in History'], 'the tab menu keeps the chat settings and offers groups most recently active first');
   await page.locator('.tab-menu [aria-label="Rose tab color"]').click();
   await page.locator('.chat-tab.has-color').filter({ hasText: 'Animator' }).waitFor();
   assert.equal(service.sessions.get('g-2').tabColor, '#dba3bb');
@@ -132,6 +132,7 @@ try {
 
   // New chat offers the known groups and files the new tab under the chosen one.
   await page.getByRole('button', { name: 'New chat', exact: true }).click();
+  await page.locator('.desk-dialog summary', { hasText: /^More options/ }).click();
   const picker = page.locator('.desk-dialog select[aria-label="Group"]');
   assert.deepEqual(await picker.locator('option').allTextContents(), ['No group', 'Dungeon', 'ThugLife', 'New group…']);
   await page.locator('.desk-dialog input[placeholder*="Dream Game"]').fill('Producer');

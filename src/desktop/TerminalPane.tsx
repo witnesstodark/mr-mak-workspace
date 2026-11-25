@@ -168,12 +168,15 @@ export default function TerminalPane({ id, agent, fontSize, appearance, optionMe
       const deviceReply = /^\x1b\[[?>0-9;]*[RcnIO]$/.test(data) || /^\x1b\][\s\S]*(?:\x07|\x1b\\)$/.test(data)
       if (ready && !deviceReply) sendEvent({ type: 'input', id, data })
     })
+    // Dictation and automation tools can send a shortcut without a scan code. It then has no
+    // `code` and its `key` is the layout's letter, so the virtual key the browser acts on counts too.
+    const letter = (event: KeyboardEvent, name: string) => event.code === `Key${name}` || event.key.toUpperCase() === name || event.keyCode === name.charCodeAt(0)
     terminal.attachCustomKeyEventHandler(event => {
       // Windows/Linux: agent chats use Ctrl+C exclusively for copy. Even an empty
       // selection must not send ETX to the CLI or terminate its wrapper process.
       // macOS: Cmd+C copies and Ctrl+C reaches the CLI, as in Terminal.app.
       const copy = isMac ? event.metaKey : event.ctrlKey && (agent !== 'shell' || event.shiftKey)
-      if (copy && !event.altKey && (event.code === 'KeyC' || event.key.toLowerCase() === 'c')) {
+      if (copy && !event.altKey && letter(event, 'C')) {
         event.preventDefault(); event.stopPropagation()
         const selection = terminal.getSelection()
         if (event.type === 'keydown' && !event.repeat && selection) navigator.clipboard.writeText(selection).catch(reportError)
@@ -181,7 +184,7 @@ export default function TerminalPane({ id, agent, fontSize, appearance, optionMe
       }
       if (event.type !== 'keydown') return true
       // Leave paste to the DOM clipboard event; do not send Ctrl+V (Cmd+V on macOS) to the CLI.
-      if (modKey(event) && (event.code === 'KeyV' || event.key.toLowerCase() === 'v')) return false
+      if (modKey(event) && letter(event, 'V')) return false
       // App shortcuts belong to Chats, not the terminal.
       if ((event.ctrlKey && event.code === 'Tab') || (modKey(event) && event.shiftKey && ['KeyP', 'KeyT', 'KeyH', 'KeyW'].includes(event.code)) || ((isMac ? event.metaKey : event.altKey) && /^Digit[1-9]$/.test(event.code))) return false
       return true

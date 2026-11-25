@@ -11,8 +11,9 @@ interface MobileState {
   sessions: ChatSession[]; agents: AgentInfo[]; selectedId: string | null
   device?: { id: string; name: string }; defaultAgent?: string; defaultBypass?: boolean
   dictation?: DictationInfo
+  mutedChats?: string[]
 }
-export interface MobileEvent { type: string; id?: string; session?: ChatSession; sessions?: ChatSession[]; data?: string; sequence?: number; error?: string; dictation?: DictationInfo }
+export interface MobileEvent { type: string; id?: string; session?: ChatSession; sessions?: ChatSession[]; data?: string; sequence?: number; error?: string; dictation?: DictationInfo; mutedChats?: string[] }
 let state: MobileState = { ready: false, authenticated: false, connected: false, error: '', sessions: [], agents: [], selectedId: localStorage.getItem('mrmak.mobile.selected') }
 const listeners = new Set<() => void>(), events = new Set<(event: MobileEvent) => void>()
 let socket: WebSocket | null = null, timer = 0, heartbeat = 0, handshake = 0, starting = false, stopped = false, connectionVersion = 0
@@ -76,7 +77,7 @@ export async function startMobile() {
   starting = true
   const version = connectionVersion, controller = new AbortController(); bootstrapAbort = controller
   try {
-    const initial = await mobileApi<Pick<MobileState, 'sessions' | 'agents' | 'device' | 'defaultAgent' | 'defaultBypass' | 'dictation'>>('/bootstrap', undefined, anySignal([controller.signal, AbortSignal.timeout(8000)]))
+    const initial = await mobileApi<Pick<MobileState, 'sessions' | 'agents' | 'device' | 'defaultAgent' | 'defaultBypass' | 'dictation' | 'mutedChats'>>('/bootstrap', undefined, anySignal([controller.signal, AbortSignal.timeout(8000)]))
     if (version !== connectionVersion || controller.signal.aborted) return
     authRejected = false
     update({ ...initial, ready: true, authenticated: true, error: '', selectedId: initial.sessions.some(item => item.id === state.selectedId) ? state.selectedId : null })
@@ -90,6 +91,7 @@ export async function startMobile() {
       if (event.type === 'connected') { clearTimeout(handshake); update({ connected: true, sessions: event.sessions || state.sessions, error: '' }) }
       if (event.type === 'session' && event.session) { const next = event.session; update({ sessions: state.sessions.some(item => item.id === next.id) ? state.sessions.map(item => item.id === next.id ? next : item) : [...state.sessions, next] }) }
       if (event.type === 'dictation' && event.dictation) update({ dictation: event.dictation })
+      if (event.type === 'muted' && Array.isArray(event.mutedChats)) update({ mutedChats: event.mutedChats })
       if (event.type === 'error') update({ error: event.error || 'Connection error' })
       events.forEach(listener => listener(event))
     }
@@ -123,3 +125,5 @@ window.addEventListener('pagehide', releaseConnection)
 window.addEventListener('pageshow', resumeMobile)
 
 export async function chooseMobileDictation(provider: string) { const dictation = await mobileApi<DictationInfo>('/dictation', { provider }); update({ dictation }); return dictation }
+// Muting is per chat and shared by every paired phone.
+export async function muteMobileChat(id: string, muted: boolean) { const { mutedChats } = await mobileApi<{ mutedChats: string[] }>(`/sessions/${id}/mute`, { muted }); update({ mutedChats }); return mutedChats }

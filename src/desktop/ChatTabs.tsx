@@ -18,9 +18,9 @@ function Swatches({ label, value, onChange }: { label: string; value: string | n
   </div>
 }
 
-export default function ChatTabs({ items, selectedId, agents, groups, collapsed, groupColors, historyCounts, choose, close, toggleGroup, collapseOthers, setGroupColor }: {
+export default function ChatTabs({ items, selectedId, agents, groups, collapsed, groupColors, historyCounts, choose, close, mark, toggleGroup, collapseOthers, setGroupColor }: {
   items: ChatSession[]; selectedId?: string; agents: AgentInfo[]; groups: string[]; collapsed: string[]; groupColors: Record<string, string>; historyCounts: Record<string, number>
-  choose: (id: string) => void; close: (id: string) => void; toggleGroup: (name: string) => void; collapseOthers: (name: string) => void; setGroupColor: (name: string, value: string | null) => void
+  choose: (id: string) => void; close: (id: string) => void; mark: (item: ChatSession) => void; toggleGroup: (name: string) => void; collapseOthers: (name: string) => void; setGroupColor: (name: string, value: string | null) => void
 }) {
   const gesture = useRef<Drag | null>(null)
   const drop = useRef<Drop | null>(null)
@@ -146,11 +146,12 @@ export default function ChatTabs({ items, selectedId, agents, groups, collapsed,
     })}
     {dragging && dragged && <div className="chat-tab-ghost" style={{ left: dragging.x + 13, top: dragging.y + 13, color: dragged.tabColor || '#d8c9da' }} aria-hidden="true"><SessionLogo session={dragged} /><span>{dragged.name}</span>{dragged.pinned && <Icon name="pin" size={12} />}</div>}
     {dragging && draggedGroup && <div className="chat-tab-ghost group-ghost" style={{ left: dragging.x + 13, top: dragging.y + 13, color: draggedGroup.color }} aria-hidden="true"><span className="chip-caret">▾</span><span>{draggedGroup.name}</span><small>{draggedGroup.items.length}</small></div>}
-    {menu && <div className="tab-menu" role="menu" style={{ left: Math.max(4, Math.min(menu.x, window.innerWidth - 260)), top: Math.max(4, Math.min(menu.y, window.innerHeight - (menu.kind === 'tab' ? 470 : 290))) }}>
+    {menu && <div className="tab-menu" role="menu" style={{ left: Math.max(4, Math.min(menu.x, window.innerWidth - 260)), top: Math.max(4, Math.min(menu.y, window.innerHeight - (menu.kind === 'tab' ? 500 : 290))) }}>
       {menu.kind === 'tab' ? <>
         <strong>{menu.item.name}</strong>
         {rename === null ? <button type="button" role="menuitem" onClick={() => setRename(menu.item.name)}>Rename chat</button> : <form className="tab-menu-rename" onSubmit={event => { event.preventDefault(); if (rename.trim()) patch(menu.item.id, { name: rename.trim() }) }}><input autoFocus value={rename} maxLength={100} aria-label="English chat name" onChange={event => setRename(event.target.value)} /><button type="submit">Save</button></form>}
         <button type="button" role="menuitem" onClick={() => patch(menu.item.id, { pinned: !menu.item.pinned })}>{menu.item.pinned ? 'Unpin from History' : 'Pin in History'}</button>
+        <button type="button" role="menuitem" onClick={() => { setMenu(null); mark(menu.item) }}>{menu.item.unread ? 'Mark as read' : 'Mark as unread'}</button>
         <span>Tab color</span>
         <Swatches label="Tab color" value={menu.item.tabColor} onChange={value => patch(menu.item.id, { tabColor: value })} />
         <span>{menu.item.group ? 'Move to group' : 'Add to group'}</span>

@@ -14,7 +14,8 @@ await writeFile(path.join(repo, 'workspace/workspace.json'), '{"entities":[]}');
 await cp(path.join(root, 'dist'), path.join(repo, 'ui'), { recursive: true });
 const service = await createService({ repo, uiDir: path.join(repo, 'ui'), mcpOptions: { home: repo, env: {} } });
 const session = service.sessions.make({ id: 'clipboard-test', createdAt: new Date().toISOString(), cols: 90, rows: 32, name: 'Clipboard test', agent: 'claude', cwd: repo, open: true, status: 'running' });
-session.process = { write() {}, resize() {}, kill() {} };
+const written = [];
+session.process = { write: data => written.push(data), resize() {}, kill() {} };
 service.sessions.items.set(session.id, session); await service.sessions.hydrate(session);
 await new Promise(resolve => session.terminal.write('Select this terminal text\r\n', resolve));
 const output = text => service.sessions.emit('output', { id: session.id, sequence: ++session.sequence, data: '\x1b]52;c;' + Buffer.from(text).toString('base64') + '\x07' });
@@ -40,5 +41,20 @@ try {
   await page.evaluate(() => window.dispatchEvent(new Event('blur')));
   output('background overwrite'); await page.waitForTimeout(100);
   assert.deepEqual(await page.evaluate(() => window.copied), ['selected by the owner']);
-  console.log('Clipboard UI passed: live selection copy, unsolicited output rejected, one write per gesture, blur revocation.');
+  // A dictation or automation tool can send the shortcut without a scan code: `code` is
+  // empty and `key` is the layout's letter, here a Greek one. Only the virtual key remains.
+  const press = ({ keyCode, ...init }) => page.locator('.xterm-helper-textarea').evaluate((element, { keyCode, init }) => {
+    const event = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, code: '', ...init });
+    Object.defineProperty(event, 'keyCode', { value: keyCode });
+    element.dispatchEvent(event);
+    return event.defaultPrevented;
+  }, { keyCode, init });
+  const mod = await page.evaluate(() => /Mac/i.test(`${navigator.platform} ${navigator.userAgent}`)) ? { metaKey: true } : { ctrlKey: true };
+  written.length = 0;
+  assert.equal(await press({ ...mod, key: 'ω', keyCode: 86 }), false, 'paste stays with the browser');
+  assert.equal(await press({ ...mod, key: 'ψ', keyCode: 67 }), true, 'copy is handled by the terminal');
+  await expect.poll(() => page.evaluate(() => window.copied)).toEqual(['selected by the owner', 'Select']);
+  await page.waitForTimeout(100);
+  assert.deepEqual(written, [], 'neither shortcut reaches the agent CLI');
+  console.log('Clipboard UI passed: live selection copy, unsolicited output rejected, one write per gesture, blur revocation, layout-independent copy and paste keys.');
 } finally { await browser?.close(); session.process = null; await service.close(); }

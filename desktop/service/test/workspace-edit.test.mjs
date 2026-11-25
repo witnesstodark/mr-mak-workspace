@@ -18,7 +18,7 @@ test('card edits are authenticated, scoped, persistent and preserve reports and 
   const file = path.join(repo, 'workspace', 'workspace.json');
   const report = path.join(repo, 'workspace', 'sample', 'report.html');
   await writeFile(report, '<h1>Keep this report</h1>');
-  const first = { id: 'sample', title: 'A sample', category: 'research', status: 'active', type: 'group', folder: 'sample', created: '2026-01-01', steps: [{ name: 'Report', path: 'report.html' }], defaultStep: 0, custom: { keep: true } };
+  const first = { id: 'sample', title: 'A sample', category: 'research', status: 'active', type: 'group', folder: 'sample', created: '2026-01-01', steps: [{ name: 'Report', path: 'report.html' }], defaultStep: 0, custom: { keep: true }, cover: 'media/cover.webp', progress: { done: 3, total: 8, label: 'M1' }, phase: 'Alpha' };
   const second = { ...first, id: 'other', title: 'Another card', status: 'done' };
   await writeFile(file, JSON.stringify({ entities: [first, second], unknownRoot: 'keep' }));
   const service = await createService({ repo, uiDir: path.join(repo, 'ui') });
