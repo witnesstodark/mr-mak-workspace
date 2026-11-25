@@ -67,7 +67,7 @@ test('a Claude chat starts with the reporter unless the person has their own sta
   if (!inventory().find(item => item.id === 'claude')?.available) return;
   const command = terminalCommand('claude', { model: 'claude-opus-5-5', settings: file, readDir: project });
   const script = process.platform === 'win32' ? Buffer.from(command.args.at(-1), 'base64').toString('utf16le') : command.args.join(' ');
-  assert.ok(script.indexOf('--model') > 0 && script.indexOf('--model') < script.indexOf('--settings') && script.indexOf('--settings') < script.indexOf('--add-dir'));
+  assert.ok(script.indexOf('--model') >= 0 && script.indexOf('--model') < script.indexOf('--settings') && script.indexOf('--settings') < script.indexOf('--add-dir'));
   assert.throws(() => terminalCommand('claude', { model: '--dangerously-skip-permissions' }), /listed models/);
 });
 
